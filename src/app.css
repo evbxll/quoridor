@@ -56,8 +56,8 @@ button {
   padding: 6px 12px;
   cursor: pointer;
 }
-button:hover:not(:disabled) { border-color: var(--text); }
-button:disabled { opacity: .55; cursor: default; border-style: dashed; }
+button:hover:not(:disabled):not([aria-disabled="true"]) { border-color: var(--text); }
+button:disabled, button[aria-disabled="true"] { opacity: .55; cursor: default; border-style: dashed; }
 select {
   background: var(--card);
   border: 1px solid var(--muted);
@@ -103,12 +103,21 @@ progress { width: 100%; accent-color: var(--accent); }
 .banner { padding: 8px 16px; background: var(--card); border-bottom: 1px solid var(--line); display: flex; flex-wrap: wrap; align-items: center; gap: 6px 16px; }
 .banner p { margin: 0; flex: 1 1 260px; }
 .banner progress { flex: 1 1 100%; }
+.eval { width: min(100%, calc(100vh - 230px)); }
+.evalbar-track { height: 16px; border: 2px solid var(--text); border-radius: 8px; overflow: hidden; background: var(--p2); }
+.evalbar-p1 { display: block; height: 100%; background: var(--p1); border-right: 3px solid var(--text); }
+.evalbar-text { display: flex; justify-content: space-between; gap: 12px; margin-top: 2px; font-weight: 700; font-variant-numeric: tabular-nums; }
+#analysis-tools { margin-top: 8px; }
+#analysis-lines { margin: 6px 0; padding-left: 1.4em; }
+.moves li button { border: none; background: none; padding: 1px 4px; min-width: 3.5em; text-align: left; border-radius: 6px; }
+.moves li button.latest { font-weight: 700; text-decoration: underline; }
 .hint { margin: 0; color: var(--muted); font-size: 13px; max-width: 60ch; }
 
 .panel { display: flex; flex-direction: column; gap: 12px; min-width: 0; }
 .card { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 12px 16px; }
 .card h2 { margin: 0 0 8px; font-size: 14px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); }
 .moves {
+  position: relative;
   list-style: decimal inside; margin: 0; padding: 0; max-height: 280px; overflow: auto;
   font-variant-numeric: tabular-nums;
 }

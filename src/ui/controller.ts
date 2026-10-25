@@ -136,8 +136,7 @@ export class GameController {
     this.targets.push(this.state.globalAction(action));
     this.game.play(action);
     this.failure = null;
-    this.onChange();
-    this.botMoveIfDue();
+    this.notifyOrSearch();
     return true;
   }
 
@@ -155,7 +154,7 @@ export class GameController {
   /** Asks the bot for its move again after a failure. */
   retry(): void {
     this.failure = null;
-    this.botMoveIfDue();
+    this.notifyOrSearch();
   }
 
   private reset(game: Game, human: Side, level: Level): void {
@@ -165,8 +164,7 @@ export class GameController {
     this.humanSide = human;
     this.currentLevel = level;
     this.failure = null;
-    this.onChange();
-    this.botMoveIfDue();
+    this.notifyOrSearch();
   }
 
   private stopSearch(): void {
@@ -182,8 +180,10 @@ export class GameController {
     return null;
   }
 
-  private botMoveIfDue(): void {
+  /** Starts the bot's move if it is due, else just reports the change. Either way there is one notice, sent once `thinking` is up to date. */
+  private notifyOrSearch(): void {
     if (this.game.result === null && this.state.p1Turn === (this.humanSide === "p2")) void this.botMove();
+    else this.onChange();
   }
 
   private async botMove(): Promise<void> {

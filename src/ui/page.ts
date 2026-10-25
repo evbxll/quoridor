@@ -1,6 +1,7 @@
 import type { GlobalAction } from "../engine/actions";
 import { Game } from "../engine/game";
 import type { GameState } from "../engine/state";
+import { Analysis, evalBar, replay } from "./analysis";
 import { describeBoard, renderBoard } from "./board";
 import { ModelManager, type ModelState } from "../model/manager";
 import type { ModelEnv } from "../model/store";
@@ -67,7 +68,7 @@ export function startPage(port: SearchPort, network: NetworkSource): GameControl
     live.textContent = text === live.textContent ? `${text} ` : text;
   };
 
-  const controller = new GameController(port, () => render());
+  const controller = new GameController(port, () => analysis.update());
   let progressFrame = false;
   const models = new ModelManager(network.env, network.start, () => {
     // Progress arrives with every chunk of the download; draw it at most once a frame. Other changes draw at once.
@@ -82,7 +83,19 @@ export function startPage(port: SearchPort, network: NetworkSource): GameControl
       return;
     }
     renderModel();
+    analysis.update();
   });
+  const analysis = new Analysis(
+    controller,
+    port,
+    () => models.state(controller.size).status === "ready",
+    () => {
+      render();
+      renderAnalysis();
+    },
+  );
+  /** The person may move: it is their turn, and the position on the board is the latest. */
+  const canPlay = (): boolean => controller.humanToMove && !analysis.viewingPast;
   const modelNote = element("model-note", HTMLElement);
   const modelProgress = element("model-progress", HTMLProgressElement);
   const modelRetry = element("model-retry", HTMLButtonElement);
@@ -139,6 +152,53 @@ export function startPage(port: SearchPort, network: NetworkSource): GameControl
     }
   }
 
+  const analysisOn = element("analysis-on", HTMLInputElement);
+  const evalElement = element("eval", HTMLElement);
+
+  /** Analysis mode: the eval bar (only here, never in play), the position being viewed and the network's best moves. */
+  function renderAnalysis(): void {
+    const view = analysis.view;
+    const ready = models.state(controller.size).status === "ready";
+    analysisOn.disabled = !ready && !analysis.enabled;
+    analysisOn.checked = analysis.enabled;
+    element("analysis-tools", HTMLElement).hidden = !analysis.enabled;
+    const bar = evalBar(view);
+    evalElement.hidden = bar === null;
+    element("analysis-lines", HTMLElement).replaceChildren();
+    const count = controller.moves.length;
+    setEnabled(element("step-first", HTMLButtonElement), analysis.ply > 0);
+    setEnabled(element("step-prev", HTMLButtonElement), analysis.ply > 0);
+    setEnabled(element("step-next", HTMLButtonElement), analysis.ply < count);
+    setEnabled(element("step-last", HTMLButtonElement), analysis.ply < count);
+    element("analysis-position", HTMLElement).textContent = analysis.enabled ? `Position after ${analysis.where}.` : "";
+    const note = element("analysis-note", HTMLElement);
+    if (view.status === "ready" && bar) {
+      evalElement.setAttribute("aria-valuenow", String(bar.percent));
+      evalElement.setAttribute("aria-valuetext", bar.label);
+      element("eval-p1", HTMLElement).style.width = `${bar.percent}%`;
+      element("eval-p1-text", HTMLElement).textContent = `Player 1: ${bar.percent}%`;
+      element("eval-p2-text", HTMLElement).textContent = `Player 2: ${100 - bar.percent}%`;
+      const lines = element("analysis-lines", HTMLElement);
+      for (const line of view.reading.lines) {
+        const item = document.createElement("li");
+        item.textContent = `${line.move}: ${Math.round(line.share * 100)}% of the searches`;
+        lines.append(item);
+      }
+      note.textContent = view.reading.lines.length > 0 ? "Best moves for the player to move, by share of the network's 32 searches." : "The game is over here.";
+      const sentence = analysis.takeAnnouncement();
+      if (sentence) announce(sentence);
+    } else {
+      note.textContent =
+        view.status === "unavailable"
+          ? "Analysis needs the network, which is not ready."
+          : view.status === "searching"
+            ? "The network is looking at this position."
+            : view.status === "failed"
+              ? `The analysis failed (${view.message}).`
+              : "";
+    }
+  }
+
   /** Shows the controller's board size, side and level in the selects (after a game is opened from a link). */
   function syncSelects(): void {
     sizeSelect.value = String(controller.size);
@@ -147,15 +207,16 @@ export function startPage(port: SearchPort, network: NetworkSource): GameControl
   }
 
   function render(): void {
-    const state: GameState = controller.state;
-    const canMove = controller.humanToMove;
+    const past = analysis.viewingPast ? replay(controller.size, controller.moves, analysis.ply) : null;
+    const state: GameState = past ? past.state : controller.state;
+    const canMove = canPlay();
     const wall = canMove ? preview.wall : null;
     const targets = canMove ? pawnTargets(state) : [];
     const markup = renderBoard(state, {
       targets,
       ghost: wall ? { wall, legal: findAction(state, wall) !== null } : null,
       cursor: cursor ? { target: cursor, legal: findAction(state, cursor) !== null } : null,
-      last: controller.lastMove,
+      last: past ? past.last : controller.lastMove,
     });
     if (markup !== drawn) {
       drawn = markup;
@@ -163,16 +224,33 @@ export function startPage(port: SearchPort, network: NetworkSource): GameControl
       board.setAttribute("viewBox", `0 0 ${span} ${span}`);
       board.innerHTML = markup;
     }
-    board.setAttribute("aria-label", `Quoridor. ${describeBoard(state)}`);
+    const viewing = past ? ` Showing the position after move ${analysis.ply} of ${controller.moves.length}.` : "";
+    board.setAttribute("aria-label", `Quoridor. ${describeBoard(state)}${viewing}`);
     board.classList.toggle("can-click", canMove);
     renderTrays(state);
     renderMoves();
     const text = statusText(controller);
     if (statusLine.textContent !== text) statusLine.textContent = text;
+    // Not read aloud with each change: the position being viewed is in the analysis card and the board's label.
+    const viewingNote = element("viewing", HTMLElement);
+    viewingNote.hidden = past === null;
+    viewingNote.textContent = past ? `Showing the position after move ${analysis.ply} of ${controller.moves.length}. Choose Latest to play.` : "";
     retryButton.hidden = controller.error === null;
-    undoButton.disabled = !controller.canUndo;
+    setEnabled(undoButton, controller.canUndo);
     // Some browsers throw if the address is rewritten too often, and a progress bar needs no new address.
     if (location.hash !== controller.hash) history.replaceState(null, "", controller.hash);
+  }
+
+  /** Greys a button out without taking it out of the tab order, so pressing it does not drop keyboard focus. */
+  function setEnabled(button: HTMLButtonElement, enabled: boolean): void {
+    button.setAttribute("aria-disabled", String(!enabled));
+  }
+
+  /** Runs `handler` on a click unless the button is greyed out. */
+  function onPress(button: HTMLButtonElement, handler: () => void): void {
+    button.addEventListener("click", () => {
+      if (button.getAttribute("aria-disabled") !== "true") handler();
+    });
   }
 
   function renderTrays(state: GameState): void {
@@ -189,22 +267,55 @@ export function startPage(port: SearchPort, network: NetworkSource): GameControl
     }
   }
 
+  let movesDrawn = "";
+
   function renderMoves(): void {
     const moves = controller.moves;
     const list = element("moves", HTMLOListElement);
-    list.replaceChildren(
-      ...moveRows(moves).map((row, i) => {
-        const item = document.createElement("li");
-        row.forEach((move, k) => {
-          const cell = document.createElement("span");
-          cell.textContent = move;
-          if (i * 2 + k === moves.length - 1) cell.className = "latest";
-          item.append(cell);
-        });
-        return item;
-      }),
-    );
-    list.scrollTop = list.scrollHeight;
+    const signature = `${analysis.enabled}|${moves.join(".")}`;
+    if (signature !== movesDrawn) {
+      movesDrawn = signature;
+      // Rebuilding must not take keyboard focus away from the move being used.
+      const focused = document.activeElement;
+      const focusedPly = focused instanceof HTMLElement && list.contains(focused) ? focused.dataset["ply"] : undefined;
+      list.replaceChildren(
+        ...moveRows(moves).map((row, i) => {
+          const item = document.createElement("li");
+          row.forEach((move, k) => {
+            const ply = i * 2 + k + 1;
+            const cell = document.createElement(analysis.enabled ? "button" : "span");
+            cell.textContent = move;
+            cell.dataset["ply"] = String(ply);
+            if (cell instanceof HTMLButtonElement) {
+              cell.type = "button";
+              cell.setAttribute("aria-label", `Show the position after move ${ply}, ${move}`);
+              cell.addEventListener("click", () => analysis.goTo(ply));
+            }
+            item.append(cell);
+          });
+          return item;
+        }),
+      );
+      if (focusedPly !== undefined) list.querySelector<HTMLElement>(`[data-ply="${focusedPly}"]`)?.focus();
+    }
+    // The viewed move is marked in place; the entries themselves stay.
+    const shown = analysis.enabled ? analysis.ply : moves.length;
+    let viewed: HTMLElement | null = null;
+    for (const cell of list.querySelectorAll<HTMLElement>("[data-ply]")) {
+      const current = Number(cell.dataset["ply"]) === shown;
+      cell.classList.toggle("latest", current);
+      if (cell instanceof HTMLButtonElement) {
+        if (current) cell.setAttribute("aria-current", "step");
+        else cell.removeAttribute("aria-current");
+      }
+      if (current) viewed = cell;
+    }
+    if (!analysis.viewingPast) list.scrollTop = list.scrollHeight;
+    else if (viewed) {
+      // Keep the viewed move in sight without pulling the list to the end.
+      if (viewed.offsetTop < list.scrollTop) list.scrollTop = viewed.offsetTop;
+      else if (viewed.offsetTop + viewed.offsetHeight > list.scrollTop + list.clientHeight) list.scrollTop = viewed.offsetTop + viewed.offsetHeight - list.clientHeight;
+    }
     element("moves-empty", HTMLElement).hidden = moves.length > 0;
   }
 
@@ -237,14 +348,14 @@ export function startPage(port: SearchPort, network: NetworkSource): GameControl
     }
   });
   board.addEventListener("pointermove", (event) => {
-    if (controller.humanToMove && preview.move(event.pointerType, targetAt(event))) render();
+    if (canPlay() && preview.move(event.pointerType, targetAt(event))) render();
   });
   board.addEventListener("pointerleave", (event) => {
     if (preview.leave(event.pointerType)) render();
   });
   board.addEventListener("pointerup", (event) => {
     const target = targetAt(event);
-    if (!controller.humanToMove) return;
+    if (!canPlay()) return;
     const release = preview.release(event.pointerType, target);
     if (release === "play") play(target!);
     else if (release === "preview") {
@@ -284,7 +395,7 @@ export function startPage(port: SearchPort, network: NetworkSource): GameControl
     }
     if (key === "Enter" || key === " ") {
       event.preventDefault();
-      if (controller.humanToMove) play(cursor);
+      if (canPlay()) play(cursor);
       else announce("It is not your move.");
       return;
     }
@@ -299,6 +410,7 @@ export function startPage(port: SearchPort, network: NetworkSource): GameControl
   /** Starts the game the selects ask for. */
   function newGame(): void {
     preview.clear();
+    analysis.reset();
     const size = Number(sizeSelect.value);
     const wanted = selectedLevel();
     // The network levels need the network of this size; without it the game is played at Normal, and the select says so.
@@ -314,6 +426,7 @@ export function startPage(port: SearchPort, network: NetworkSource): GameControl
   function openHash(): boolean {
     try {
       preview.clear();
+      analysis.reset();
       controller.load(Game.fromHash(location.hash), selectedLevel());
       syncSelects();
       renderModel();
@@ -327,6 +440,11 @@ export function startPage(port: SearchPort, network: NetworkSource): GameControl
   }
 
   element("new", HTMLButtonElement).addEventListener("click", newGame);
+  analysisOn.addEventListener("change", () => analysis.setEnabled(analysisOn.checked));
+  onPress(element("step-first", HTMLButtonElement), () => analysis.goTo(0));
+  onPress(element("step-prev", HTMLButtonElement), () => analysis.step(-1));
+  onPress(element("step-next", HTMLButtonElement), () => analysis.step(1));
+  onPress(element("step-last", HTMLButtonElement), () => analysis.goTo(controller.moves.length));
   levelSelect.addEventListener("change", () => {
     controller.setLevel(selectedLevel());
     announce(`The bot plays at ${selectedLevel().label} from its next move.`);
@@ -336,7 +454,7 @@ export function startPage(port: SearchPort, network: NetworkSource): GameControl
     void models.select(Number(sizeSelect.value));
   });
   modelRetry.addEventListener("click", () => void models.retry(Number(sizeSelect.value)));
-  undoButton.addEventListener("click", () => controller.undo());
+  onPress(undoButton, () => controller.undo());
   retryButton.addEventListener("click", () => controller.retry());
   element("copy", HTMLButtonElement).addEventListener("click", () => {
     navigator.clipboard.writeText(location.href).then(

@@ -46,6 +46,11 @@
         <svg id="board" class="board" tabindex="0" role="application" aria-describedby="board-help"></svg>
         <div id="tray-p1" class="tray p1"></div>
         <p id="status" class="status" role="status"></p>
+        <p id="viewing" class="hint" hidden></p>
+        <div id="eval" class="eval" role="meter" aria-label="Chance that player 1 wins, by the network" aria-valuemin="0" aria-valuemax="100" hidden>
+          <div class="evalbar-track"><span id="eval-p1" class="evalbar-p1"></span></div>
+          <div class="evalbar-text" aria-hidden="true"><span id="eval-p1-text"></span><span id="eval-p2-text"></span></div>
+        </div>
         <p><button id="retry" type="button" hidden>Retry</button></p>
         <p id="board-help" class="hint">
           Click a cell to move your pawn, or a groove between cells to place a wall; on a touch screen tap a groove
@@ -59,6 +64,21 @@
           <h2 id="moves-title">Moves</h2>
           <ol id="moves" class="moves" aria-label="Moves in standard notation"></ol>
           <p id="moves-empty" class="hint">No moves yet.</p>
+        </section>
+        <section class="card" aria-labelledby="analysis-title">
+          <h2 id="analysis-title">Analysis</h2>
+          <label class="inline"><input id="analysis-on" type="checkbox" /> Analysis mode (needs the network)</label>
+          <div id="analysis-tools" hidden>
+            <div class="toolbar" role="group" aria-label="Step through the game">
+              <button id="step-first" type="button">First</button>
+              <button id="step-prev" type="button">Previous</button>
+              <button id="step-next" type="button">Next</button>
+              <button id="step-last" type="button">Latest</button>
+            </div>
+            <p id="analysis-position"></p>
+            <ol id="analysis-lines" aria-label="Best moves"></ol>
+            <p id="analysis-note" class="hint"></p>
+          </div>
         </section>
         <section class="card" aria-labelledby="model-title">
           <h2 id="model-title">Network</h2>
