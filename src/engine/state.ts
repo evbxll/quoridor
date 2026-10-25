@@ -87,6 +87,55 @@ export class GameState {
     return copy;
   }
 
+  /**
+   * The position as the player to move sees it: for player 2 the board is
+   * rotated 180 degrees and the players swap, so the mover is player 0 with
+   * goal row 0. With player 1 to move this is the state itself.
+   */
+  moverFrame(): GameState {
+    if (this.p1Turn) return this;
+    const size = this.size;
+    const anchors = (size - 1) ** 2;
+    const frame = GameState.initial(size);
+    frame.pawns.set([size - 1 - this.row(1), size - 1 - this.col(1), size - 1 - this.row(0), size - 1 - this.col(0)]);
+    frame.left.set([this.left[1]!, this.left[0]!]);
+    for (let i = 0; i < anchors; i++) {
+      frame.walls[2 * (anchors - 1 - i)] = this.walls[2 * i]!;
+      frame.walls[2 * (anchors - 1 - i) + 1] = this.walls[2 * i + 1]!;
+    }
+    return frame;
+  }
+
+  /**
+   * Breadth-first distances in steps from the nearest of `seeds` (cell
+   * indices `row * size + col`) to every cell, through open steps; -1 where
+   * unreachable.
+   */
+  distanceField(seeds: readonly number[]): Int32Array {
+    const size = this.size;
+    const dist = new Int32Array(size * size).fill(-1);
+    const queue = new Int32Array(size * size);
+    let tail = 0;
+    for (const seed of seeds) {
+      dist[seed] = 0;
+      queue[tail++] = seed;
+    }
+    for (let head = 0; head < tail; head++) {
+      const cell = queue[head]!;
+      const r = Math.floor(cell / size);
+      const c = cell % size;
+      for (const [dr, dc] of STEPS) {
+        const nr = r + dr;
+        const nc = c + dc;
+        if (nr < 0 || nr >= size || nc < 0 || nc >= size) continue;
+        if (dist[nr * size + nc]! >= 0 || !this.isStepOpen(r, c, nr, nc)) continue;
+        dist[nr * size + nc] = dist[cell]! + 1;
+        queue[tail++] = nr * size + nc;
+      }
+    }
+    return dist;
+  }
+
   /** Row of a player's pawn (GLOBAL). */
   row(player: 0 | 1): number {
     return this.pawns[2 * player]!;
