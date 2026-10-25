@@ -4,16 +4,61 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Quoridor</title>
+    <link rel="icon" href="data:," />
     <script src="%BASE_URL%coi-config.js"></script>
     <script src="%BASE_URL%coi-serviceworker.js"></script>
     <script type="module" src="/src/main.ts"></script>
   </head>
   <body>
-    <main>
+    <header class="topbar">
       <h1>Quoridor</h1>
-      <p>A Quoridor bot that runs in your browser. Coming soon.</p>
-      <p id="isolation">Checking the browser environment...</p>
-      <p id="engine">Starting the search worker...</p>
+      <div class="toolbar" role="group" aria-label="Game settings">
+        <label class="inline">Board
+          <select id="size">
+            <option value="5">5 x 5</option>
+            <option value="7">7 x 7</option>
+            <option value="9" selected>9 x 9</option>
+            <option value="11">11 x 11</option>
+          </select>
+        </label>
+        <label class="inline">Level <select id="level"></select></label>
+        <label class="inline">You play
+          <select id="side">
+            <option value="p1" selected>First (player 1)</option>
+            <option value="p2">Second (player 2)</option>
+          </select>
+        </label>
+        <button id="new" type="button">New game</button>
+        <button id="undo" type="button">Undo</button>
+        <button id="copy" type="button">Copy link</button>
+      </div>
+    </header>
+
+    <main class="layout">
+      <section class="board-area" aria-label="Game">
+        <div id="tray-p2" class="tray p2"></div>
+        <svg id="board" class="board" tabindex="0" role="application" aria-describedby="board-help"></svg>
+        <div id="tray-p1" class="tray p1"></div>
+        <p id="status" class="status" role="status"></p>
+        <p><button id="retry" type="button" hidden>Retry</button></p>
+        <p id="board-help" class="hint">
+          Click a cell to move your pawn, or a groove between cells to place a wall; on a touch screen tap a groove
+          once to preview a wall and again to place it. With the keyboard, focus the board, move the cursor with the
+          arrow keys, press H or V to choose a horizontal or vertical wall, P to go back to pawn moves, and Enter to play.
+        </p>
+      </section>
+
+      <aside class="panel">
+        <section class="card" aria-labelledby="moves-title">
+          <h2 id="moves-title">Moves</h2>
+          <ol id="moves" class="moves" aria-label="Moves in standard notation"></ol>
+          <p id="moves-empty" class="hint">No moves yet.</p>
+        </section>
+        <p id="level-note" class="hint">Strong and Max play with a trained network, which is not available yet.</p>
+        <p id="isolation" class="hint"></p>
+      </aside>
     </main>
+
+    <div id="live" class="sr-only" role="status" aria-live="polite"></div>
   </body>
 </html>
