@@ -5,7 +5,21 @@ import { startPage } from "./ui/page";
 
 const client = new SearchClient(() => new Worker(new URL("./ai/worker.ts", import.meta.url), { type: "module" }));
 client.configure({ kind: "heuristic" }).catch((error: unknown) => console.error(error));
-startPage(client);
+
+/** Cache Storage exists only in secure contexts; reading it elsewhere can throw. */
+function cacheStorage(): CacheStorage | undefined {
+  try {
+    return globalThis.caches;
+  } catch {
+    return undefined;
+  }
+}
+
+startPage(client, {
+  env: { fetch: globalThis.fetch.bind(globalThis), caches: cacheStorage(), base: new URL(import.meta.env.BASE_URL, location.href).href },
+  start: (model) =>
+    client.configure({ kind: "network", model, threads: searchThreads(globalThis.crossOriginIsolated, navigator.hardwareConcurrency) }),
+});
 
 const isolated = globalThis.crossOriginIsolated;
 const status = document.getElementById("isolation");

@@ -34,6 +34,12 @@
       </div>
     </header>
 
+    <div id="model-banner" class="banner" hidden>
+      <p id="model-banner-text" tabindex="-1"></p>
+      <progress id="model-progress" aria-label="Network download progress" hidden></progress>
+      <button id="model-retry" type="button" hidden>Retry download</button>
+    </div>
+
     <main class="layout">
       <section class="board-area" aria-label="Game">
         <div id="tray-p2" class="tray p2"></div>
@@ -54,7 +60,10 @@
           <ol id="moves" class="moves" aria-label="Moves in standard notation"></ol>
           <p id="moves-empty" class="hint">No moves yet.</p>
         </section>
-        <p id="level-note" class="hint">Strong and Max play with a trained network, which is not available yet.</p>
+        <section class="card" aria-labelledby="model-title">
+          <h2 id="model-title">Network</h2>
+          <p id="model-note" class="hint"></p>
+        </section>
         <p id="isolation" class="hint"></p>
       </aside>
     </main>

@@ -99,6 +99,10 @@ select {
 .tray.p2 .pieces i { background: var(--p2); }
 .tray .count { font-size: 18px; font-weight: 700; color: var(--text); }
 .status { margin: 4px 0 0; min-height: 1.45em; font-weight: 600; text-align: center; }
+progress { width: 100%; accent-color: var(--accent); }
+.banner { padding: 8px 16px; background: var(--card); border-bottom: 1px solid var(--line); display: flex; flex-wrap: wrap; align-items: center; gap: 6px 16px; }
+.banner p { margin: 0; flex: 1 1 260px; }
+.banner progress { flex: 1 1 100%; }
 .hint { margin: 0; color: var(--muted); font-size: 13px; max-width: 60ch; }
 
 .panel { display: flex; flex-direction: column; gap: 12px; min-width: 0; }
