@@ -1,4 +1,4 @@
-import { existsSync, readFileSync } from "node:fs";
+import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { encodeState } from "../../src/ai/encoding";
@@ -11,6 +11,7 @@ import { HORIZONTAL, squareName, VERTICAL, wallName } from "../../src/engine/act
 import { actionCount, wallCount } from "../../src/engine/constants";
 import { formatAction } from "../../src/engine/notation";
 import { GameState } from "../../src/engine/state";
+import { discoverModels } from "../helpers/models";
 
 /** A network that counts its calls and answers with a uniform policy. */
 class CountingNetwork implements Network {
@@ -127,20 +128,19 @@ describe("createOrtNetwork", () => {
   });
 });
 
-/** Set `QUORIDOR_TEST_MODEL_DIR` to a directory holding `model.onnx` and `golden.json` (see the README). */
-const modelDir = process.env["QUORIDOR_TEST_MODEL_DIR"] ?? join(process.cwd(), "test-data", "model");
-const hasGolden = existsSync(join(modelDir, "golden.json"));
-const hasModel = hasGolden && existsSync(join(modelDir, "model.onnx"));
-if (!hasModel) {
-  console.warn("onnxEvaluator.test: model tests skipped; set QUORIDOR_TEST_MODEL_DIR to a folder with model.onnx and golden.json (or put them in test-data/model)");
+/**
+ * The models to test: the folder in `QUORIDOR_TEST_MODEL_DIR` (or `test-data/model/`), else every model published in
+ * `public/models/index.json`, so the public CI checks golden parity as soon as a model is merged.
+ */
+const models = discoverModels(process.cwd(), process.env["QUORIDOR_TEST_MODEL_DIR"]);
+if (models.length === 0) {
+  console.warn("onnxEvaluator.test: NO MODEL FOUND, so the model tests are skipped; set QUORIDOR_TEST_MODEL_DIR to a folder with model.onnx and golden.json (or put them in test-data/model)");
 }
 
 interface Golden {
   tolerance: number;
   positions: Record<string, { planes: number[]; policy: number[]; value: number }[]>;
 }
-
-const golden = hasGolden ? (JSON.parse(readFileSync(join(modelDir, "golden.json"), "utf8")) as Golden) : null;
 
 /**
  * The position a golden input describes, as player 1 to move. golden.json holds
@@ -162,27 +162,29 @@ function positionOf(planes: readonly number[], size: number): GameState {
   return GameState.fromKey(`${size}|1|${pawn(2)}|${pawn(3)}|${left(4)},${left(5)}|${walls.join(",")}`);
 }
 
-describe.skipIf(!hasGolden)("golden.json (skipped when it is absent)", () => {
-  it("holds inputs that encodeState reproduces bit for bit from the position they describe", () => {
+if (models.length === 0) it.skip("model tests: no model was found (see the warning above)", () => {});
+
+describe.each(models)("model $id", ({ dir }) => {
+  const golden = JSON.parse(readFileSync(join(dir, "golden.json"), "utf8")) as Golden;
+
+  it("has golden inputs that encodeState reproduces bit for bit from the position they describe", () => {
     let checked = 0;
-    for (const [size, cases] of Object.entries(golden!.positions)) {
+    for (const [size, cases] of Object.entries(golden.positions)) {
       for (const [i, expected] of cases.entries()) {
         const encoded = encodeState(positionOf(expected.planes, Number(size)));
         expect(Array.from(encoded), `${size}x${size} position ${i}`).toEqual(Array.from(Float32Array.from(expected.planes)));
         checked++;
       }
     }
-    expect(checked).toBe(128);
+    expect(checked).toBe(Object.values(golden.positions).reduce((total, cases) => total + cases.length, 0));
   });
-});
 
-describe.skipIf(!hasModel)("the exported model (skipped when model.onnx is absent)", () => {
   for (const size of [5, 7, 9, 11]) {
     it(`matches golden.json within its own tolerance on ${size}x${size}`, async () => {
-      const network = await createOrtNetwork(ort, readFileSync(join(modelDir, "model.onnx")), { threads: 1 });
-      const cases = golden!.positions[String(size)]!;
-      expect(golden!.tolerance).toBe(1e-5);
-      expect(cases).toHaveLength(32);
+      const cases = golden.positions[String(size)];
+      if (!cases) return;
+      const network = await createOrtNetwork(ort, readFileSync(join(dir, "model.onnx")), { threads: 1 });
+      expect(golden.tolerance).toBe(1e-5);
       for (const [i, expected] of cases.entries()) {
         const { policy, value } = await network.infer(Float32Array.from(expected.planes), size);
         expect(policy.length).toBe(actionCount(size));
@@ -194,15 +196,15 @@ describe.skipIf(!hasModel)("the exported model (skipped when model.onnx is absen
           if (policy[k]! > policy[argmax]!) argmax = k;
           if (p > expected.policy[expectedArgmax]!) expectedArgmax = k;
         });
-        expect(worst, `policy of position ${i}`).toBeLessThan(golden!.tolerance);
-        expect(Math.abs(value - expected.value), `value of position ${i}`).toBeLessThan(golden!.tolerance);
+        expect(worst, `policy of position ${i}`).toBeLessThan(golden.tolerance);
+        expect(Math.abs(value - expected.value), `value of position ${i}`).toBeLessThan(golden.tolerance);
         expect(argmax, `argmax of position ${i}`).toBe(expectedArgmax);
       }
     });
   }
 
   it("searches a 9x9 position and returns a legal move", async () => {
-    const network = await createOrtNetwork(ort, readFileSync(join(modelDir, "model.onnx")), { threads: 1 });
+    const network = await createOrtNetwork(ort, readFileSync(join(dir, "model.onnx")), { threads: 1 });
     const state = GameState.initial(9);
     const mcts = await Mcts.create(new OnnxEvaluator(network), state);
     const result = await mcts.search(16);
