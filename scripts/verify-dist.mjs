@@ -29,8 +29,59 @@ function sha256(path) {
   return createHash("sha256").update(readFileSync(path)).digest("hex");
 }
 
+/** The rules the page applies when it reads `models/index.json` (`src/model/index.ts`); a dist the page would partly ignore is refused. */
+const MODEL_ID = /^[A-Za-z0-9._-]+$/;
+const SHA256 = /^[0-9a-f]{64}$/;
+/** A `bots` entry with this value means: no network at that size. */
+const NO_NETWORK = "heuristic";
+
 /**
- * Checks every model in `models/index.json`. A dist without the index has no
+ * Checks the shape of an index the way the page reads it.
+ * @param {any} index
+ * @returns {{errors: string[], models: {id: string, path: string, sha256: string}[]}}
+ */
+function validateIndex(index) {
+  const errors = [];
+  if (typeof index !== "object" || index === null || !Array.isArray(index.models) || typeof index.bots !== "object" || index.bots === null || Array.isArray(index.bots)) {
+    return { errors: ["models/index.json must be {models: [...], bots: {...}}"], models: [] };
+  }
+  const models = [];
+  const ids = new Set();
+  for (const [position, model] of index.models.entries()) {
+    const label = `model ${position}`;
+    if (typeof model !== "object" || model === null) {
+      errors.push(`${label}: not an object`);
+      continue;
+    }
+    const { id, path, sha256: sum } = model;
+    if (typeof id !== "string" || !MODEL_ID.test(id) || id === NO_NETWORK) {
+      errors.push(`${label}: id ${JSON.stringify(id)} is not a plain id (letters, digits, . _ -; not "${NO_NETWORK}")`);
+      continue;
+    }
+    if (ids.has(id)) {
+      errors.push(`model ${id}: listed twice`);
+      continue;
+    }
+    ids.add(id);
+    if (typeof path !== "string" || !path.startsWith("models/") || path.split("/").some((part) => part === ".." || part === "" || part === ".") || /^[a-z][a-z0-9+.-]*:/i.test(path)) {
+      errors.push(`model ${id}: path ${JSON.stringify(path)} must be a relative path under models/`);
+      continue;
+    }
+    if (typeof sum !== "string" || !SHA256.test(sum)) {
+      errors.push(`model ${id}: sha256 must be 64 lowercase hex digits`);
+      continue;
+    }
+    models.push({ id, path, sha256: sum });
+  }
+  for (const [size, id] of Object.entries(index.bots)) {
+    if (!/^[0-9]+$/.test(size)) errors.push(`bot size ${JSON.stringify(size)} is not a number`);
+    else if (id !== NO_NETWORK && !ids.has(id)) errors.push(`bot for ${size}x${size} names ${id}, which is not in the index`);
+  }
+  return { errors, models };
+}
+
+/**
+ * Checks every model in `models/index.json`. A model's `path` is relative to the site root (`models/<id>/model.onnx`), as `quoridor-publish` writes it. A dist without the index has no
  * published models, which is valid until the first model is published.
  * @param {string} distDir
  * @returns {string[]} Error messages.
@@ -40,10 +91,15 @@ function checkModels(distDir) {
   if (!existsSync(indexPath)) {
     return [];
   }
-  const errors = [];
-  const index = JSON.parse(readFileSync(indexPath, "utf8"));
-  for (const model of index.models ?? []) {
-    const file = join(distDir, "models", model.path);
+  let index;
+  try {
+    index = JSON.parse(readFileSync(indexPath, "utf8"));
+  } catch {
+    return ["models/index.json is not valid JSON"];
+  }
+  const { errors, models } = validateIndex(index);
+  for (const model of models) {
+    const file = join(distDir, model.path);
     if (!existsSync(file)) {
       errors.push(`model ${model.id}: ${model.path} is missing`);
       continue;

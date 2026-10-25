@@ -57,15 +57,57 @@ describe("verifyDist", () => {
     const sha = createHash("sha256").update("onnx").digest("hex");
     write("models/m1/model.onnx", "onnx");
     write("models/m1/card.json", JSON.stringify({ sha256: sha }));
-    write("models/index.json", JSON.stringify({ models: [{ id: "m1", path: "m1/model.onnx", sha256: sha }] }));
+    write("models/index.json", JSON.stringify({ models: [{ id: "m1", path: "models/m1/model.onnx", sha256: sha }], bots: {} }));
     expect(verifyDist(dist, root)).toEqual([]);
 
     write("models/m1/model.onnx", "tampered");
     expect(verifyDist(dist, root)).toHaveLength(2);
   });
 
+  it("reports a bot that names a model the index does not have", () => {
+    write("models/index.json", JSON.stringify({ models: [], bots: { 9: "gone" } }));
+    expect(verifyDist(dist, root)).toEqual(["bot for 9x9 names gone, which is not in the index"]);
+  });
+
+  describe("an index the page would refuse or partly ignore", () => {
+    const sha = createHash("sha256").update("onnx").digest("hex");
+    const good = { id: "m1", path: "models/m1/model.onnx", sha256: sha };
+    const check = (index: unknown): string[] => {
+      write("models/m1/model.onnx", "onnx");
+      write("models/m1/card.json", JSON.stringify({ sha256: sha }));
+      write("models/index.json", typeof index === "string" ? index : JSON.stringify(index));
+      return verifyDist(dist, root);
+    };
+
+    it("accepts an index written the way quoridor-publish writes it", () => {
+      expect(check({ models: [good], bots: { 5: "m1", 7: "m1", 9: "m1", 11: "m1" } })).toEqual([]);
+    });
+
+    it("accepts a bot that says no network at a size", () => {
+      expect(check({ models: [good], bots: { 5: "heuristic", 9: "m1" } })).toEqual([]);
+    });
+
+    it("refuses what is not an index, with a message instead of a crash", () => {
+      for (const index of ["not json", { models: "abc", bots: {} }, { models: [], bots: [] }, { bots: {} }, null, []]) {
+        expect(check(index), JSON.stringify(index)).toHaveLength(1);
+      }
+    });
+
+    it("refuses a root-absolute or outside path, an odd id, a bad checksum and a duplicate", () => {
+      expect(check({ models: [{ ...good, path: "/models/m1/model.onnx" }], bots: {} })[0]).toContain("relative path");
+      expect(check({ models: [{ ...good, path: "models/../m1/model.onnx" }], bots: {} })[0]).toContain("relative path");
+      expect(check({ models: [{ ...good, path: "https://x.example/models/m1/model.onnx" }], bots: {} })[0]).toContain("relative path");
+      expect(check({ models: [{ ...good, path: "other/m1/model.onnx" }], bots: {} })[0]).toContain("relative path");
+      expect(check({ models: [{ ...good, id: "my model" }], bots: {} })[0]).toContain("plain id");
+      expect(check({ models: [{ ...good, id: "heuristic" }], bots: {} })[0]).toContain("plain id");
+      expect(check({ models: [{ ...good, sha256: sha.toUpperCase() }], bots: {} })[0]).toContain("64 lowercase");
+      expect(check({ models: [good, good], bots: {} })).toEqual(["model m1: listed twice"]);
+      expect(check({ models: [good], bots: { five: "m1" } })[0]).toContain("not a number");
+    });
+  });
+
   it("reports a model file that is missing", () => {
-    write("models/index.json", JSON.stringify({ models: [{ id: "m1", path: "m1/model.onnx", sha256: "x" }] }));
-    expect(verifyDist(dist, root)).toEqual(["model m1: m1/model.onnx is missing"]);
+    write("models/index.json", JSON.stringify({ models: [{ id: "m1", path: "models/m1/model.onnx", sha256: "a".repeat(64) }], bots: {} }));
+    expect(verifyDist(dist, root)).toEqual(["model m1: models/m1/model.onnx is missing"]);
   });
 });
