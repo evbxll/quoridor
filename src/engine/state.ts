@@ -110,9 +110,13 @@ export class GameState {
    * Breadth-first distances in steps from the nearest of `seeds` (cell
    * indices `row * size + col`) to every cell, through open steps; -1 where
    * unreachable.
+   * With `extraWall`, that wall counts as placed during the search (its legality is not checked).
    */
-  distanceField(seeds: readonly number[]): Int32Array {
+  distanceField(seeds: readonly number[], extraWall?: { row: number; col: number; orientation: Orientation }): Int32Array {
     const size = this.size;
+    const index = extraWall ? (extraWall.row * (size - 1) + extraWall.col) * 2 + extraWall.orientation : -1;
+    const hadWall = extraWall ? this.walls[index] : 0;
+    if (extraWall) this.walls[index] = 1;
     const dist = new Int32Array(size * size).fill(-1);
     const queue = new Int32Array(size * size);
     let tail = 0;
@@ -133,6 +137,7 @@ export class GameState {
         queue[tail++] = nr * size + nc;
       }
     }
+    if (extraWall) this.walls[index] = hadWall!;
     return dist;
   }
 
