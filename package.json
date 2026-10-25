@@ -13,12 +13,16 @@
     "test": "vitest run",
     "build": "vite build",
     "preview": "vite preview",
-    "verify-dist": "node scripts/verify-dist.mjs"
+    "verify-dist": "node scripts/verify-dist.mjs",
+    "bench": "vite build --ssr scripts/bench.ts --outDir .bench --emptyOutDir && node .bench/bench.js"
   },
   "devDependencies": {
     "@types/node": "22.20.5",
     "typescript": "6.0.3",
     "vite": "8.3.4",
     "vitest": "5.0.3"
+  },
+  "dependencies": {
+    "onnxruntime-web": "1.30.0"
   }
 }

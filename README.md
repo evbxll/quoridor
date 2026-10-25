@@ -21,7 +21,10 @@ npm run typecheck    # tsc, strict
 npm test             # vitest
 npm run build        # writes dist/
 npm run verify-dist  # checks dist/ before deploy
+npm run bench -- <model.onnx> [threads]   # times the network and the search in Node
 ```
+
+Tests that need a model skip without one. To run them, set `QUORIDOR_TEST_MODEL_DIR` to a folder holding `model.onnx` and `golden.json` (or put them in `test-data/model/`, which git ignores). Never commit a model outside `public/models/`.
 
 ## Hosting
 
