@@ -9,8 +9,12 @@ export interface Evaluation {
 }
 
 export interface Evaluator {
-  /** Evaluates an unfinished position; `legal` is its legal actions, ascending (the search already has them). */
-  evaluate(state: GameState, legal: readonly PlayerAction[]): Evaluation;
+  /**
+   * Evaluates an unfinished position; `legal` is its legal actions, ascending (the search already has them).
+   * A network runs asynchronously (onnxruntime-web has no synchronous call); the table and the heuristic
+   * answer at once, and their concrete signatures say so.
+   */
+  evaluate(state: GameState, legal: readonly PlayerAction[]): Evaluation | Promise<Evaluation>;
 }
 
 /** One recorded evaluation: the policy at the position's legal actions, ascending, and the value. */

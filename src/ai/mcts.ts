@@ -73,16 +73,23 @@ type Step = readonly [node: Node, where: number];
  * repetition or cap inside the tree.
  */
 export class Mcts {
-  private root: Node;
+  private busy = false;
+
+  private constructor(
+    private readonly evaluator: Evaluator,
+    private root: Node,
+    private readonly cPuct: number,
+    private readonly fpuReduction: number,
+  ) {}
 
   /** Starts a tree at a copy of `state`, evaluating it. */
-  constructor(
-    private readonly evaluator: Evaluator,
+  static async create(
+    evaluator: Evaluator,
     state: GameState,
-    private readonly cPuct = C_PUCT,
-    private readonly fpuReduction = FPU_REDUCTION,
-  ) {
-    this.root = this.evaluatedNode(state.clone());
+    cPuct = C_PUCT,
+    fpuReduction = FPU_REDUCTION,
+  ): Promise<Mcts> {
+    return new Mcts(evaluator, await evaluatedNode(evaluator, state.clone()), cPuct, fpuReduction);
   }
 
   /** The root position. Do not mutate it. */
@@ -91,37 +98,57 @@ export class Mcts {
   }
 
   /** Plays `action` at the root, keeping that child's subtree. Throws if the action is illegal there. */
-  advance(action: PlayerAction): void {
+  async advance(action: PlayerAction): Promise<void> {
+    this.enter();
+    try {
+      await this.advanceRoot(action);
+    } finally {
+      this.busy = false;
+    }
+  }
+
+  private async advanceRoot(action: PlayerAction): Promise<void> {
     const where = this.root.actions.indexOf(action);
     if (where < 0) throw new Error(`Action ${action} is not legal at the root`);
     let child = this.root.children.get(where);
     if (!child) {
-      child = this.evaluatedNode(this.childState(this.root, where));
+      child = await evaluatedNode(this.evaluator, this.childState(this.root, where));
       this.root.children.set(where, child);
     }
     this.root = child;
   }
 
   /** Runs simulations from the root, adding to any statistics already there. Throws at a finished game. */
-  search(simulations: number): SearchResult {
+  async search(simulations: number): Promise<SearchResult> {
     if (this.root.terminal) throw new Error("Cannot search a finished game");
-    for (let i = 0; i < simulations; i++) {
-      const path: Step[] = [];
-      const leaf = this.descend(path);
-      this.backpropagate(path, leaf.value);
+    this.enter();
+    try {
+      for (let i = 0; i < simulations; i++) {
+        const path: Step[] = [];
+        const leaf = await this.descend(path);
+        this.backpropagate(path, leaf.value);
+      }
+    } finally {
+      this.busy = false;
     }
     return this.result();
   }
 
+  /** The tree is changed across awaits, so a second call before the first finishes would corrupt it. */
+  private enter(): void {
+    if (this.busy) throw new Error("The search tree is busy with another call");
+    this.busy = true;
+  }
+
   /** Follows PUCT to a terminal node or an unexpanded action, which is expanded and returned. */
-  private descend(path: Step[]): Node {
+  private async descend(path: Step[]): Promise<Node> {
     let node = this.root;
     for (;;) {
       const where = this.select(node);
       path.push([node, where]);
       const child = node.children.get(where);
       if (!child) {
-        const created = this.evaluatedNode(this.childState(node, where));
+        const created = await evaluatedNode(this.evaluator, this.childState(node, where));
         node.children.set(where, created);
         return created;
       }
@@ -198,11 +225,12 @@ export class Mcts {
     return state;
   }
 
-  private evaluatedNode(state: GameState): Node {
-    if (state.isEnd()) return new Node(state, [], null);
-    const legal = state.legalActions();
-    return new Node(state, legal, this.evaluator.evaluate(state, legal));
-  }
+}
+
+async function evaluatedNode(evaluator: Evaluator, state: GameState): Promise<Node> {
+  if (state.isEnd()) return new Node(state, [], null);
+  const legal = state.legalActions();
+  return new Node(state, legal, await evaluator.evaluate(state, legal));
 }
 
 /** Index of the first maximum. */

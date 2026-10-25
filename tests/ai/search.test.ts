@@ -28,8 +28,8 @@ interface Search {
 const { searches } = fixture<{ searches: Search[] }>("search");
 const { positions } = fixture<{ positions: { key: string; priors: number[]; value: number }[] }>("heuristic");
 
-function searchFixture(s: Search): Mcts {
-  return new Mcts(new TableEvaluator(s.evaluations), GameState.fromKey(s.key), s.c_puct, s.fpu_reduction);
+function searchFixture(s: Search): Promise<Mcts> {
+  return Mcts.create(new TableEvaluator(s.evaluations), GameState.fromKey(s.key), s.c_puct, s.fpu_reduction);
 }
 
 describe("numpySum", () => {
@@ -40,7 +40,7 @@ describe("numpySum", () => {
     b: (i) => ((i * i * 13 + 7) % 1009) / 1009,
   };
 
-  it("matches numpy bit for bit at every recorded length", () => {
+  it("matches numpy bit for bit at every recorded length", async () => {
     expect(Object.keys(sums)).toHaveLength(18);
     for (const [name, expected] of Object.entries(sums)) {
       const values = Float64Array.from({ length: Number(name.slice(1)) }, (_, i) => formulas[name[0]!]!(i));
@@ -48,21 +48,21 @@ describe("numpySum", () => {
     }
   });
 
-  it("sums the empty array to zero", () => {
+  it("sums the empty array to zero", async () => {
     expect(numpySum([])).toBe(0);
   });
 });
 
 describe("search.json", () => {
-  it("has searches on 5x5 and 7x7", () => {
+  it("has searches on 5x5 and 7x7", async () => {
     expect(new Set(searches.map((s) => s.size))).toEqual(new Set([5, 7]));
     expect(searches.length).toBeGreaterThanOrEqual(12);
   });
 
-  it("reproduces the visits of every recorded search exactly", () => {
+  it("reproduces the visits of every recorded search exactly", async () => {
     let matched = 0;
     for (const s of searches) {
-      const result = searchFixture(s).search(s.simulations);
+      const result = await (await searchFixture(s)).search(s.simulations);
       expect(result.actions, s.key).toEqual(s.actions);
       expect(result.visits, s.key).toEqual(s.visits);
       expect(formatAction(GameState.fromKey(s.key), selectAction(result, 0, Math.random)), s.key).toBe(s.best_move);
@@ -92,20 +92,20 @@ interface Advance {
 describe("advance.json", () => {
   const { searches: cases } = fixture<{ searches: Advance[] }>("advance");
 
-  it("covers both the expanded and the unexpanded child", () => {
+  it("covers both the expanded and the unexpanded child", async () => {
     expect(cases.map((c) => c.which)).toContain("most");
     expect(cases.map((c) => c.which)).toContain("least");
   });
 
-  it("searches, advances and searches again exactly as Python does", () => {
+  it("searches, advances and searches again exactly as Python does", async () => {
     for (const c of cases) {
       const start = GameState.fromKey(c.key);
-      const mcts = new Mcts(new TableEvaluator(c.evaluations), start, c.c_puct, c.fpu_reduction);
-      const first = mcts.search(c.simulations[0]);
+      const mcts = await Mcts.create(new TableEvaluator(c.evaluations), start, c.c_puct, c.fpu_reduction);
+      const first = await mcts.search(c.simulations[0]);
       expect(first.visits, c.key).toEqual(c.visits);
       expect(first.value, c.key).toBe(c.value);
-      mcts.advance(parseMove(start, c.advance));
-      const second = mcts.search(c.simulations[1]);
+      await mcts.advance(parseMove(start, c.advance));
+      const second = await mcts.search(c.simulations[1]);
       expect(second.actions, c.key).toEqual(c.actions2);
       expect(second.visits, c.key).toEqual(c.visits2);
       expect(second.value, c.key).toBe(c.value2);
@@ -116,27 +116,37 @@ describe("advance.json", () => {
 describe("Mcts", () => {
   const first = searches[0]!;
 
-  it("keeps the subtree on advance", () => {
-    const mcts = searchFixture(first);
-    const result = mcts.search(first.simulations);
+  it("keeps the subtree on advance", async () => {
+    const mcts = await searchFixture(first);
+    const result = await mcts.search(first.simulations);
     const best = selectAction(result, 0, Math.random);
     const visitsBefore = result.visits[result.actions.indexOf(best)]!;
-    mcts.advance(best);
+    await mcts.advance(best);
     expect(mcts.rootState.p1Turn).toBe(!GameState.fromKey(first.key).p1Turn);
     // The new root already carries the visits spent below the chosen move.
-    const again = mcts.search(0);
+    const again = await mcts.search(0);
     expect(again.visits.reduce((a, b) => a + b, 0)).toBe(visitsBefore - 1);
   });
 
-  it("rejects an illegal advance and a search of a finished game", () => {
-    expect(() => searchFixture(first).advance(playerAction(1000))).toThrow("not legal");
-    const done = new Mcts(new HeuristicEvaluator(), GameState.fromKey("5|1|c5|c2|3,3|"));
-    expect(() => done.search(1)).toThrow("finished");
+  it("refuses a call while another is still running, and works again afterwards", async () => {
+    const mcts = await searchFixture(first);
+    const running = mcts.search(30);
+    await expect(mcts.search(30)).rejects.toThrow("busy");
+    await expect(mcts.advance(playerAction(0))).rejects.toThrow("busy");
+    const result = await running;
+    expect(result.visits.reduce((a, b) => a + b, 0)).toBe(30);
+    expect((await mcts.search(10)).visits.reduce((a, b) => a + b, 0)).toBe(40);
   });
 
-  it("finds the winning step and scores the position as won", () => {
-    const mcts = new Mcts(new HeuristicEvaluator(), GameState.fromKey("5|1|c4|c2|3,3|"));
-    const result = mcts.search(50);
+  it("rejects an illegal advance and a search of a finished game", async () => {
+    await expect((await searchFixture(first)).advance(playerAction(1000))).rejects.toThrow("not legal");
+    const done = await Mcts.create(new HeuristicEvaluator(), GameState.fromKey("5|1|c5|c2|3,3|"));
+    await expect(done.search(1)).rejects.toThrow("finished");
+  });
+
+  it("finds the winning step and scores the position as won", async () => {
+    const mcts = await Mcts.create(new HeuristicEvaluator(), GameState.fromKey("5|1|c4|c2|3,3|"));
+    const result = await mcts.search(50);
     expect(result.visits.reduce((a, b) => a + b, 0)).toBe(50);
     expect(selectAction(result, 0, Math.random)).toBe(0);
     expect(result.principalVariation[0]).toBe(0);
@@ -153,12 +163,12 @@ describe("selectAction", () => {
     principalVariation: [],
   };
 
-  it("plays the most visited action at temperature 0, ties to the lowest index", () => {
+  it("plays the most visited action at temperature 0, ties to the lowest index", async () => {
     expect(selectAction(result, 0, Math.random)).toBe(9);
     expect(selectAction({ ...result, visits: [30, 30, 5] }, 0, Math.random)).toBe(3);
   });
 
-  it("samples reproducibly from a seed and in proportion to the visits", () => {
+  it("samples reproducibly from a seed and in proportion to the visits", async () => {
     const draw = (seed: number): number[] => {
       const random = seededRandom(seed);
       return Array.from({ length: 20 }, () => selectAction(result, 1, random));
@@ -175,19 +185,19 @@ describe("selectAction", () => {
     expect(counts.get(3)! / 10000).toBeCloseTo(0.1, 1);
   });
 
-  it("never picks an unvisited action, even at a high temperature", () => {
+  it("never picks an unvisited action, even at a high temperature", async () => {
     const sparse = { ...result, actions: [3, 5, 9, 11].map(playerAction), visits: [0, 10, 60, 0], qValues: [0, 0, 0, 0] };
     const random = seededRandom(5);
     const picked = new Set(Array.from({ length: 5000 }, () => selectAction(sparse, 5, random)));
     expect(picked).toEqual(new Set([5, 9]));
   });
 
-  it("falls back to the first action when nothing was searched", () => {
+  it("falls back to the first action when nothing was searched", async () => {
     const none = { ...result, visits: [0, 0, 0] };
     expect(selectAction(none, 1, seededRandom(1))).toBe(3);
   });
 
-  it("draws the same actions as the Python formula up to a temperature of 2", () => {
+  it("draws the same actions as the Python formula up to a temperature of 2", async () => {
     const sparse = { ...result, actions: [3, 5, 9, 11].map(playerAction), visits: [0, 10, 60, 25], qValues: [0, 0, 0, 0] };
     // Python: weight = exp(log(max(v, 1e-12)) / T), normalized, then sampled.
     const python = (temperature: number, random: () => number): number => {
@@ -208,7 +218,7 @@ describe("selectAction", () => {
     }
   });
 
-  it("sharpens toward the most visited action at a low temperature", () => {
+  it("sharpens toward the most visited action at a low temperature", async () => {
     const random = seededRandom(3);
     const picks = Array.from({ length: 200 }, () => selectAction(result, 0.1, random));
     expect(picks.filter((a) => a === 9).length).toBeGreaterThan(195);
@@ -216,7 +226,7 @@ describe("selectAction", () => {
 });
 
 describe("HeuristicEvaluator against heuristic.json", () => {
-  it("matches priors and value within 1e-6 on every position", () => {
+  it("matches priors and value within 1e-6 on every position", async () => {
     expect(positions).toHaveLength(160);
     const evaluator = new HeuristicEvaluator();
     for (const p of positions) {
