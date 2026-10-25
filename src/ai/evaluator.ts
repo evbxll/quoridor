@@ -15,6 +15,8 @@ export interface Evaluator {
    * answer at once, and their concrete signatures say so.
    */
   evaluate(state: GameState, legal: readonly PlayerAction[]): Evaluation | Promise<Evaluation>;
+  /** Frees what the evaluator holds (a network session); called when it is replaced. */
+  dispose?(): void | Promise<void>;
 }
 
 /** One recorded evaluation: the policy at the position's legal actions, ascending, and the value. */

@@ -63,7 +63,7 @@ describe("GameController", () => {
     expect(controller.humanToMove).toBe(true);
     expect(play("c2")).toBe(true);
     expect(controller.thinking).toBe(true);
-    expect(engine.requests).toEqual([{ size: 5, moves: ["c2"], simulations: 5, temperature: 1, seed: 2147483648 }]);
+    expect(engine.requests).toEqual([{ engine: "heuristic", size: 5, moves: ["c2"], simulations: 5, temperature: 1, seed: 2147483648 }]);
     engine.answer("c4");
     await settle();
     expect(controller.moves).toEqual(["c2", "c4"]);
@@ -207,12 +207,43 @@ describe("GameController", () => {
     expect(controller.moves).toEqual(["c2", "c4"]);
   });
 
-  it("treats a cancelled answer that nobody asked for as a failure", async () => {
+  it("asks again when the worker cancels a search nobody cancelled", async () => {
     const { engine, controller, play } = setup();
     play("c2");
     engine.cancelled();
     await settle();
+    expect(controller.error).toBeNull();
+    expect(controller.thinking).toBe(true);
+    expect(engine.requests).toHaveLength(2);
+    expect(engine.requests[1]!.moves).toEqual(["c2"]);
+    engine.answer("c4");
+    await settle();
+    expect(controller.moves).toEqual(["c2", "c4"]);
+  });
+
+  it("treats a cancelled answer that nobody asked for as a failure, once it keeps happening", async () => {
+    const { engine, controller, play } = setup();
+    play("c2");
+    for (let i = 0; i < 3; i++) {
+      engine.cancelled();
+      await settle();
+    }
     expect(controller.error).toContain("cancelled");
+    expect(engine.requests).toHaveLength(3);
+  });
+
+  it("asks the network for a network level and the heuristic for the others", () => {
+    const { engine, controller, play } = setup(5, "p1", LEVELS[2]!);
+    play("c2");
+    expect(engine.requests[0]).toMatchObject({ engine: "network", simulations: 32, temperature: 0 });
+    controller.setLevel(LEVELS[3]!);
+    controller.undo();
+    play("c2");
+    expect(engine.requests[1]).toMatchObject({ engine: "network", simulations: 200 });
+    controller.setLevel(NORMAL);
+    controller.undo();
+    play("c2");
+    expect(engine.requests[2]).toMatchObject({ engine: "heuristic", simulations: 100 });
   });
 
   it("uses a new level on the bot's next move", () => {

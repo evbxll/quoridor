@@ -28,6 +28,9 @@ function replayTargets(size: number, moves: readonly string[]): GlobalAction[] {
   });
 }
 
+/** How often a search the worker cancelled without being asked is tried again before it is reported. */
+const RETRIES_AFTER_CANCEL = 2;
+
 /** Seeds for the bot's sampling are drawn from this range. */
 const SEED_RANGE = 2 ** 32;
 
@@ -189,14 +192,19 @@ export class GameController {
     this.searching = true;
     this.onChange();
     try {
-      const reply = await this.port.search({
-        size: this.game.size,
-        moves: this.game.moves,
-        simulations: level.simulations,
-        temperature: level.temperature,
-        seed: Math.floor(this.random() * SEED_RANGE),
-      });
-      if (epoch !== this.epoch) return;
+      let reply: SearchResponse | null = null;
+      // A null answer that nobody asked for (the worker was reconfigured, say) is not a failure: ask again.
+      for (let attempt = 0; attempt <= RETRIES_AFTER_CANCEL && reply === null; attempt++) {
+        reply = await this.port.search({
+          engine: level.engine,
+          size: this.game.size,
+          moves: this.game.moves,
+          simulations: level.simulations,
+          temperature: level.temperature,
+          seed: Math.floor(this.random() * SEED_RANGE),
+        });
+        if (epoch !== this.epoch) return;
+      }
       if (reply === null) throw new Error("The search was cancelled");
       const action = parseMove(this.game.state, reply.move);
       this.targets.push(this.state.globalAction(action));

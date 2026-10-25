@@ -76,6 +76,14 @@ describe("OnnxEvaluator with a stand-in network", () => {
     expect([evaluator.hits, evaluator.misses]).toEqual([2, 4]);
   });
 
+  it("frees the network when it is replaced", async () => {
+    let released = 0;
+    const network: Network = { ...new CountingNetwork(), infer: async () => ({ policy: new Float32Array(0), value: 0 }), release: async () => void released++ };
+    await new OnnxEvaluator(network).dispose();
+    await new OnnxEvaluator(new CountingNetwork()).dispose();
+    expect(released).toBe(1);
+  });
+
   it("separates positions of different sizes", async () => {
     const evaluator = new OnnxEvaluator(new CountingNetwork());
     await evaluator.evaluate(GameState.initial(5));
@@ -93,6 +101,8 @@ describe("OnnxEvaluator with a stand-in network", () => {
 });
 
 /** A stand-in for onnxruntime-web whose session answers with the given policy length and value. */
+const released = { count: 0 };
+
 function stubRuntime(policyLength: (size: number) => number, value: number): OrtRuntime {
   let size = 0;
   return {
@@ -104,6 +114,7 @@ function stubRuntime(policyLength: (size: number) => number, value: number): Ort
     },
     InferenceSession: {
       create: async () => ({
+        release: async () => void (released.count += 1),
         run: async () => ({ policy: { data: new Float32Array(policyLength(size)) }, value: { data: Float32Array.of(value) } }),
       }),
     },
@@ -118,6 +129,13 @@ describe("createOrtNetwork", () => {
     await expect(nan.infer(new Float32Array(250), 5)).rejects.toThrow("a number");
     const fine = await createOrtNetwork(stubRuntime(actionCount, 0.5), new Uint8Array(), { threads: 1 });
     expect((await fine.infer(new Float32Array(250), 5)).value).toBe(0.5);
+  });
+
+  it("lets the session go on release", async () => {
+    const network = await createOrtNetwork(stubRuntime(actionCount, 0), new Uint8Array(), { threads: 1 });
+    const before = released.count;
+    await network.release!();
+    expect(released.count).toBe(before + 1);
   });
 
   it("refuses to change the thread count after the runtime has started", async () => {

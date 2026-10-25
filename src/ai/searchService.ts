@@ -3,7 +3,7 @@ import { formatAction, parseMove } from "../engine/notation";
 import { GameState } from "../engine/state";
 import type { Evaluator } from "./evaluator";
 import { C_PUCT, FPU_REDUCTION, Mcts, selectAction } from "./mcts";
-import type { EngineSpec, Request, Response } from "./protocol";
+import type { EngineKind, EngineSpec, Request, Response } from "./protocol";
 import { seededRandom } from "./random";
 
 /** Milliseconds of uninterrupted search before the worker lets its message queue run. */
@@ -24,6 +24,9 @@ interface Tree {
 /** A search that is queued or running. */
 interface Run {
   readonly id: number;
+  readonly engine: EngineKind;
+  /** Whether the run uses the game's kept tree. */
+  readonly reuse: boolean;
   cancelled: boolean;
 }
 
@@ -39,8 +42,8 @@ function nextTask(): Promise<void> {
  * the searches queued or running. The tree is kept between searches of the same game.
  */
 export function createSearchService(post: (response: Response) => void, makeEvaluator: EvaluatorFactory): (request: Request) => void {
-  let evaluator: Evaluator | null = null;
-  let tree: Tree | null = null;
+  const evaluators = new Map<EngineKind, Evaluator>();
+  const trees = new Map<EngineKind, Tree>();
   const runs = new Set<Run>();
   let queue: Promise<void> = Promise.resolve();
 
@@ -53,30 +56,40 @@ export function createSearchService(post: (response: Response) => void, makeEval
     const { size, moves } = request;
     const cPuct = request.cPuct ?? C_PUCT;
     const fpuReduction = request.fpuReduction ?? FPU_REDUCTION;
+    if (request.reuseTree === false) {
+      const state = GameState.initial(size);
+      for (const move of moves) state.play(parseMove(state, move));
+      return { mcts: await Mcts.create(current, state, cPuct, fpuReduction), size, moves, evaluator: current, settings: "" };
+    }
+    const tree = trees.get(request.engine);
     const settings = [request.simulations, request.temperature, cPuct, fpuReduction].join("|");
     if (tree && tree.evaluator === current && tree.size === size && tree.settings === settings && tree.moves.length <= moves.length && tree.moves.every((m, i) => m === moves[i])) {
+      let kept: Tree = tree;
       for (const move of moves.slice(tree.moves.length)) {
-        await tree.mcts.advance(parseMove(tree.mcts.rootState, move));
+        await kept.mcts.advance(parseMove(kept.mcts.rootState, move));
         // Recorded move by move, so a later illegal move leaves the tree and its moves in step.
-        tree = { ...tree, moves: [...tree.moves, move] };
+        kept = { ...kept, moves: [...kept.moves, move] };
+        trees.set(request.engine, kept);
       }
-      return tree;
+      return kept;
     }
-    tree = null;
+    trees.delete(request.engine);
     const state = GameState.initial(size);
     for (const move of moves) state.play(parseMove(state, move));
-    tree = { mcts: await Mcts.create(current, state, cPuct, fpuReduction), size, moves, evaluator: current, settings };
-    return tree;
+    const fresh: Tree = { mcts: await Mcts.create(current, state, cPuct, fpuReduction), size, moves, evaluator: current, settings };
+    trees.set(request.engine, fresh);
+    return fresh;
   };
 
   /** A cancelled search leaves a partly searched tree, which a later search of the same position must not inherit. */
   const abandon = (run: Run): void => {
-    tree = null;
+    if (run.reuse) trees.delete(run.engine);
     post({ type: "cancelled", id: run.id });
   };
 
   const search = async (request: Extract<Request, { type: "search" }>, mine: Run): Promise<void> => {
-    if (!evaluator) throw new Error("The worker is not configured");
+    const evaluator = evaluators.get(request.engine);
+    if (!evaluator) throw new Error(`The ${request.engine} engine is not configured`);
     const { mcts } = await treeFor(request, evaluator);
     if (mcts.rootState.isEnd()) throw new Error("The game is over");
     let sliceStart = performance.now();
@@ -103,9 +116,9 @@ export function createSearchService(post: (response: Response) => void, makeEval
     });
   };
 
-  const enqueue = (id: number, task: () => Promise<void>): void => {
+  const enqueue = (id: number, task: () => Promise<void>, keepsTrees = true): void => {
     queue = queue.then(task).catch((error: unknown) => {
-      tree = null;
+      if (keepsTrees) trees.clear();
       fail(id, error);
     });
   };
@@ -115,17 +128,21 @@ export function createSearchService(post: (response: Response) => void, makeEval
       for (const run of runs) if (run.id === request.id) run.cancelled = true;
       return;
     }
-    for (const run of runs) run.cancelled = true;
     const id = request.id;
+    // Configuring waits its turn: a search in flight (the bot's move, say) finishes with the evaluator it started with.
     if (request.type === "configure") {
       enqueue(id, async () => {
-        evaluator = await makeEvaluator(request.engine);
-        tree = null;
+        const replaced = evaluators.get(request.engine.kind);
+        evaluators.set(request.engine.kind, await makeEvaluator(request.engine));
+        trees.delete(request.engine.kind);
+        await replaced?.dispose?.();
         post({ type: "configured", id });
       });
       return;
     }
-    const mine: Run = { id, cancelled: false };
+    for (const run of runs) run.cancelled = true;
+    const reuse = request.reuseTree !== false;
+    const mine: Run = { id, engine: request.engine, reuse, cancelled: false };
     runs.add(mine);
     enqueue(id, async () => {
       try {
@@ -134,7 +151,7 @@ export function createSearchService(post: (response: Response) => void, makeEval
       } finally {
         runs.delete(mine);
       }
-    });
+    }, reuse);
   };
 }
 

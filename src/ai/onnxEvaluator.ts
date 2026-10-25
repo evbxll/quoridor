@@ -9,6 +9,8 @@ export const CACHE_POSITIONS = 20_000;
 /** A network that evaluates one encoded position: `planes` is `[10, size, size]` float32. */
 export interface Network {
   infer(planes: Float32Array, size: number): Promise<Evaluation>;
+  /** Frees the model's memory; the network is not used afterwards. */
+  release?(): Promise<void>;
 }
 
 /**
@@ -26,6 +28,11 @@ export class OnnxEvaluator implements Evaluator {
     capacity = CACHE_POSITIONS,
   ) {
     this.cache = new LruCache(capacity);
+  }
+
+  /** Frees the network's memory when this evaluator is replaced. */
+  async dispose(): Promise<void> {
+    await this.network.release?.();
   }
 
   /** Evaluations answered from the cache. */

@@ -10,6 +10,11 @@ import type { GameState } from "../../src/engine/state";
 /** A uniform evaluator that counts its calls and answers on a later task, as a network would. */
 class FakeEvaluator implements Evaluator {
   calls = 0;
+  disposed = 0;
+
+  dispose(): void {
+    this.disposed++;
+  }
 
   async evaluate(state: GameState): Promise<Evaluation> {
     this.calls++;
@@ -23,7 +28,7 @@ const engine: EngineSpec = { kind: "heuristic" };
 type SearchRequest = Extract<Request, { type: "search" }>;
 
 function search(id: number, moves: string[], extra: Partial<SearchRequest> = {}): Request {
-  return { type: "search", id, size: 5, moves, simulations: 10, temperature: 0, seed: 1, ...extra };
+  return { type: "search", id, engine: "heuristic", size: 5, moves, simulations: 10, temperature: 0, seed: 1, ...extra };
 }
 
 function setup() {
@@ -60,7 +65,7 @@ describe("search service", () => {
   it("refuses a search before it is configured", async () => {
     const { handle, reply } = setup();
     handle(search(1, []));
-    expect(await reply(1)).toMatchObject({ type: "error", message: "The worker is not configured" });
+    expect(await reply(1)).toMatchObject({ type: "error", message: "The heuristic engine is not configured" });
   });
 
   it("answers with a legal move, visits for every legal move and the principal variation", async () => {
@@ -206,6 +211,97 @@ describe("search service", () => {
   });
 });
 
+describe("search service with two engines", () => {
+  const network: EngineSpec = { kind: "network", model: new ArrayBuffer(8), threads: 1 };
+
+  function twoEngines() {
+    const evaluators = { heuristic: new FakeEvaluator(), network: new FakeEvaluator() };
+    const outbox: Response[] = [];
+    const handle = createSearchService(
+      (response) => outbox.push(response),
+      async (spec) => evaluators[spec.kind],
+    );
+    const reply = async (id: number): Promise<Response> => {
+      for (let i = 0; i < 3000; i++) {
+        const found = outbox.find((r) => r.id === id);
+        if (found) return found;
+        await new Promise((resolve) => setTimeout(resolve, 1));
+      }
+      throw new Error(`no response to ${id}`);
+    };
+    return { evaluators, handle, reply };
+  }
+
+  it("searches with the engine the request names, and refuses one that is not configured", async () => {
+    const { evaluators, handle, reply } = twoEngines();
+    handle({ type: "configure", id: 1, engine });
+    handle(search(2, [], { engine: "network" }));
+    expect(await reply(2)).toMatchObject({ type: "error", message: "The network engine is not configured" });
+    handle({ type: "configure", id: 3, engine: network });
+    handle(search(4, [], { engine: "network" }));
+    expect((await reply(4)).type).toBe("result");
+    expect(evaluators.network.calls).toBeGreaterThan(0);
+    expect(evaluators.heuristic.calls).toBe(0);
+  });
+
+  it("does not cancel a search in flight when an engine is configured: the model arriving mid-move leaves the bot's move alone", async () => {
+    const { handle, reply } = twoEngines();
+    handle({ type: "configure", id: 1, engine });
+    handle(search(2, [], { simulations: 30 }));
+    handle({ type: "configure", id: 3, engine: network });
+    expect((await reply(2)).type).toBe("result");
+    expect(await reply(3)).toEqual({ type: "configured", id: 3 });
+    handle(search(4, [], { engine: "network" }));
+    expect((await reply(4)).type).toBe("result");
+  });
+
+  it("configures a replacement the same way, and frees the evaluator it replaces", async () => {
+    const { evaluators, handle, reply } = twoEngines();
+    handle({ type: "configure", id: 1, engine: network });
+    await reply(1);
+    expect(evaluators.network.disposed).toBe(0);
+    handle({ type: "configure", id: 2, engine: network });
+    await reply(2);
+    expect(evaluators.network.disposed).toBe(1);
+  });
+
+  it("answers an analysis request (no tree reuse) from exactly its own simulations, leaving the bot's tree alone", async () => {
+    const { handle, reply } = twoEngines();
+    handle({ type: "configure", id: 1, engine: network });
+    handle(search(2, [], { engine: "network", simulations: 30 }));
+    const first = await reply(2);
+    if (first.type !== "result") throw new Error("no result");
+
+    handle(search(3, [], { engine: "network", simulations: 32, reuseTree: false }));
+    const first32 = await reply(3);
+    handle(search(4, [], { engine: "network", simulations: 32, reuseTree: false }));
+    const second32 = await reply(4);
+    if (first32.type !== "result" || second32.type !== "result") throw new Error("no result");
+    expect(first32.visits.reduce((a, b) => a + b, 0)).toBe(32);
+    expect(second32.visits).toEqual(first32.visits);
+
+    handle(search(5, [first.move], { engine: "network", simulations: 30 }));
+    const next = await reply(5);
+    if (next.type !== "result") throw new Error("no result");
+    expect(next.visits.reduce((a, b) => a + b, 0)).toBe(Math.max(...first.visits) - 1 + 30);
+  });
+
+  it("keeps a tree for each engine, so a search with one does not disturb the other", async () => {
+    const { handle, reply } = twoEngines();
+    handle({ type: "configure", id: 1, engine });
+    handle({ type: "configure", id: 2, engine: network });
+    handle(search(3, [], { simulations: 30 }));
+    const first = await reply(3);
+    handle(search(4, [], { engine: "network", simulations: 10 }));
+    await reply(4);
+    if (first.type !== "result") throw new Error("no result");
+    handle(search(5, [first.move], { simulations: 30 }));
+    const again = await reply(5);
+    if (again.type !== "result") throw new Error("no result");
+    expect(again.visits.reduce((a, b) => a + b, 0)).toBe(Math.max(...first.visits) - 1 + 30);
+  });
+});
+
 /** A worker stand-in wired straight to a search service. */
 function loopback() {
   const evaluator = new FakeEvaluator();
@@ -225,7 +321,7 @@ function loopback() {
 }
 
 describe("search client", () => {
-  const params = { size: 5, moves: [] as string[], simulations: 10, temperature: 0, seed: 1 };
+  const params = { engine: "heuristic" as const, size: 5, moves: [] as string[], simulations: 10, temperature: 0, seed: 1 };
 
   it("turns requests into promises", async () => {
     const { client, configured } = loopback();
@@ -266,6 +362,16 @@ describe("search client", () => {
     expect(workers[1]!.received[0]).toMatchObject({ type: "configure", engine });
     expect(configured).toHaveLength(2);
     expect(total(result!.visits)).toBe(10);
+  });
+
+  it("configures a replacement worker with every engine it had", async () => {
+    const { client, workers } = loopback();
+    const network: EngineSpec = { kind: "network", model: new ArrayBuffer(8), threads: 1 };
+    await client.configure(engine);
+    await client.configure(network);
+    workers[0]!.fail("boom");
+    await client.search(params);
+    expect(workers[1]!.received.slice(0, 2).map((r) => (r.type === "configure" ? r.engine.kind : r.type))).toEqual(["heuristic", "network"]);
   });
 
   it("rejects when the worker cannot be created or sends something unreadable", async () => {

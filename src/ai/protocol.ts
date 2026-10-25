@@ -1,4 +1,7 @@
-/** Which evaluator the worker searches with. */
+/** The evaluators the worker can search with, by name. */
+export type EngineKind = "heuristic" | "network";
+
+/** How to build one evaluator; the worker keeps one per kind. */
 export type EngineSpec =
   | { readonly kind: "heuristic" }
   | { readonly kind: "network"; readonly model: ArrayBuffer; readonly threads: number };
@@ -9,6 +12,8 @@ export type Request =
   | {
       readonly type: "search";
       readonly id: number;
+      /** Which configured evaluator searches. */
+      readonly engine: EngineKind;
       readonly size: number;
       /** The whole game so far in standard notation. The worker keeps its tree when this extends the last search's moves. */
       readonly moves: readonly string[];
@@ -16,6 +21,8 @@ export type Request =
       /** 0 plays the most visited move; above 0 samples in proportion to `visits ** (1 / temperature)`. */
       readonly temperature: number;
       readonly seed: number;
+      /** False searches a fresh tree that is not kept, so the answer is from exactly `simulations` and the game's tree is untouched. Default true. */
+      readonly reuseTree?: boolean;
       readonly cPuct?: number;
       readonly fpuReduction?: number;
     }

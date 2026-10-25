@@ -46,5 +46,6 @@ export async function createOrtNetwork(ort: OrtRuntime, model: Uint8Array, optio
       }
       return { policy, value };
     },
+    release: () => session.release(),
   };
 }
