@@ -1,5 +1,7 @@
 /** Which evaluator the worker searches with. */
-export type EngineSpec = { readonly kind: "heuristic" };
+export type EngineSpec =
+  | { readonly kind: "heuristic" }
+  | { readonly kind: "network"; readonly model: ArrayBuffer; readonly threads: number };
 
 /** Messages from the page to the search worker. Ids are chosen by the page and echoed back. */
 export type Request =

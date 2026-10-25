@@ -2,7 +2,7 @@ import type { EngineSpec, Request, Response, SearchResponse } from "./protocol";
 
 /** The part of `Worker` the client uses, so tests can stand in for it. */
 export interface WorkerLike {
-  postMessage(message: Request): void;
+  postMessage(message: Request, transfer?: Transferable[]): void;
   onmessage: ((event: MessageEvent<Response>) => void) | null;
   /** The worker's script failed to load or threw. */
   onerror: ((event: ErrorEvent) => void) | null;
@@ -39,7 +39,7 @@ export class SearchClient {
   async configure(engine: EngineSpec): Promise<void> {
     this.start();
     this.heuristic = engine.kind === "heuristic" ? engine : null;
-    const response = await this.request({ type: "configure", id: this.nextId++, engine });
+    const response = await this.request({ type: "configure", id: this.nextId++, engine }, engine.kind === "network" ? [engine.model] : []);
     if (response.type === "error") throw new Error(response.message);
   }
 
@@ -48,7 +48,7 @@ export class SearchClient {
     const id = this.nextId++;
     this.currentSearch = id;
     try {
-      const response = await this.request({ type: "search", id, ...params });
+      const response = await this.request({ type: "search", id, ...params }, []);
       if (response.type === "error") throw new Error(response.message);
       return response.type === "result" ? response : null;
     } finally {
@@ -88,11 +88,11 @@ export class SearchClient {
     for (const { reject } of waiting) reject(new Error(message));
   }
 
-  private request(request: Request): Promise<Response> {
+  private request(request: Request, transfer: Transferable[]): Promise<Response> {
     return new Promise((resolve, reject) => {
       const worker = this.start();
       this.pending.set(request.id, { resolve, reject });
-      worker.postMessage(request);
+      worker.postMessage(request, transfer);
     });
   }
 }
