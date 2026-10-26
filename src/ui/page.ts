@@ -3,6 +3,7 @@ import { Game } from "../engine/game";
 import type { GameState } from "../engine/state";
 import { Analysis, evalBar, replay } from "./analysis";
 import { describeBoard, renderBoard } from "./board";
+import { element, onPress, renderTray, setEnabled } from "./dom";
 import { ModelManager, type ModelState } from "../model/manager";
 import type { ModelEnv } from "../model/store";
 import { GameController, type SearchPort, type Side } from "./controller";
@@ -10,6 +11,7 @@ import { boardSpan, cellAt, PAD, wallAt } from "./geometry";
 import { isAvailable, type Level, LEVELS } from "./levels";
 import { WallPreview } from "./pointer";
 import { moveRows, statusText } from "./status";
+import { startWatch } from "./watchPage";
 import { describeTarget, findAction, moveCursor, pawnTargets } from "./targets";
 
 /** How the page gets the network: where to fetch it from, and how to give it to the search worker. */
@@ -43,23 +45,20 @@ function describeModel(state: ModelState): { note: string; level: string } {
   }
 }
 
-function element<T extends Element>(id: string, type: abstract new () => T): T {
-  const found = document.getElementById(id);
-  if (!(found instanceof type)) throw new Error(`The page has no #${id} of the expected kind`);
-  return found;
-}
-
 /** Wires the controller to the page: draws the position and turns clicks and keys into moves. */
 export function startPage(port: SearchPort, network: NetworkSource): GameController {
   const board = element("board", SVGSVGElement);
   const sizeSelect = element("size", HTMLSelectElement);
   const levelSelect = element("level", HTMLSelectElement);
+  const modeSelect = element("mode", HTMLSelectElement);
+  const levelSelects = [...document.querySelectorAll<HTMLSelectElement>("select.level-select")];
   const sideSelect = element("side", HTMLSelectElement);
   const live = element("live", HTMLElement);
   const statusLine = element("status", HTMLElement);
   const retryButton = element("retry", HTMLButtonElement);
   const undoButton = element("undo", HTMLButtonElement);
 
+  const watching = (): boolean => modeSelect.value === "watch";
   const preview = new WallPreview();
   let cursor: GlobalAction | null = null; // shown only once the keyboard is in use on the board
   let drawn = "";
@@ -95,7 +94,7 @@ export function startPage(port: SearchPort, network: NetworkSource): GameControl
     },
   );
   /** The person may move: it is their turn, and the position on the board is the latest. */
-  const canPlay = (): boolean => controller.humanToMove && !analysis.viewingPast;
+  const canPlay = (): boolean => !watching() && controller.humanToMove && !analysis.viewingPast;
   const modelNote = element("model-note", HTMLElement);
   const modelProgress = element("model-progress", HTMLProgressElement);
   const modelRetry = element("model-retry", HTMLButtonElement);
@@ -108,13 +107,24 @@ export function startPage(port: SearchPort, network: NetworkSource): GameControl
     if (document.activeElement === hiding) fallback.focus();
   };
 
-  for (const level of LEVELS) {
-    const option = document.createElement("option");
-    option.value = level.id;
-    levelSelect.append(option);
+  for (const select of levelSelects) {
+    for (const level of LEVELS) {
+      const option = document.createElement("option");
+      option.value = level.id;
+      select.append(option);
+    }
+    select.value = LEVELS[1]!.id;
   }
-  levelSelect.value = LEVELS[1]!.id;
-  const selectedLevel = (): Level => LEVELS.find((l) => l.id === levelSelect.value) ?? LEVELS[1]!;
+  const levelOf = (select: HTMLSelectElement): Level => LEVELS.find((l) => l.id === select.value) ?? LEVELS[1]!;
+  const selectedLevel = (): Level => levelOf(levelSelect);
+  /** The level chosen in `select`, or Normal (said aloud, and shown in the select) when the network it needs is not ready for this size. */
+  function usableLevel(select: HTMLSelectElement, size: number): Level {
+    const wanted = levelOf(select);
+    if (isAvailable(wanted, models.state(size).status === "ready")) return wanted;
+    select.value = LEVELS[1]!.id;
+    announce(`${wanted.label} is not available at this board size, so ${LEVELS[1]!.label} is used.`);
+    return LEVELS[1]!;
+  }
 
   /**
    * Shows where the network stands for the board size in the select: the note,
@@ -140,10 +150,12 @@ export function startPage(port: SearchPort, network: NetworkSource): GameControl
     modelRetry.hidden = state.status !== "failed";
     modelBanner.hidden = !banner;
     modelBannerText.textContent = note;
-    for (const option of levelSelect.options) {
-      const found = LEVELS.find((l) => l.id === option.value)!;
-      option.disabled = !isAvailable(found, state.status === "ready");
-      option.textContent = option.disabled ? `${found.label} (${level})` : found.label;
+    for (const select of levelSelects) {
+      for (const option of select.options) {
+        const found = LEVELS.find((l) => l.id === option.value)!;
+        option.disabled = !isAvailable(found, state.status === "ready");
+        option.textContent = option.disabled ? `${found.label} (${level})` : found.label;
+      }
     }
     if (state.status !== announcedModel) {
       announcedModel = state.status;
@@ -207,6 +219,7 @@ export function startPage(port: SearchPort, network: NetworkSource): GameControl
   }
 
   function render(): void {
+    if (watching()) return;
     const past = analysis.viewingPast ? replay(controller.size, controller.moves, analysis.ply) : null;
     const state: GameState = past ? past.state : controller.state;
     const canMove = canPlay();
@@ -241,30 +254,8 @@ export function startPage(port: SearchPort, network: NetworkSource): GameControl
     if (location.hash !== controller.hash) history.replaceState(null, "", controller.hash);
   }
 
-  /** Greys a button out without taking it out of the tab order, so pressing it does not drop keyboard focus. */
-  function setEnabled(button: HTMLButtonElement, enabled: boolean): void {
-    button.setAttribute("aria-disabled", String(!enabled));
-  }
-
-  /** Runs `handler` on a click unless the button is greyed out. */
-  function onPress(button: HTMLButtonElement, handler: () => void): void {
-    button.addEventListener("click", () => {
-      if (button.getAttribute("aria-disabled") !== "true") handler();
-    });
-  }
-
   function renderTrays(state: GameState): void {
-    for (const [player, side] of [[0, "p1"], [1, "p2"]] as const) {
-      const walls = state.wallsLeft(player);
-      const who = controller.human === side ? "You" : "Bot";
-      const tray = element(`tray-${side}`, HTMLElement);
-      tray.setAttribute("role", "group");
-      tray.setAttribute("aria-label", `${who}, player ${player + 1}: ${walls} walls left`);
-      tray.innerHTML =
-        `<span aria-hidden="true">${who} (P${player + 1}) walls</span>` +
-        `<span class="pieces" aria-hidden="true">${"<i></i>".repeat(walls)}</span>` +
-        `<span class="count">${walls}</span>`;
-    }
+    for (const side of ["p1", "p2"] as const) renderTray(side, controller.human === side ? "You" : "Bot", state);
   }
 
   let movesDrawn = "";
@@ -373,7 +364,7 @@ export function startPage(port: SearchPort, network: NetworkSource): GameControl
 
   board.addEventListener("focus", () => {
     // A focus that came from a click or tap is not keyboard use; it draws no cursor.
-    if (!board.matches(":focus-visible")) return;
+    if (watching() || !board.matches(":focus-visible")) return;
     cursor = cursor ?? startCursor();
     render();
     announce(`${describeTarget(controller.state, cursor)}.`);
@@ -383,7 +374,7 @@ export function startPage(port: SearchPort, network: NetworkSource): GameControl
     render();
   });
   board.addEventListener("keydown", (event) => {
-    if (event.ctrlKey || event.metaKey || event.altKey) return;
+    if (watching() || event.ctrlKey || event.metaKey || event.altKey) return;
     const key = event.key.length === 1 ? event.key.toLowerCase() : event.key;
     if (cursor === null) {
       if (!["ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight", "h", "v", "p", "Enter", " "].includes(key)) return;
@@ -412,14 +403,8 @@ export function startPage(port: SearchPort, network: NetworkSource): GameControl
     preview.clear();
     analysis.reset();
     const size = Number(sizeSelect.value);
-    const wanted = selectedLevel();
     // The network levels need the network of this size; without it the game is played at Normal, and the select says so.
-    const level = isAvailable(wanted, models.state(size).status === "ready") ? wanted : LEVELS[1]!;
-    if (level !== wanted) {
-      levelSelect.value = level.id;
-      announce(`${wanted.label} is not available at this board size, so the game is played at ${level.label}.`);
-    }
-    controller.newGame(size, sideSelect.value as Side, level);
+    controller.newGame(size, sideSelect.value as Side, usableLevel(levelSelect, size));
   }
 
   /** Opens the game in the address bar's hash if it is one the site offers; otherwise says so. Returns whether it did. */
@@ -452,6 +437,20 @@ export function startPage(port: SearchPort, network: NetworkSource): GameControl
   sizeSelect.addEventListener("change", () => {
     renderModel();
     void models.select(Number(sizeSelect.value));
+    if (watching()) watch.restart();
+  });
+  modeSelect.addEventListener("change", () => {
+    document.body.dataset["mode"] = modeSelect.value;
+    if (watching()) {
+      // One worker serves both modes: the game's bot and the analysis step aside.
+      analysis.setEnabled(false);
+      controller.halt();
+      watch.restart();
+    } else {
+      watch.pause();
+      drawn = "";
+      controller.retry();
+    }
   });
   modelRetry.addEventListener("click", () => void models.retry(Number(sizeSelect.value)));
   onPress(undoButton, () => controller.undo());
@@ -466,6 +465,7 @@ export function startPage(port: SearchPort, network: NetworkSource): GameControl
     if (location.hash !== controller.hash) openHash();
   });
 
+  const watch = startWatch(port, { size: () => Number(sizeSelect.value), level: (select) => usableLevel(select, Number(sizeSelect.value)), announce });
   renderModel();
   if (location.hash.length <= 1 || !openHash()) newGame();
   void models.select(controller.size);

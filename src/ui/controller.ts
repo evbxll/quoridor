@@ -151,6 +151,12 @@ export class GameController {
     this.onChange();
   }
 
+  /** Stops the bot's search so the shared worker is free (Watch mode); `retry` picks the game up again. */
+  halt(): void {
+    this.stopSearch();
+    this.onChange();
+  }
+
   /** Asks the bot for its move again after a failure. */
   retry(): void {
     this.failure = null;

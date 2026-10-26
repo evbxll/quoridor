@@ -9,10 +9,16 @@
     <script src="%BASE_URL%coi-serviceworker.js"></script>
     <script type="module" src="/src/main.ts"></script>
   </head>
-  <body>
+  <body data-mode="play">
     <header class="topbar">
       <h1>Quoridor</h1>
       <div class="toolbar" role="group" aria-label="Game settings">
+        <label class="inline">Mode
+          <select id="mode">
+            <option value="play" selected>Play</option>
+            <option value="watch">Watch</option>
+          </select>
+        </label>
         <label class="inline">Board
           <select id="size">
             <option value="5">5 x 5</option>
@@ -21,16 +27,16 @@
             <option value="11">11 x 11</option>
           </select>
         </label>
-        <label class="inline">Level <select id="level"></select></label>
-        <label class="inline">You play
+        <label class="inline play-only">Level <select id="level" class="level-select"></select></label>
+        <label class="inline play-only">You play
           <select id="side">
             <option value="p1" selected>First (player 1)</option>
             <option value="p2">Second (player 2)</option>
           </select>
         </label>
-        <button id="new" type="button">New game</button>
-        <button id="undo" type="button">Undo</button>
-        <button id="copy" type="button">Copy link</button>
+        <button id="new" class="play-only" type="button">New game</button>
+        <button id="undo" class="play-only" type="button">Undo</button>
+        <button id="copy" class="play-only" type="button">Copy link</button>
       </div>
     </header>
 
@@ -51,8 +57,17 @@
           <div class="evalbar-track"><span id="eval-p1" class="evalbar-p1"></span></div>
           <div class="evalbar-text" aria-hidden="true"><span id="eval-p1-text"></span><span id="eval-p2-text"></span></div>
         </div>
-        <p><button id="retry" type="button" hidden>Retry</button></p>
-        <p id="board-help" class="hint">
+        <div id="watch-eval" class="eval watch-only" role="meter" aria-label="Chance that player 1 wins, by the bots" aria-valuemin="0" aria-valuemax="100" hidden>
+          <div class="evalbar-track">
+            <span id="watch-fill" class="evalbar-p1"></span>
+            <span id="watch-mark-p1" class="mark mark-top"></span>
+            <span id="watch-mark-p2" class="mark mark-bottom"></span>
+          </div>
+          <div class="evalbar-text" aria-hidden="true"><span id="watch-text-p1"></span><span id="watch-text-p2"></span></div>
+          <p id="watch-opinions" class="hint"></p>
+        </div>
+        <p class="play-only"><button id="retry" type="button" hidden>Retry</button></p>
+        <p id="board-help" class="hint play-only">
           Click a cell to move your pawn, or a groove between cells to place a wall; on a touch screen tap a groove
           once to preview a wall and again to place it. With the keyboard, focus the board, move the cursor with the
           arrow keys, press H or V to choose a horizontal or vertical wall, P to go back to pawn moves, and Enter to play.
@@ -60,12 +75,38 @@
       </section>
 
       <aside class="panel">
-        <section class="card" aria-labelledby="moves-title">
+        <section class="card watch-only" aria-labelledby="watch-title">
+          <h2 id="watch-title">Watch two bots</h2>
+          <div class="toolbar" role="group" aria-label="Bots and speed">
+            <label class="inline">Player 1 <select id="watch-p1" class="level-select"></select></label>
+            <label class="inline">Player 2 <select id="watch-p2" class="level-select"></select></label>
+            <label class="inline">Speed
+              <select id="watch-speed">
+                <option value="slow">Slow</option>
+                <option value="normal" selected>Normal</option>
+                <option value="fast">Fast</option>
+                <option value="instant">Instant</option>
+              </select>
+            </label>
+          </div>
+          <div class="toolbar" role="group" aria-label="Game controls">
+            <button id="watch-toggle" type="button">Start</button>
+            <button id="watch-step" type="button">Step</button>
+            <button id="watch-restart" type="button">Restart</button>
+            <label class="inline"><input id="watch-swap" type="checkbox" /> Swap colours on restart</label>
+          </div>
+          <p id="watch-bots" class="hint"></p>
+        </section>
+        <section class="card watch-only" aria-labelledby="watch-moves-title">
+          <h2 id="watch-moves-title">Moves</h2>
+          <ol id="watch-moves" class="moves" aria-label="Moves in standard notation"></ol>
+        </section>
+        <section class="card play-only" aria-labelledby="moves-title">
           <h2 id="moves-title">Moves</h2>
           <ol id="moves" class="moves" aria-label="Moves in standard notation"></ol>
           <p id="moves-empty" class="hint">No moves yet.</p>
         </section>
-        <section class="card" aria-labelledby="analysis-title">
+        <section class="card play-only" aria-labelledby="analysis-title">
           <h2 id="analysis-title">Analysis</h2>
           <label class="inline"><input id="analysis-on" type="checkbox" /> Analysis mode (needs the network)</label>
           <div id="analysis-tools" hidden>

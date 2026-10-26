@@ -104,9 +104,14 @@ progress { width: 100%; accent-color: var(--accent); }
 .banner p { margin: 0; flex: 1 1 260px; }
 .banner progress { flex: 1 1 100%; }
 .eval { width: min(100%, calc(100vh - 230px)); }
-.evalbar-track { height: 16px; border: 2px solid var(--text); border-radius: 8px; overflow: hidden; background: var(--p2); }
+.evalbar-track { position: relative; height: 16px; border: 2px solid var(--text); border-radius: 8px; overflow: hidden; background: var(--p2); }
 .evalbar-p1 { display: block; height: 100%; background: var(--p1); border-right: 3px solid var(--text); }
 .evalbar-text { display: flex; justify-content: space-between; gap: 12px; margin-top: 2px; font-weight: 700; font-variant-numeric: tabular-nums; }
+.mark { position: absolute; width: 8px; height: 50%; transform: translateX(-50%); background: var(--text); border: 2px solid var(--surface); }
+#watch-eval .evalbar-track { height: 28px; }
+.mark-top { top: 0; }
+.mark-bottom { bottom: 0; }
+body[data-mode="watch"] .play-only, body[data-mode="play"] .watch-only { display: none !important; }
 #analysis-tools { margin-top: 8px; }
 #analysis-lines { margin: 6px 0; padding-left: 1.4em; }
 .moves li button { border: none; background: none; padding: 1px 4px; min-width: 3.5em; text-align: left; border-radius: 6px; }
