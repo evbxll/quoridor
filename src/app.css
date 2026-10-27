@@ -11,6 +11,8 @@
   --groove: #b9a07a;
   --label: #5e4f38;
   --wall: #4a3f30;
+  --wall-p1: #2c4a78; /* darker than player 2's, so the two differ in lightness as well as hue; 5.2:1 and 3.1:1 on --board, 1.7:1 apart */
+  --wall-p2: #9c5c32;
   --p1: #1d5fb4;
   --p2: #b23c0a;
   --pawn-text: #ffffff; /* 6.3:1 on --p1, 5.9:1 on --p2 */
@@ -35,6 +37,8 @@
     --groove: #3a3126;
     --label: #e0d2b4;
     --wall: #f0e6d2;
+    --wall-p1: #c2d8fb; /* lighter than player 2's; 7.1:1 and 3.4:1 on --board, 2.1:1 apart */
+    --wall-p2: #d17f48;
     --p1: #7db3f5;
     --p2: #f2905f;
     --pawn-text: #000000; /* 9.6:1 on --p1, 8.9:1 on --p2 */
@@ -235,6 +239,8 @@ details.card > :not(summary) + * { margin-top: 10px; }
 .dot { fill: var(--groove); }
 .label { fill: var(--label); font-weight: 600; text-anchor: middle; dominant-baseline: middle; }
 .wall { fill: var(--wall); }
+.wall.p1 { fill: var(--wall-p1); }
+.wall.p2 { fill: var(--wall-p2); }
 .target { fill: none; stroke: var(--accent); stroke-width: 4; stroke-dasharray: 5 4; }
 .pawn { stroke: var(--text); stroke-width: 2; }
 .pawn.p1 { fill: var(--p1); }

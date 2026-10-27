@@ -1,8 +1,11 @@
 import { describe, expect, it } from "vitest";
 import { HORIZONTAL } from "../../src/engine/actions";
 import { GameState } from "../../src/engine/state";
-import { describeBoard, renderBoard } from "../../src/ui/board";
+import { replay } from "../../src/ui/analysis";
+import { describeBoard, renderBoard, wallOwners } from "../../src/ui/board";
 
+/** Plies: e2 (player 1), e8 (player 2), c3h (player 1), d7v (player 2). */
+const GAME = ["e2", "e8", "c3h", "d7v"];
 const count = (markup: string, pattern: RegExp): number => markup.match(pattern)?.length ?? 0;
 
 describe("renderBoard", () => {
@@ -26,6 +29,13 @@ describe("renderBoard", () => {
   it("draws placed walls", () => {
     const markup = renderBoard(GameState.fromKey("5|1|c1|c5|2,3|b3h"));
     expect(count(markup, /class="wall"/g)).toBe(1);
+  });
+
+  it("tints each wall by the player who placed it", () => {
+    const { state } = replay(9, GAME, GAME.length);
+    const markup = renderBoard(state, { targets: [], ghost: null, cursor: null, last: null, owners: wallOwners(9, GAME) });
+    expect(count(markup, /class="wall p1"/g)).toBe(1);
+    expect(count(markup, /class="wall p2"/g)).toBe(1);
   });
 
   it("draws targets, the last move, a ghost wall (dashed when illegal in the stylesheet) and the cursor", () => {
@@ -62,5 +72,18 @@ describe("describeBoard", () => {
     expect(describeBoard(GameState.fromKey("5|1|c1|c5|2,3|b3h"))).toBe(
       "5 by 5 board. Player 1 on c1 with 2 walls left. Player 2 on c5 with 3 walls left. 1 walls placed.",
     );
+  });
+});
+
+describe("wallOwners", () => {
+  it("gives each wall to the player whose ply placed it, and ignores pawn moves", () => {
+    const owners = wallOwners(9, GAME);
+    expect([...owners.values()]).toEqual([0, 1]);
+    expect(owners.size).toBe(2);
+  });
+
+  it("is empty before any wall", () => {
+    expect(wallOwners(5, []).size).toBe(0);
+    expect(wallOwners(5, ["c2"]).size).toBe(0);
   });
 });

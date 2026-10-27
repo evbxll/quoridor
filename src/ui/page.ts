@@ -2,7 +2,7 @@ import type { GlobalAction } from "../engine/actions";
 import { Game } from "../engine/game";
 import type { GameState } from "../engine/state";
 import { Analysis, replay } from "./analysis";
-import { describeBoard, renderBoard } from "./board";
+import { describeBoard, renderBoard, wallOwners } from "./board";
 import { element, onPress, setEnabled } from "./dom";
 import { ModelManager, type ModelState } from "../model/manager";
 import type { ModelEnv } from "../model/store";
@@ -95,6 +95,8 @@ export function startPage(port: SearchPort, network: NetworkSource): GameControl
   const preview = new WallPreview();
   let cursor: GlobalAction | null = null; // shown only once the keyboard is in use on the board
   let drawn = "";
+  let ownersKey = "";
+  let owners = new Map<string, 0 | 1>();
   /** The eval bar's last fresh percentage, kept (dimmed) while the next position is read. */
   let shownPercent: number | null = null;
 
@@ -203,7 +205,14 @@ export function startPage(port: SearchPort, network: NetworkSource): GameControl
     const state: GameState = past ? past.state : controller.state;
     const canMove = canPlay();
     const wall = canMove ? preview.wall : null;
+    const ply = past ? analysis.ply : controller.moves.length;
+    const key = `${controller.size}|${controller.moves.slice(0, ply).join(".")}`;
+    if (key !== ownersKey) {
+      ownersKey = key;
+      owners = wallOwners(controller.size, controller.moves.slice(0, ply));
+    }
     const markup = renderBoard(state, {
+      owners,
       targets: canMove ? pawnTargets(state) : [],
       ghost: wall ? { wall, legal: findAction(state, wall) !== null } : null,
       cursor: cursor ? { target: cursor, legal: findAction(state, cursor) !== null } : null,
