@@ -47,28 +47,29 @@ function saveShowEval(on: boolean): void {
 
 const megabytes = (bytes: number): string => (bytes / 1e6).toFixed(1);
 
-/** Where the network stands, in words: the line at the foot of the panel, and the short form for a bot that waits for it. */
-function describeNetwork(state: ModelState, size: number): { line: string; short: string; tone: "ok" | "busy" | "off" | "bad" } {
+/** Where the network stands, in words: the chip in the top bar with its popover, and the short form for a bot that waits for it. */
+function describeNetwork(state: ModelState, size: number): { line: string; short: string; chip: string; tone: "ok" | "busy" | "off" | "bad" } {
   switch (state.status) {
     case "checking":
-      return { line: "Network: looking for it…", short: "looking for it", tone: "busy" };
+      return { line: "Network: looking for it…", short: "looking for it", chip: "checking", tone: "busy" };
     case "unavailable":
       return state.reason === "not-offered"
-        ? { line: `Network: not offered at ${size} × ${size}. Strong and Max are off; Beginner and Normal play.`, short: "not offered at this size", tone: "off" }
-        : { line: "Network: none is published yet. Strong and Max are off; Beginner and Normal play.", short: "none published", tone: "off" };
+        ? { line: `Network: not offered at ${size} × ${size}. Strong and Max are off; Beginner and Normal play.`, short: "not offered at this size", chip: "not offered here", tone: "off" }
+        : { line: "Network: none is published yet. Strong and Max are off; Beginner and Normal play.", short: "none published", chip: "not published", tone: "off" };
     case "downloading": {
       const percent = state.total === null ? null : Math.floor((state.loaded / state.total) * 100);
       const done = state.total === null ? `${megabytes(state.loaded)} MB` : `${megabytes(state.loaded)} of ${megabytes(state.total)} MB`;
-      return { line: `Network: downloading, ${done}.`, short: percent === null ? `downloading, ${done}` : `downloading, ${percent}%`, tone: "busy" };
+      return { line: `Network: downloading, ${done}.`, short: percent === null ? `downloading, ${done}` : `downloading, ${percent}%`, chip: percent === null ? "downloading" : `downloading ${percent}%`, tone: "busy" };
     }
     case "ready":
       return {
         line: `Network: ready (${state.model}${state.fromCache ? ", loaded from this device" : ""}).${state.saved ? "" : " It could not be saved for offline use."}`,
         short: "ready",
+        chip: "ready",
         tone: "ok",
       };
     case "failed":
-      return { line: `Network: failed. ${state.message}`, short: "the download failed; choose Retry download", tone: "bad" };
+      return { line: `Network: failed. ${state.message}`, short: "the download failed; choose Retry download", chip: "failed", tone: "bad" };
   }
 }
 
@@ -180,9 +181,10 @@ export function startPage(port: SearchPort, network: NetworkSource): GameControl
 
   function renderNetwork(): void {
     const state = modelState();
-    const { line, tone } = describeNetwork(state, controller.size);
+    const { line, chip, tone } = describeNetwork(state, controller.size);
     const text = element("network-text", HTMLElement);
     if (text.textContent !== line) text.textContent = line;
+    element("network-chip", HTMLElement).textContent = `Network: ${chip}`;
     element("network-dot", HTMLElement).dataset["tone"] = tone;
     if (state.status === "downloading") {
       networkProgress.hidden = false;

@@ -12,7 +12,17 @@
   <body>
     <header class="topbar">
       <h1>Quoridor</h1>
-      <button id="copy" class="quiet" type="button">Copy link</button>
+      <div class="topbar-end">
+        <button id="network-retry" type="button" hidden>Retry download</button>
+        <details id="network" class="network">
+          <summary><span id="network-dot" class="net-dot" aria-hidden="true"></span><span id="network-chip"></span><progress id="network-progress" aria-label="Network download progress" hidden></progress></summary>
+          <div class="network-pop">
+            <p id="network-text"></p>
+            <p id="isolation" class="hint"></p>
+          </div>
+        </details>
+        <button id="copy" class="quiet" type="button">Copy link</button>
+      </div>
     </header>
 
     <main class="layout">
@@ -38,6 +48,18 @@
       </section>
 
       <aside class="panel">
+        <section class="card row" role="group" aria-label="New game">
+          <label class="inline">Board
+            <select id="size">
+              <option value="5">5 × 5</option>
+              <option value="7">7 × 7</option>
+              <option value="9" selected>9 × 9</option>
+              <option value="11">11 × 11</option>
+            </select>
+          </label>
+          <button id="new" type="button">New game</button>
+        </section>
+
         <section class="card players" aria-label="Players">
           <div id="seat-p2" class="seat">
             <span class="disc p2" aria-hidden="true">2</span>
@@ -82,18 +104,6 @@
           </div>
         </section>
 
-        <section class="card row" role="group" aria-label="New game">
-          <label class="inline">Board
-            <select id="size">
-              <option value="5">5 × 5</option>
-              <option value="7">7 × 7</option>
-              <option value="9" selected>9 × 9</option>
-              <option value="11">11 × 11</option>
-            </select>
-          </label>
-          <button id="new" type="button">New game</button>
-        </section>
-
         <section class="card" aria-labelledby="moves-title">
           <h2 id="moves-title">Moves</h2>
           <div class="moves-box">
@@ -125,13 +135,6 @@
             arrow keys, press H or V to choose a horizontal or vertical wall, P to go back to pawn moves, and Enter to play.
           </p>
         </details>
-
-        <footer id="network" class="network">
-          <p><span id="network-dot" class="net-dot" aria-hidden="true"></span><span id="network-text"></span></p>
-          <progress id="network-progress" aria-label="Network download progress" hidden></progress>
-          <button id="network-retry" type="button" hidden>Retry download</button>
-          <p id="isolation" class="hint"></p>
-        </footer>
       </aside>
     </main>
 
