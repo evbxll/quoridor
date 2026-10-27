@@ -14,8 +14,22 @@ export interface SearchPort {
 
 export type Side = "p1" | "p2";
 
+/** A seat at the board: a person, or a bot at one of the levels. */
+export const HUMAN = "human";
+export type Player = Level | typeof HUMAN;
+export type Players = Readonly<Record<Side, Player>>;
+
 /** The board sizes the site offers. */
 export const BOARD_SIZES = [5, 7, 9, 11] as const;
+
+/** The pause between one move and the next while two bots play, in milliseconds. */
+export const SPEEDS = { slow: 1500, normal: 600, fast: 150, instant: 0 } as const;
+export type Speed = keyof typeof SPEEDS;
+
+/** Each bot's own reading of the position at its latest move: player 1's expected score, 0 to 1. */
+export type Opinions = Readonly<Record<Side, number | null>>;
+
+export const sideOf = (ply: number): Side => (ply % 2 === 0 ? "p1" : "p2");
 
 /** Where each of `moves` landed on the board, in order. */
 function replayTargets(size: number, moves: readonly string[]): GlobalAction[] {
@@ -28,6 +42,12 @@ function replayTargets(size: number, moves: readonly string[]): GlobalAction[] {
   });
 }
 
+/** A search answer is from the view of the player to move; this is player 1's share. */
+function p1ShareOf(mover: Side, response: SearchResponse): number {
+  const moverShare = (response.value + 1) / 2;
+  return mover === "p1" ? moverShare : 1 - moverShare;
+}
+
 /** How often a search the worker cancelled without being asked is tried again before it is reported. */
 const RETRIES_AFTER_CANCEL = 2;
 
@@ -35,19 +55,26 @@ const RETRIES_AFTER_CANCEL = 2;
 const SEED_RANGE = 2 ** 32;
 
 /**
- * One game of a person against the bot: whose turn it is, the bot's reply
- * (searched in the worker), undo, and what the page needs to show. It has no
- * DOM; `onChange` is called after every change.
+ * One game with a player in each seat, a person or a bot. With a person in
+ * either seat a bot replies as soon as it is its turn; between two bots the
+ * game plays on only after `start` (or one move per `step`). A bot whose level
+ * needs the network waits for `setNetworkReady(true)`. It has no DOM;
+ * `onChange` is called after every change.
  */
 export class GameController {
   private game = new Game(9);
-  private humanSide: Side = "p1";
-  private currentLevel: Level = LEVELS[1]!;
+  private seats: Record<Side, Player> = { p1: HUMAN, p2: LEVELS[1]! };
   /** Where each move so far landed, kept so the board need not replay the game to show the last one. */
   private targets: GlobalAction[] = [];
+  /** Per move, the reading of the bot that made it (player 1's share), or null for a person's move. */
+  private readings: (number | null)[] = [];
   private searching = false;
   private failure: string | null = null;
-  /** Counts games and takebacks, so a reply to a position that no longer exists is dropped. */
+  private playing = false;
+  private network = false;
+  private delayMs: number = SPEEDS.normal;
+  private timer: ReturnType<typeof setTimeout> | null = null;
+  /** Counts searches, games, takebacks and pauses, so a reply to a position that no longer exists is dropped. */
   private epoch = 0;
 
   constructor(
@@ -60,12 +87,8 @@ export class GameController {
     return this.game.size;
   }
 
-  get human(): Side {
-    return this.humanSide;
-  }
-
-  get level(): Level {
-    return this.currentLevel;
+  get players(): Players {
+    return this.seats;
   }
 
   /** A copy of the current position. */
@@ -82,7 +105,17 @@ export class GameController {
     return this.game.result;
   }
 
-  /** True while the bot is choosing its move. */
+  /** The side whose turn it is. */
+  get mover(): Side {
+    return sideOf(this.game.moves.length);
+  }
+
+  /** Whether a person plays either side; if not, two bots play and `start`, `pause` and `step` drive the game. */
+  get hasHuman(): boolean {
+    return this.seats.p1 === HUMAN || this.seats.p2 === HUMAN;
+  }
+
+  /** True while a bot is choosing its move. */
   get thinking(): boolean {
     return this.searching;
   }
@@ -90,6 +123,17 @@ export class GameController {
   /** Why the bot could not move, if it could not. */
   get error(): string | null {
     return this.failure;
+  }
+
+  /** True while two bots play on by themselves. */
+  get running(): boolean {
+    return this.playing;
+  }
+
+  /** A bot is due to move but its level needs the network, which is not ready. */
+  get waiting(): boolean {
+    const seat = this.seats[this.mover];
+    return seat !== HUMAN && seat.engine === "network" && !this.network && this.due();
   }
 
   /** Where the last move landed, or null before any move. */
@@ -102,99 +146,188 @@ export class GameController {
     return this.game.toHash();
   }
 
-  /** Whether the person may move now. */
+  /** Whether a person may move now. */
   get humanToMove(): boolean {
-    return this.game.result === null && !this.searching && this.failure === null && this.state.p1Turn === (this.humanSide === "p1");
+    return this.game.result === null && !this.searching && this.failure === null && this.seats[this.mover] === HUMAN;
   }
 
-  /** Whether there is a move of the person's to take back. */
+  /** Whether there is a move of a person's to take back. */
   get canUndo(): boolean {
     return this.lastHumanPly() !== null;
   }
 
-  /** Starts a game; the bot moves first when the person plays second. Throws for a size the site does not offer. */
-  newGame(size: number, human: Side, level: Level): void {
+  /** Whether `step` would play a move: two bots, paused, and the game is not over. */
+  get canStep(): boolean {
+    const seat = this.seats[this.mover];
+    return !this.hasHuman && !this.playing && !this.searching && this.game.result === null && seat !== HUMAN && (seat.engine !== "network" || this.network);
+  }
+
+  /** Each bot's reading at its latest move among the first `ply` moves (all of them by default). */
+  opinions(ply = this.readings.length): Opinions {
+    const latest = (side: Side): number | null => {
+      for (let i = Math.min(ply, this.readings.length) - 1; i >= 0; i--) if (sideOf(i) === side && this.readings[i] !== null) return this.readings[i]!;
+      return null;
+    };
+    return { p1: latest("p1"), p2: latest("p2") };
+  }
+
+  /** Starts a game; a bot that moves first starts at once if a person plays. Throws for a size the site does not offer. */
+  newGame(size: number, players: Players): void {
     if (!BOARD_SIZES.some((offered) => offered === size)) throw new RangeError(`The site has no ${size}x${size} board`);
-    this.reset(new Game(size), human, level);
+    this.reset(new Game(size), players);
   }
 
-  /** Continues a game made elsewhere (a link): the person plays the side to move, or player 1 if it is over. Throws for a size the site does not offer. */
-  load(game: Game, level: Level): void {
+  /** Continues a game made elsewhere (a link). Throws for a size the site does not offer. */
+  load(game: Game, players: Players): void {
     if (!BOARD_SIZES.some((offered) => offered === game.size)) throw new RangeError(`The site has no ${game.size}x${game.size} board`);
-    this.reset(game, game.result === null && !game.state.p1Turn ? "p2" : "p1", level);
+    this.reset(game, players);
   }
 
-  /** Sets the level for the bot's next move. */
-  setLevel(level: Level): void {
-    this.currentLevel = level;
+  /**
+   * Changes who plays in the game under way. A search for a side whose player
+   * changed is dropped and made again by the new one. When the last person
+   * leaves, the two bots wait for `start`.
+   */
+  setPlayers(players: Players): void {
+    const hadHuman = this.hasHuman;
+    if (players[this.mover] !== this.seats[this.mover]) this.dropSearch();
+    this.seats = { ...players };
+    if (hadHuman && !this.hasHuman) this.stop();
+    this.advance();
+  }
+
+  /** Tells the controller whether the network can search; a bot that waited for it moves now. */
+  setNetworkReady(ready: boolean): void {
+    if (ready === this.network) return;
+    this.network = ready;
+    if (this.searching) this.onChange();
+    else this.advance();
+  }
+
+  setSpeed(speed: Speed): void {
+    this.delayMs = SPEEDS[speed];
+    // A wait already under way is cut or stretched to the new speed.
+    if (this.timer !== null) {
+      clearTimeout(this.timer);
+      this.wait();
+    }
+  }
+
+  /** Lets two bots play on by themselves until the game ends or `pause`. */
+  start(): void {
+    if (this.hasHuman || this.playing || this.game.result !== null) return;
+    this.playing = true;
+    this.failure = null;
+    if (this.searching) this.onChange();
+    else this.advance();
+  }
+
+  /** Stops two bots; a search in flight is dropped and made again on `start` or `step`. */
+  pause(): void {
+    this.stop();
     this.onChange();
   }
 
-  /** Plays the person's move. Returns false (and does nothing) when it is not their turn. */
+  /** Plays one move of two paused bots. */
+  step(): void {
+    if (!this.canStep) return;
+    this.failure = null;
+    this.advance(true);
+  }
+
+  /** Plays a person's move. Returns false (and does nothing) when it is not a person's turn. */
   playHuman(action: PlayerAction): boolean {
     if (!this.humanToMove) return false;
-    this.targets.push(this.state.globalAction(action));
-    this.game.play(action);
+    this.record(action, null);
     this.failure = null;
-    this.notifyOrSearch();
+    this.advance();
     return true;
   }
 
-  /** Takes back the person's last move and everything after it, cancelling a search in flight. */
+  /** Takes back the last move of a person's and everything after it, cancelling a search in flight. */
   undo(): void {
     const ply = this.lastHumanPly();
     if (ply === null) return;
-    this.stopSearch();
+    this.stop();
     this.game.undo(this.game.moves.length - ply);
     this.targets.length = ply;
+    this.readings.length = ply;
     this.failure = null;
-    this.onChange();
-  }
-
-  /** Stops the bot's search so the shared worker is free (Watch mode); `retry` picks the game up again. */
-  halt(): void {
-    this.stopSearch();
-    this.onChange();
+    this.advance();
   }
 
   /** Asks the bot for its move again after a failure. */
   retry(): void {
     this.failure = null;
-    this.notifyOrSearch();
+    this.advance();
   }
 
-  private reset(game: Game, human: Side, level: Level): void {
-    this.stopSearch();
+  private reset(game: Game, players: Players): void {
+    this.stop();
     this.game = game;
     this.targets = replayTargets(game.size, game.moves);
-    this.humanSide = human;
-    this.currentLevel = level;
+    this.readings = game.moves.map(() => null);
+    this.seats = { ...players };
     this.failure = null;
-    this.notifyOrSearch();
+    this.advance();
   }
 
-  private stopSearch(): void {
+  private record(action: PlayerAction, reading: number | null): void {
+    this.targets.push(this.state.globalAction(action));
+    this.readings.push(reading);
+    this.game.play(action);
+  }
+
+  private stop(): void {
+    this.playing = false;
+    this.dropSearch();
+  }
+
+  /** Drops a search in flight, or the wait before the next one; its late answer is ignored. */
+  private dropSearch(): void {
     this.epoch++;
     if (this.searching) this.port.cancel();
     this.searching = false;
+    if (this.timer !== null) clearTimeout(this.timer);
+    this.timer = null;
   }
 
-  /** Index of the person's latest move, or null if they have made none. */
+  /** Index of a person's latest move, or null if no person has moved. */
   private lastHumanPly(): number | null {
-    const parity = this.humanSide === "p1" ? 0 : 1;
-    for (let ply = this.game.moves.length - 1; ply >= 0; ply--) if (ply % 2 === parity) return ply;
+    for (let ply = this.game.moves.length - 1; ply >= 0; ply--) if (this.seats[sideOf(ply)] === HUMAN) return ply;
     return null;
   }
 
-  /** Starts the bot's move if it is due, else just reports the change. Either way there is one notice, sent once `thinking` is up to date. */
-  private notifyOrSearch(): void {
-    if (this.game.result === null && this.state.p1Turn === (this.humanSide === "p2")) void this.botMove();
+  /** A bot is to move and nothing holds it back but, perhaps, the network. A pending pause between two bots' moves holds it back. */
+  private due(): boolean {
+    return (
+      this.game.result === null &&
+      this.failure === null &&
+      !this.searching &&
+      this.timer === null &&
+      this.seats[this.mover] !== HUMAN &&
+      (this.hasHuman || this.playing)
+    );
+  }
+
+  /** Starts the bot's move if it is due and can search, else just reports the change. Either way there is one notice. */
+  private advance(stepping = false): void {
+    const seat = this.seats[this.mover];
+    const due = this.due() || (stepping && this.game.result === null && seat !== HUMAN);
+    if (due && seat !== HUMAN && (seat.engine !== "network" || this.network)) void this.botMove(seat);
     else this.onChange();
   }
 
-  private async botMove(): Promise<void> {
+  private wait(): void {
+    this.timer = setTimeout(() => {
+      this.timer = null;
+      this.advance();
+    }, this.delayMs);
+  }
+
+  private async botMove(level: Level): Promise<void> {
     const epoch = ++this.epoch;
-    const level = this.currentLevel;
+    const mover = this.mover;
     this.searching = true;
     this.onChange();
     try {
@@ -212,14 +345,17 @@ export class GameController {
         if (epoch !== this.epoch) return;
       }
       if (reply === null) throw new Error("The search was cancelled");
-      const action = parseMove(this.game.state, reply.move);
-      this.targets.push(this.state.globalAction(action));
-      this.game.play(action);
+      this.record(parseMove(this.game.state, reply.move), p1ShareOf(mover, reply));
     } catch (error) {
       if (epoch !== this.epoch) return;
       this.failure = error instanceof Error ? error.message : String(error);
+      this.playing = false;
     }
     this.searching = false;
-    this.onChange();
+    if (this.game.result !== null) this.playing = false;
+    if (this.playing && this.delayMs > 0) {
+      this.onChange();
+      this.wait();
+    } else this.advance();
   }
 }

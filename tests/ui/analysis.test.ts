@@ -2,8 +2,8 @@ import { describe, expect, it } from "vitest";
 import type { SearchResponse } from "../../src/ai/protocol";
 import type { SearchParams } from "../../src/ai/searchClient";
 import { Game } from "../../src/engine/game";
-import { Analysis, ANALYSIS_SIMULATIONS, evalBar, readingOf, replay } from "../../src/ui/analysis";
-import { GameController, type SearchPort } from "../../src/ui/controller";
+import { Analysis, ANALYSIS_SIMULATIONS, readingOf, replay } from "../../src/ui/analysis";
+import { GameController, HUMAN, type SearchPort } from "../../src/ui/controller";
 import { LEVELS } from "../../src/ui/levels";
 import { formatAction } from "../../src/engine/notation";
 import { GameState } from "../../src/engine/state";
@@ -44,7 +44,9 @@ function setup(hash: string, ready = true) {
   let changes = 0;
   let isReady = ready;
   const analysis: Analysis = new Analysis(controller, network, () => isReady, () => changes++);
-  controller.load(Game.fromHash(hash), NORMAL);
+  // The person plays the side to move, as the page seats them for a link.
+  const game = Game.fromHash(hash);
+  controller.load(game, game.result === null && !game.state.p1Turn ? { p1: NORMAL, p2: HUMAN } : { p1: HUMAN, p2: NORMAL });
   return { controller, analysis, network, botPort, changes: () => changes, setReady: (value: boolean) => (isReady = value) };
 }
 
@@ -61,48 +63,25 @@ describe("readingOf", () => {
   });
 });
 
-describe("evalBar", () => {
-  it("is drawn only for a ready reading in analysis mode", () => {
-    expect(evalBar({ status: "off" })).toBeNull();
-    expect(evalBar({ status: "unavailable" })).toBeNull();
-    expect(evalBar({ status: "searching" })).toBeNull();
-    expect(evalBar({ status: "failed", message: "x" })).toBeNull();
-    expect(evalBar({ status: "ready", reading: { p1Share: 0.624, lines: [] } })).toEqual({ percent: 62, label: "Player 1 62%, player 2 38%" });
-  });
-});
-
 describe("Analysis", () => {
-  it("is off by default, and an off analysis never searches", () => {
-    const { analysis, network } = setup("#n=5&m=c2.c4");
-    expect(analysis.view).toEqual({ status: "off" });
-    expect(evalBar(analysis.view)).toBeNull();
-    analysis.update();
-    expect(network.requests).toEqual([]);
-  });
-
   it("says it needs the network when none is ready, without searching", () => {
     const { analysis, network } = setup("#n=5&m=c2.c4", false);
-    analysis.setEnabled(true);
     expect(analysis.view).toEqual({ status: "unavailable" });
-    expect(evalBar(analysis.view)).toBeNull();
     expect(network.requests).toEqual([]);
   });
 
   it("searches the latest position with the network at the Strong budget and shows the reading", async () => {
     const { analysis, network } = setup("#n=5&m=c2.c4");
-    analysis.setEnabled(true);
     expect(analysis.view).toEqual({ status: "searching" });
     expect(network.requests).toEqual([{ engine: "network", size: 5, moves: ["c2", "c4"], simulations: ANALYSIS_SIMULATIONS, temperature: 0, seed: 0, reuseTree: false }]);
     expect(ANALYSIS_SIMULATIONS).toBe(32);
     network.answer(0.2, ["b3h", "c3"], [10, 22]);
     await settle();
     expect(analysis.view).toMatchObject({ status: "ready", reading: { p1Share: 0.6 } });
-    expect(evalBar(analysis.view)).toEqual({ percent: 60, label: "Player 1 60%, player 2 40%" });
   });
 
   it("steps through the game, searching each position once", async () => {
     const { analysis, network } = setup("#n=5&m=c2.c4.c3");
-    analysis.setEnabled(true);
     network.answer(0, ["c4"], [1]);
     await settle();
     analysis.step(-1);
@@ -131,7 +110,6 @@ describe("Analysis", () => {
 
   it("follows new moves while on the latest position, and stays put on an earlier one", async () => {
     const { analysis, controller, network, botPort } = setup("#n=5&m=c2.c4");
-    analysis.setEnabled(true);
     network.answer(0, ["c3"], [1]);
     await settle();
     controller.playHuman(controller.state.legalActions()[0]!);
@@ -148,7 +126,6 @@ describe("Analysis", () => {
 
   it("does not search while the bot is thinking, and does afterwards", async () => {
     const { analysis, controller, network, botPort } = setup("#n=5&m=c2.c4");
-    analysis.setEnabled(true);
     network.answer(0, ["c3"], [1]);
     await settle();
     const move = controller.state.legalActions().find((a) => a !== undefined)!;
@@ -165,19 +142,16 @@ describe("Analysis", () => {
 
   it("reads a finished game without searching", () => {
     const { analysis, network } = setup("#n=5&m=c2.b5.c3.a5.c4.b5.c5");
-    analysis.setEnabled(true);
     expect(analysis.view).toMatchObject({ status: "ready", reading: { p1Share: 1, lines: [] } });
     analysis.goTo(6);
     expect(network.requests).toHaveLength(1);
     const drawn = setup("#n=5&m=c2.c4.c1.c5.c2.c4.c1.c5");
-    drawn.analysis.setEnabled(true);
     expect(drawn.analysis.view).toMatchObject({ status: "ready", reading: { p1Share: 0.5 } });
     expect(drawn.network.requests).toEqual([]);
   });
 
   it("shows a failure, and treats a cancelled search as no failure", async () => {
     const { analysis, network } = setup("#n=5&m=c2.c4");
-    analysis.setEnabled(true);
     network.cancelled();
     await settle();
     expect(analysis.view).toEqual({ status: "searching" });
@@ -185,12 +159,10 @@ describe("Analysis", () => {
     network.fail("no network");
     await settle();
     expect(analysis.view).toEqual({ status: "failed", message: "no network" });
-    expect(evalBar(analysis.view)).toBeNull();
   });
 
   it("keeps a failure with the position it happened at, and tries that position again when it is visited again", async () => {
     const { analysis, network } = setup("#n=5&m=c2.c4");
-    analysis.setEnabled(true);
     network.answer(0, ["c3"], [1]);
     await settle();
     analysis.step(-1);
@@ -209,7 +181,6 @@ describe("Analysis", () => {
 
   it("says each reading once, in words with the position", async () => {
     const { analysis, network } = setup("#n=5&m=c2.c4");
-    analysis.setEnabled(true);
     expect(analysis.takeAnnouncement()).toBeNull();
     network.answer(0.2, ["b3h", "c3"], [10, 22]);
     await settle();
@@ -228,10 +199,9 @@ describe("Analysis", () => {
 
   it("starts over for a new game", async () => {
     const { analysis, controller, network } = setup("#n=5&m=c2.c4");
-    analysis.setEnabled(true);
     network.answer(0, ["c3"], [1]);
     await settle();
-    controller.newGame(5, "p1", NORMAL);
+    controller.newGame(5, { p1: HUMAN, p2: NORMAL });
     analysis.reset();
     analysis.update();
     expect(analysis.ply).toBe(0);

@@ -30,7 +30,7 @@ describe("ModelManager", () => {
     const { manager, started, changes } = setup();
     expect(manager.state(9)).toEqual({ status: "checking" });
     await manager.select(9);
-    expect(manager.state(9)).toEqual({ status: "ready", fromCache: false, saved: true });
+    expect(manager.state(9)).toEqual({ status: "ready", model: "m1", fromCache: false, saved: true });
     expect(started).toHaveLength(1);
     expect(new Uint8Array(started[0]!)).toEqual(model);
     const downloading = changes.filter((s) => s.status === "downloading");

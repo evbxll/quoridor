@@ -1,31 +1,39 @@
 import { maxPlies } from "../engine/constants";
-import type { GameController } from "./controller";
+import { type GameController, HUMAN, type Players, type Side, sideOf } from "./controller";
 
-/** Who played the last move and what it was ("Bot played e8."), or an empty string before any move. */
-function lastMoveText(controller: GameController): string {
-  const moves = controller.moves;
-  if (moves.length === 0) return "";
-  const mover = moves.length % 2 === 1 ? "p1" : "p2";
-  return `${mover === controller.human ? "You" : "The bot"} played ${moves[moves.length - 1]}. `;
+/** A seat in words: "You" for the one person against a bot, "Player 1" for either of two people, "Player 2 (Strong)" for a bot. */
+export function playerName(players: Players, side: Side): string {
+  const seat = players[side];
+  const number = side === "p1" ? 1 : 2;
+  if (seat !== HUMAN) return `Player ${number} (${seat.label})`;
+  return players[side === "p1" ? "p2" : "p1"] === HUMAN ? `Player ${number}` : "You";
 }
 
 /**
  * The status line under the board, also read out by screen readers: the last
- * move, then whose turn it is or how the game ended and why.
+ * move, then whose turn it is or how the game ended and why. `network` says
+ * where the network stands ("downloading, 40%") for a bot that waits for it.
  */
-export function statusText(controller: GameController): string {
-  const played = lastMoveText(controller);
+export function statusText(controller: GameController, network: string): string {
+  const players = controller.players;
+  const name = (side: Side): string => playerName(players, side);
+  const moves = controller.moves;
+  const played = moves.length === 0 ? "" : `${name(sideOf(moves.length - 1))} played ${moves[moves.length - 1]}. `;
   const result = controller.result;
   if (result) {
     if (result.reason === "repetition") return `${played}Draw by threefold repetition.`;
     if (result.reason === "cap") return `${played}Draw: the limit of ${maxPlies(controller.size)} moves was reached.`;
-    return `${played}${result.winner === controller.human ? "You win by reaching the goal row." : "The bot wins by reaching the goal row."}`;
+    const winner = name(result.winner === "p1" ? "p1" : "p2");
+    return `${played}${winner} ${winner === "You" ? "win" : "wins"} by reaching the goal row.`;
   }
-  if (controller.error !== null) return `${played}The bot could not move (${controller.error}). Choose Retry.`;
-  if (controller.thinking) return `${played}The bot is thinking.`;
-  const state = controller.state;
-  const mine = controller.human === "p1" ? 0 : 1;
-  return `${played}Your move. Walls left: you ${state.wallsLeft(mine)}, bot ${state.wallsLeft(mine === 0 ? 1 : 0)}.`;
+  const mover = controller.mover;
+  const seat = players[mover];
+  if (controller.error !== null) return `${played}${name(mover)} could not move (${controller.error}). Choose Retry.`;
+  if (seat === HUMAN) return `${played}${name(mover) === "You" ? "Your move." : `${name(mover)} to move.`}`;
+  if (controller.thinking) return `${played}${name(mover)} is thinking (${seat.engine === "network" ? "neural network" : "heuristic search"}).`;
+  if (controller.waiting) return `${played}${name(mover)} is waiting for the network (${network}).`;
+  if (!controller.hasHuman && !controller.running) return moves.length === 0 ? "Choose Start to watch the bots play." : `${played}Paused.`;
+  return `${played}${name(mover)} moves next.`;
 }
 
 /** The move list as rows of one move per player: `[["e2", "e8"], ["e3"]]`. */

@@ -1,13 +1,16 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import type { SearchResponse } from "../../src/ai/protocol";
 import type { SearchParams } from "../../src/ai/searchClient";
 import { playerAction } from "../../src/engine/actions";
 import { Game } from "../../src/engine/game";
-import { parseMove } from "../../src/engine/notation";
-import { GameController, type SearchPort } from "../../src/ui/controller";
+import { formatAction, parseMove } from "../../src/engine/notation";
+import { GameState } from "../../src/engine/state";
+import { GameController, HUMAN, type Players, type SearchPort, SPEEDS, type Speed } from "../../src/ui/controller";
 import { LEVELS } from "../../src/ui/levels";
 
-const [BEGINNER, NORMAL] = [LEVELS[0]!, LEVELS[1]!];
+const [BEGINNER, NORMAL, STRONG, MAX] = [LEVELS[0]!, LEVELS[1]!, LEVELS[2]!, LEVELS[3]!];
+
+const result = (move: string, value = 0): SearchResponse => ({ type: "result", id: 0, move, moves: [move], visits: [1], value, principalVariation: [move] });
 
 /** An engine the test answers by hand: each search waits until `answer`, `fail` or `cancelled`. */
 class FakeEngine implements SearchPort {
@@ -27,8 +30,8 @@ class FakeEngine implements SearchPort {
   }
 
   /** Answers the oldest search with `move`. */
-  answer(move: string): void {
-    this.waiting.shift()!({ type: "result", id: 0, move, moves: [move], visits: [1], value: 0, principalVariation: [move] });
+  answer(move: string, value = 0): void {
+    this.waiting.shift()!(result(move, value));
   }
 
   fail(message: string): void {
@@ -41,12 +44,27 @@ class FakeEngine implements SearchPort {
   }
 }
 
+/** An engine that answers at once with the first legal move. */
+class FirstMoveEngine implements SearchPort {
+  searches = 0;
+
+  async search(params: SearchParams): Promise<SearchResponse | null> {
+    this.searches++;
+    const state = GameState.initial(params.size);
+    for (const move of params.moves) state.play(parseMove(state, move));
+    return result(formatAction(state, state.legalActions()[0]!));
+  }
+
+  cancel(): void {}
+}
+
 const settle = (): Promise<void> => new Promise((resolve) => setImmediate(resolve));
 
-function setup(size = 5, human: "p1" | "p2" = "p1", level = NORMAL) {
+function setup(size = 5, players: Players = { p1: HUMAN, p2: NORMAL }) {
   const engine = new FakeEngine();
   const controller = new GameController(engine, () => {}, () => 0.5);
-  controller.newGame(size, human, level);
+  controller.setNetworkReady(true);
+  controller.newGame(size, players);
   const play = (move: string): boolean => controller.playHuman(parseMove(controller.state, move));
   /** The person plays `mine`, the engine answers `theirs`. */
   const turn = async (mine: string, theirs: string): Promise<void> => {
@@ -57,9 +75,18 @@ function setup(size = 5, human: "p1" | "p2" = "p1", level = NORMAL) {
   return { engine, controller, play, turn };
 }
 
-describe("GameController", () => {
+/** Two bots on 5x5, paused, at the given speed. */
+function bots(speed: Speed = "instant", players: Players = { p1: STRONG, p2: NORMAL }) {
+  const { engine, controller } = setup(5, players);
+  controller.setSpeed(speed);
+  return { engine, controller };
+}
+
+afterEach(() => vi.useRealTimers());
+
+describe("GameController with a person playing", () => {
   it("plays the person's move, asks the engine for a reply at the level's budget, and plays it", async () => {
-    const { engine, controller, play } = setup(5, "p1", BEGINNER);
+    const { engine, controller, play } = setup(5, { p1: HUMAN, p2: BEGINNER });
     expect(controller.humanToMove).toBe(true);
     expect(play("c2")).toBe(true);
     expect(controller.thinking).toBe(true);
@@ -72,7 +99,7 @@ describe("GameController", () => {
   });
 
   it("lets the bot open when the person plays second", async () => {
-    const { engine, controller, play } = setup(5, "p2");
+    const { engine, controller, play } = setup(5, { p1: NORMAL, p2: HUMAN });
     expect(controller.thinking).toBe(true);
     expect(controller.humanToMove).toBe(false);
     expect(engine.requests[0]).toMatchObject({ moves: [], simulations: 100, temperature: 0 });
@@ -132,7 +159,7 @@ describe("GameController", () => {
   });
 
   it("has nothing to undo for a person playing second until they have moved", async () => {
-    const { engine, controller, turn } = setup(5, "p2");
+    const { engine, controller, turn } = setup(5, { p1: NORMAL, p2: HUMAN });
     engine.answer("c2");
     await settle();
     expect(controller.canUndo).toBe(false);
@@ -155,7 +182,7 @@ describe("GameController", () => {
   });
 
   it("takes back a game the bot's move ended, along with the person's move before it", async () => {
-    const { engine, controller, turn } = setup(5, "p2");
+    const { engine, controller, turn } = setup(5, { p1: NORMAL, p2: HUMAN });
     engine.answer("c2");
     await settle();
     await turn("b5", "c3");
@@ -182,14 +209,14 @@ describe("GameController", () => {
   it("starts a new game over a search in flight", async () => {
     const { engine, controller, play } = setup();
     play("c2");
-    controller.newGame(7, "p1", BEGINNER);
+    controller.newGame(7, { p1: HUMAN, p2: BEGINNER });
     expect(engine.cancels).toBe(1);
     expect(controller.size).toBe(7);
     expect(controller.moves).toEqual([]);
     engine.answer("c4"); // a late reply for the old 5x5 game
     await settle();
     expect(controller.moves).toEqual([]);
-    expect(controller.level).toBe(BEGINNER);
+    expect(controller.players.p2).toBe(BEGINNER);
   });
 
   it("shows the engine's failure and tries again on request", async () => {
@@ -233,31 +260,52 @@ describe("GameController", () => {
   });
 
   it("asks the network for a network level and the heuristic for the others", () => {
-    const { engine, controller, play } = setup(5, "p1", LEVELS[2]!);
+    const { engine, controller, play } = setup(5, { p1: HUMAN, p2: STRONG });
     play("c2");
     expect(engine.requests[0]).toMatchObject({ engine: "network", simulations: 32, temperature: 0 });
-    controller.setLevel(LEVELS[3]!);
     controller.undo();
+    controller.setPlayers({ p1: HUMAN, p2: MAX });
     play("c2");
     expect(engine.requests[1]).toMatchObject({ engine: "network", simulations: 200 });
-    controller.setLevel(NORMAL);
     controller.undo();
+    controller.setPlayers({ p1: HUMAN, p2: NORMAL });
     play("c2");
     expect(engine.requests[2]).toMatchObject({ engine: "heuristic", simulations: 100 });
   });
 
-  it("uses a new level on the bot's next move", () => {
+  it("drops the search of a bot whose level changes and searches again at the new level", () => {
     const { engine, controller, play } = setup();
-    controller.setLevel(BEGINNER);
     play("c2");
-    expect(engine.requests[0]).toMatchObject({ simulations: 5, temperature: 1 });
+    controller.setPlayers({ p1: HUMAN, p2: BEGINNER });
+    expect(engine.cancels).toBe(1);
+    expect(engine.requests[1]).toMatchObject({ simulations: 5, temperature: 1, moves: ["c2"] });
+    // A change to the other side leaves the search alone.
+    controller.setPlayers({ p1: HUMAN, p2: BEGINNER });
+    expect(engine.requests).toHaveLength(2);
   });
 
-  it("continues a game from a link as the side to move, and writes the link back", () => {
+  it("swaps sides: the bot takes the side to move and moves at once", () => {
+    const { engine, controller } = setup(5, { p1: HUMAN, p2: STRONG });
+    expect(engine.requests).toHaveLength(0);
+    controller.setPlayers({ p1: STRONG, p2: HUMAN });
+    expect(controller.thinking).toBe(true);
+    expect(engine.requests[0]).toMatchObject({ engine: "network", moves: [] });
+  });
+
+  it("lets two people take turns on one device, and undoes one move at a time", () => {
+    const { engine, controller, play } = setup(5, { p1: HUMAN, p2: HUMAN });
+    expect(play("c2")).toBe(true);
+    expect(controller.humanToMove).toBe(true);
+    expect(play("c4")).toBe(true);
+    controller.undo();
+    expect(controller.moves).toEqual(["c2"]);
+    expect(engine.requests).toHaveLength(0);
+  });
+
+  it("continues a game from a link with the players it is given, and writes the link back", () => {
     const engine = new FakeEngine();
     const controller = new GameController(engine, () => {}, () => 0);
-    controller.load(Game.fromHash("#n=5&m=c2.c4.c3"), NORMAL);
-    expect(controller.human).toBe("p2");
+    controller.load(Game.fromHash("#n=5&m=c2.c4.c3"), { p1: NORMAL, p2: HUMAN });
     expect(controller.humanToMove).toBe(true);
     expect(controller.hash).toBe("#n=5&m=c2.c4.c3");
     expect(engine.requests).toHaveLength(0);
@@ -274,25 +322,221 @@ describe("GameController", () => {
     controller.undo();
     controller.undo();
     expect(controller.lastMove).toBeNull();
-    controller.load(Game.fromHash("#n=5&m=c2.c4.b3h"), NORMAL);
+    controller.load(Game.fromHash("#n=5&m=c2.c4.b3h"), { p1: NORMAL, p2: HUMAN });
     expect(controller.lastMove).toEqual({ kind: "wall", row: 1, col: 1, orientation: 0 });
     expect(engine.requests).toHaveLength(2);
   });
 
   it("refuses a board size the site does not offer", () => {
     const { controller } = setup();
-    for (const size of [0, 3, 6, 13]) expect(() => controller.newGame(size, "p1", NORMAL)).toThrow("no ");
-    expect(() => controller.load(Game.fromHash("#n=13"), NORMAL)).toThrow("13x13");
+    for (const size of [0, 3, 6, 13]) expect(() => controller.newGame(size, { p1: HUMAN, p2: NORMAL })).toThrow("no ");
+    expect(() => controller.load(Game.fromHash("#n=13"), { p1: HUMAN, p2: NORMAL })).toThrow("13x13");
     expect(controller.size).toBe(5);
   });
 
   it("does not search a game loaded as already over", () => {
     const engine = new FakeEngine();
     const controller = new GameController(engine, () => {}, () => 0);
-    controller.load(Game.fromHash("#n=5&m=c2.b5.c3.a5.c4.b5.c5"), NORMAL);
+    controller.load(Game.fromHash("#n=5&m=c2.b5.c3.a5.c4.b5.c5"), { p1: HUMAN, p2: NORMAL });
     expect(controller.result?.winner).toBe("p1");
-    expect(controller.human).toBe("p1");
     expect(controller.humanToMove).toBe(false);
     expect(engine.requests).toHaveLength(0);
+  });
+});
+
+describe("GameController and the network", () => {
+  it("makes a network bot wait until the network is ready, then moves; the heuristic never waits", async () => {
+    const engine = new FakeEngine();
+    const controller = new GameController(engine, () => {}, () => 0.5);
+    controller.newGame(5, { p1: STRONG, p2: HUMAN });
+    expect(controller.waiting).toBe(true);
+    expect(controller.thinking).toBe(false);
+    expect(engine.requests).toHaveLength(0);
+    controller.setNetworkReady(true);
+    expect(controller.waiting).toBe(false);
+    expect(engine.requests[0]).toMatchObject({ engine: "network", simulations: 32 });
+    const heuristic = new GameController(new FakeEngine(), () => {});
+    heuristic.newGame(5, { p1: NORMAL, p2: HUMAN });
+    expect(heuristic.waiting).toBe(false);
+    expect(heuristic.thinking).toBe(true);
+  });
+
+  it("keeps each bot's reading, as player 1's share, with the move it made", async () => {
+    const { engine, controller } = bots();
+    controller.step();
+    engine.answer("c2", 0.5);
+    await settle();
+    expect(controller.opinions()).toEqual({ p1: 0.75, p2: null });
+    controller.step();
+    engine.answer("c4", 0.5);
+    await settle();
+    expect(controller.opinions()).toEqual({ p1: 0.75, p2: 0.25 });
+    expect(controller.opinions(1)).toEqual({ p1: 0.75, p2: null });
+    expect(controller.opinions(0)).toEqual({ p1: null, p2: null });
+  });
+
+  it("forgets the readings of moves taken back", async () => {
+    const { engine, controller, play } = setup(5, { p1: HUMAN, p2: STRONG });
+    play("c2");
+    engine.answer("c4", 0.2);
+    await settle();
+    expect(controller.opinions().p2).toBeCloseTo(0.4);
+    controller.undo();
+    expect(controller.opinions()).toEqual({ p1: null, p2: null });
+  });
+});
+
+describe("GameController with two bots", () => {
+  it("starts paused and asks the level of the side to move", async () => {
+    const { engine, controller } = bots();
+    expect(controller.running).toBe(false);
+    expect(controller.hasHuman).toBe(false);
+    expect(engine.requests).toEqual([]);
+    controller.step();
+    expect(engine.requests[0]).toMatchObject({ engine: "network", simulations: 32, temperature: 0, size: 5, moves: [] });
+    engine.answer("c2");
+    await settle();
+    controller.step();
+    expect(engine.requests[1]).toMatchObject({ engine: "heuristic", simulations: 100, moves: ["c2"] });
+  });
+
+  it("plays one move on step and stays paused; step is ignored while searching or running", async () => {
+    const { engine, controller } = bots();
+    controller.step();
+    controller.step();
+    expect(engine.requests).toHaveLength(1);
+    engine.answer("c2");
+    await settle();
+    expect(controller.moves).toEqual(["c2"]);
+    expect(controller.running).toBe(false);
+    controller.start();
+    controller.step();
+    expect(engine.requests).toHaveLength(2);
+  });
+
+  it("cannot step a network bot before the network is ready", () => {
+    const engine = new FakeEngine();
+    const controller = new GameController(engine, () => {});
+    controller.newGame(5, { p1: STRONG, p2: NORMAL });
+    expect(controller.canStep).toBe(false);
+    controller.step();
+    expect(engine.requests).toHaveLength(0);
+    controller.start();
+    expect(controller.waiting).toBe(true);
+    controller.setNetworkReady(true);
+    expect(engine.requests).toHaveLength(1);
+  });
+
+  it("plays on after each move once started, waiting the speed's pause", async () => {
+    vi.useFakeTimers();
+    const { engine, controller } = bots("normal");
+    controller.start();
+    engine.answer("c2");
+    await vi.advanceTimersByTimeAsync(0);
+    expect(controller.moves).toEqual(["c2"]);
+    expect(engine.requests).toHaveLength(1);
+    await vi.advanceTimersByTimeAsync(SPEEDS.normal - 1);
+    expect(engine.requests).toHaveLength(1);
+    await vi.advanceTimersByTimeAsync(1);
+    expect(engine.requests).toHaveLength(2);
+  });
+
+  it("applies a new speed to a wait already under way", async () => {
+    vi.useFakeTimers();
+    const { engine, controller } = bots("slow");
+    controller.start();
+    engine.answer("c2");
+    await vi.advanceTimersByTimeAsync(0);
+    controller.setSpeed("fast");
+    await vi.advanceTimersByTimeAsync(SPEEDS.fast);
+    expect(engine.requests).toHaveLength(2);
+  });
+
+  it("does not move twice when the other side changes during the pause between moves", async () => {
+    vi.useFakeTimers();
+    const { engine, controller } = bots("normal");
+    controller.start();
+    engine.answer("c2");
+    await vi.advanceTimersByTimeAsync(0);
+    controller.setPlayers({ p1: MAX, p2: NORMAL });
+    expect(engine.requests).toHaveLength(1);
+    await vi.advanceTimersByTimeAsync(SPEEDS.normal);
+    expect(engine.requests).toHaveLength(2);
+    expect(controller.running).toBe(true);
+  });
+
+  it("pausing during a wait stops the next search", async () => {
+    vi.useFakeTimers();
+    const { engine, controller } = bots("normal");
+    controller.start();
+    engine.answer("c2");
+    await vi.advanceTimersByTimeAsync(0);
+    controller.pause();
+    await vi.advanceTimersByTimeAsync(10_000);
+    expect(engine.requests).toHaveLength(1);
+    expect(controller.running).toBe(false);
+  });
+
+  it("pausing during a search cancels it, drops a late answer, and searches again on start", async () => {
+    const { engine, controller } = bots();
+    controller.start();
+    controller.pause();
+    expect(engine.cancels).toBe(1);
+    expect(controller.thinking).toBe(false);
+    engine.answer("c2");
+    await settle();
+    expect(controller.moves).toEqual([]);
+    controller.start();
+    expect(engine.requests).toHaveLength(2);
+    engine.answer("b1");
+    await settle();
+    expect(controller.moves).toEqual(["b1"]);
+  });
+
+  it("stops and reports when a search fails, and tries again on start", async () => {
+    const { engine, controller } = bots();
+    controller.start();
+    engine.fail("boom");
+    await settle();
+    expect(controller.error).toBe("boom");
+    expect(controller.running).toBe(false);
+    controller.start();
+    expect(controller.error).toBeNull();
+    expect(engine.requests).toHaveLength(2);
+  });
+
+  it("stops and reports an answer that is not a legal move", async () => {
+    const { engine, controller } = bots();
+    controller.start();
+    engine.answer("a9");
+    await settle();
+    expect(controller.moves).toEqual([]);
+    expect(controller.error).toMatch(/not a legal move/);
+  });
+
+  it("pauses when the last person leaves, and plays on by itself when a person sits down", async () => {
+    const { engine, controller, play } = setup(5, { p1: HUMAN, p2: NORMAL });
+    play("c2");
+    engine.answer("c4");
+    await settle();
+    controller.setPlayers({ p1: BEGINNER, p2: NORMAL });
+    expect(controller.running).toBe(false);
+    expect(engine.requests).toHaveLength(1);
+    controller.setPlayers({ p1: BEGINNER, p2: HUMAN });
+    expect(engine.requests[1]).toMatchObject({ simulations: 5, moves: ["c2", "c4"] });
+  });
+
+  it("plays a whole game to its end by the site's rules, then stops", async () => {
+    const engine = new FirstMoveEngine();
+    const controller = new GameController(engine, () => {});
+    controller.newGame(5, { p1: BEGINNER, p2: NORMAL });
+    controller.setSpeed("instant");
+    controller.start();
+    while (controller.running) await settle();
+    expect(controller.result).not.toBeNull();
+    expect(engine.searches).toBe(controller.moves.length);
+    controller.start();
+    controller.step();
+    expect(engine.searches).toBe(controller.moves.length);
   });
 });

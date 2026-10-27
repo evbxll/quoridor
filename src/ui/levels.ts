@@ -20,6 +20,11 @@ export const LEVELS: readonly Level[] = [
   { id: "max", label: "Max", engine: "network", simulations: 200, temperature: 0 },
 ];
 
+/** What a level plays with, in words: "Neural network, 32 searches a move". */
+export function levelSummary(level: Level): string {
+  return `${level.engine === "network" ? "Neural network" : "Heuristic"}, ${level.simulations} searches a move${level.temperature > 0 ? ", varied" : ""}`;
+}
+
 /** Whether the level can be played now: a network level needs a model that has been loaded. */
 export function isAvailable(level: Level, modelReady: boolean): boolean {
   return level.engine === "heuristic" || modelReady;

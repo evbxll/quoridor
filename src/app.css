@@ -1,11 +1,11 @@
-/* The look follows the research app's app.css (copied once, same author). */
+/* The board's look follows the research app's app.css (copied once, same author). */
 :root {
   color-scheme: light;
-  --surface: #f6f5f1;
+  --surface: #f4f3ef;
   --card: #ffffff;
   --text: #1f1f1e;
   --muted: #5f5e58;
-  --line: #d6d5cd;
+  --line: #dddcd4;
   --board: #d9c3a0;
   --cell: #efe1c6;
   --groove: #b9a07a;
@@ -14,18 +14,22 @@
   --p1: #1d5fb4;
   --p2: #b23c0a;
   --pawn-text: #ffffff; /* 6.3:1 on --p1, 5.9:1 on --p2 */
+  --eval-p1: #6c9de0;
+  --eval-p2: #f0b7a2;
   --accent: #0f7a54;
+  --on-accent: #ffffff;
   --bad: #c0392b;
+  --busy: #b7791f;
   --focus: #1456a8;
 }
 @media (prefers-color-scheme: dark) {
   :root {
     color-scheme: dark;
-    --surface: #161615;
-    --card: #1f1f1e;
+    --surface: #141413;
+    --card: #1f1f1d;
     --text: #f0efec;
     --muted: #b0afa7;
-    --line: #3f3e39;
+    --line: #34332f;
     --board: #4a3f30;
     --cell: #6b5b45;
     --groove: #3a3126;
@@ -34,8 +38,12 @@
     --p1: #7db3f5;
     --p2: #f2905f;
     --pawn-text: #000000; /* 9.6:1 on --p1, 8.9:1 on --p2 */
+    --eval-p1: #4f86cf;
+    --eval-p2: #8f4a37;
     --accent: #3ec99a;
+    --on-accent: #06281c;
     --bad: #ff7b6b;
+    --busy: #e8b04f;
     --focus: #7ab4ff;
   }
 }
@@ -53,16 +61,19 @@ button {
   background: var(--card);
   border: 1px solid var(--muted);
   border-radius: 8px;
-  padding: 6px 12px;
+  padding: 6px 14px;
   cursor: pointer;
 }
 button:hover:not(:disabled):not([aria-disabled="true"]) { border-color: var(--text); }
-button:disabled, button[aria-disabled="true"] { opacity: .55; cursor: default; border-style: dashed; }
+button[aria-disabled="true"] { opacity: .5; cursor: default; border-style: dashed; }
+button.primary { background: var(--accent); border-color: var(--accent); color: var(--on-accent); font-weight: 600; }
+button.quiet { background: none; border-color: transparent; color: var(--muted); padding: 4px 8px; }
+button.quiet:hover { color: var(--text); text-decoration: underline; }
 select {
   background: var(--card);
   border: 1px solid var(--muted);
   border-radius: 8px;
-  padding: 5px 8px;
+  padding: 6px 8px;
 }
 :focus-visible { outline: 3px solid var(--focus); outline-offset: 2px; }
 
@@ -70,71 +81,139 @@ select {
   position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0; overflow: hidden;
   clip: rect(0 0 0 0); white-space: nowrap; border: 0;
 }
+.hint { margin: 0; color: var(--muted); font-size: 13px; }
+.inline { display: inline-flex; gap: 6px; align-items: center; }
+.row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
 
 .topbar {
-  display: flex; flex-wrap: wrap; gap: 12px 24px; align-items: center; justify-content: space-between;
-  padding: 12px 16px; border-bottom: 1px solid var(--line); background: var(--card);
+  display: flex; align-items: center; justify-content: space-between;
+  max-width: 1180px; margin: 0 auto; padding: 12px 24px 4px;
 }
-.topbar h1 { margin: 0; font-size: 20px; font-weight: 650; }
-.toolbar { display: flex; flex-wrap: wrap; gap: 8px 12px; align-items: center; }
-.inline { display: inline-flex; gap: 6px; align-items: center; }
+.topbar h1 { margin: 0; font-size: 19px; font-weight: 650; letter-spacing: .01em; }
 
+/* The board is the hero; the panel beside it stays narrow. */
 .layout {
-  display: grid; grid-template-columns: minmax(0, 1fr) minmax(260px, 340px);
-  gap: 20px; padding: 16px; max-width: 1100px; margin: 0 auto;
+  display: grid; grid-template-columns: minmax(0, 1fr) 330px; gap: 28px;
+  max-width: 1180px; margin: 0 auto; padding: 8px 24px 32px; align-items: start;
 }
-@media (max-width: 800px) { .layout { grid-template-columns: minmax(0, 1fr); } }
-
-.board-area { display: flex; flex-direction: column; gap: 6px; min-width: 0; align-items: center; }
-.board { width: min(100%, calc(100vh - 230px)); min-width: min(100%, 260px); aspect-ratio: 1; user-select: none; touch-action: manipulation; }
+.stage { display: flex; flex-direction: column; align-items: center; gap: 8px; min-width: 0; }
+.board-row {
+  --board-max: calc(100vh - 140px);
+  display: flex; gap: 8px; width: 100%; max-width: calc(var(--board-max) + 56px);
+}
+.board { flex: 1 1 0; min-width: 0; aspect-ratio: 1; user-select: none; touch-action: manipulation; }
 .board:focus-visible { outline: 3px solid var(--focus); outline-offset: 3px; border-radius: 10px; }
+.board:focus:not(:focus-visible) { outline: none; } /* a click focuses the board too; only keyboard focus is outlined */
 .board.can-click { cursor: pointer; }
-.tray {
-  display: flex; align-items: center; justify-content: center; gap: 10px; min-height: 34px;
-  width: min(100%, calc(100vh - 230px)); color: var(--muted); font-variant-numeric: tabular-nums;
+.status { margin: 4px 0 0; min-height: 2.9em; max-width: 60ch; font-size: 16px; font-weight: 600; text-align: center; }
+.viewing { margin: 0; color: var(--muted); text-align: center; }
+
+/* Eval bar: player 1's share rises from the bottom (player 1's side of the board) in a
+   soft blue over player 2's soft red. Its rows line up with the board's edges (set from
+   the board's geometry); the shares are printed at each end. The numbered tabs are each
+   bot's own estimate: player 1's on the left, player 2's on the right, so they never overlap. */
+.eval { flex: none; width: 48px; display: grid; grid-template-rows: minmax(0, 1fr) minmax(0, 12fr) minmax(0, 1fr); }
+.eval-end {
+  display: flex; align-items: center; justify-content: center; gap: 2px;
+  font-size: 12px; line-height: 1; font-variant-numeric: tabular-nums;
 }
-.tray .pieces { display: flex; flex-wrap: wrap; gap: 4px; }
-.tray .pieces i { width: 6px; height: 22px; border-radius: 3px; border: 2px solid var(--text); }
-.tray.p1 .pieces i { background: var(--p1); }
-.tray.p2 .pieces i { background: var(--p2); }
-.tray .count { font-size: 18px; font-weight: 700; color: var(--text); }
-.status { margin: 4px 0 0; min-height: 1.45em; font-weight: 600; text-align: center; }
-progress { width: 100%; accent-color: var(--accent); }
-.banner { padding: 8px 16px; background: var(--card); border-bottom: 1px solid var(--line); display: flex; flex-wrap: wrap; align-items: center; gap: 6px 16px; }
-.banner p { margin: 0; flex: 1 1 260px; }
-.banner progress { flex: 1 1 100%; }
-.eval { width: min(100%, calc(100vh - 230px)); }
-.evalbar-track { position: relative; height: 16px; border: 2px solid var(--text); border-radius: 8px; overflow: hidden; background: var(--p2); }
-.evalbar-p1 { display: block; height: 100%; background: var(--p1); border-right: 3px solid var(--text); }
-.evalbar-text { display: flex; justify-content: space-between; gap: 12px; margin-top: 2px; font-weight: 700; font-variant-numeric: tabular-nums; }
-.mark { position: absolute; width: 8px; height: 50%; transform: translateX(-50%); background: var(--text); border: 2px solid var(--surface); }
-#watch-eval .evalbar-track { height: 28px; }
-.mark-top { top: 0; }
-.mark-bottom { bottom: 0; }
-body[data-mode="watch"] .play-only, body[data-mode="play"] .watch-only { display: none !important; }
-#analysis-tools { margin-top: 8px; }
-#analysis-lines { margin: 6px 0; padding-left: 1.4em; }
-.moves li button { border: none; background: none; padding: 1px 4px; min-width: 3.5em; text-align: left; border-radius: 6px; }
-.moves li button.latest { font-weight: 700; text-decoration: underline; }
-.hint { margin: 0; color: var(--muted); font-size: 13px; max-width: 60ch; }
+.eval-end b { font-weight: 700; }
+.eval-end span { color: var(--muted); font-size: 10px; }
+.eval-end:first-child b { color: var(--p2); }
+.eval-end:last-child b { color: var(--p1); }
+.eval-main { display: flex; justify-content: center; min-height: 0; }
+.eval-track {
+  position: relative; width: 14px; border-radius: 7px; overflow: hidden;
+  background: var(--eval-p2); box-shadow: inset 0 0 0 1px var(--muted);
+}
+.eval-fill {
+  position: absolute; left: 0; right: 0; bottom: 0; background: var(--eval-p1);
+  border-top: 2px solid var(--text); transition: height .3s;
+}
+.eval-even { position: absolute; left: 0; right: 0; bottom: 50%; border-top: 1px dashed var(--text); opacity: .55; }
+.eval.stale .eval-track, .eval.stale .eval-end b { opacity: .55; }
+.eval.empty .eval-track { background: var(--surface); }
+.eval.empty .eval-fill { display: none; }
+.eval-ticks { position: relative; width: 17px; }
+.tick {
+  position: absolute; right: 1px; width: 16px; height: 16px; transform: translateY(50%); transition: bottom .3s;
+  display: flex; align-items: center; justify-content: center; padding-right: 3px;
+  font-size: 11px; font-weight: 800; color: var(--pawn-text);
+  clip-path: polygon(0 0, 65% 0, 100% 50%, 65% 100%, 0 100%); /* points at the bar */
+}
+.eval-ticks.right .tick { right: auto; left: 1px; padding: 0 0 0 3px; clip-path: polygon(35% 0, 100% 0, 100% 100%, 35% 100%, 0 50%); }
+.tick.p1 { background: var(--p1); }
+.tick.p2 { background: var(--p2); }
 
 .panel { display: flex; flex-direction: column; gap: 12px; min-width: 0; }
-.card { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 12px 16px; }
-.card h2 { margin: 0 0 8px; font-size: 14px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); }
+.card { background: var(--card); border: 1px solid var(--line); border-radius: 14px; padding: 14px 16px; }
+.card h2 { margin: 0 0 8px; font-size: 13px; font-weight: 650; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); }
+
+/* Players, in board order: player 2 (top) above player 1 (bottom). The side to move is outlined in its colour. */
+.players { display: flex; flex-direction: column; gap: 4px; }
+.seat {
+  display: grid; grid-template-columns: 30px minmax(0, 1fr); gap: 12px; align-items: center;
+  padding: 10px 12px; border: 2px solid transparent; border-radius: 12px;
+}
+.seat.to-move { background: var(--surface); }
+#seat-p1.to-move { border-color: var(--p1); }
+#seat-p2.to-move { border-color: var(--p2); }
+.disc {
+  width: 30px; height: 30px; border-radius: 50%; display: grid; place-items: center;
+  font-weight: 800; color: var(--pawn-text); border: 2px solid var(--text);
+}
+.disc.p1 { background: var(--p1); }
+.disc.p2 { background: var(--p2); }
+.seat-body { display: flex; flex-direction: column; gap: 5px; min-width: 0; }
+.seat-head { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
+.seat-head label { font-weight: 650; font-size: 14px; }
+.seat-body select { width: 100%; }
+.seat-note { margin: 0; color: var(--muted); font-size: 13px; }
+.seat.thinking .seat-note { color: var(--text); font-weight: 600; }
+.walls { color: var(--muted); font-size: 13px; white-space: nowrap; font-variant-numeric: tabular-nums; }
+.walls b { color: var(--text); font-size: 15px; }
+.swap { align-self: center; font-size: 13px; margin: -2px 0; }
+.players .row { margin-top: 8px; padding: 0 2px; }
+
 .moves {
-  position: relative;
-  list-style: decimal inside; margin: 0; padding: 0; max-height: 280px; overflow: auto;
+  list-style: none; margin: 0; padding: 0; max-height: 196px; overflow: auto; counter-reset: turn;
   font-variant-numeric: tabular-nums;
 }
-.moves li { padding: 2px 0; }
-.moves li span { display: inline-block; min-width: 3.5em; }
-.moves li span.latest { font-weight: 700; text-decoration: underline; }
+.moves li { display: grid; grid-template-columns: 2.4em 1fr 1fr; counter-increment: turn; padding: 1px 0; }
+.moves li::before { content: counter(turn) "."; color: var(--muted); }
+.moves li > * { justify-self: start; }
+.moves li button { border: none; background: none; padding: 0 6px; margin-left: -6px; border-radius: 6px; }
+.moves .latest { font-weight: 700; text-decoration: underline; text-underline-offset: 3px; }
+
+details.card > summary { cursor: pointer; font-weight: 650; }
+details.card[open] > summary { margin-bottom: 10px; }
+details.card > :not(summary) + * { margin-top: 10px; }
+#analysis-position { margin: 10px 0 0; font-weight: 600; }
+#analysis-lines { margin: 6px 0; padding-left: 1.4em; }
+#analysis-lines:empty { display: none; }
+
+.network { padding: 0 4px; font-size: 13px; color: var(--muted); display: flex; flex-direction: column; gap: 6px; }
+.network p { margin: 0; }
+.network progress { width: 100%; accent-color: var(--accent); }
+.network button { align-self: start; }
+.net-dot { display: inline-block; width: 9px; height: 9px; border-radius: 50%; margin-right: 7px; background: var(--muted); }
+.net-dot[data-tone="ok"] { background: var(--accent); }
+.net-dot[data-tone="busy"] { background: var(--busy); }
+.net-dot[data-tone="bad"] { background: var(--bad); }
+
+/* Phone and narrow windows: the board takes the width, the eval bar stays on its left, the panel follows. */
+@media (max-width: 820px) {
+  .topbar { padding: 10px 16px 2px; }
+  .layout { grid-template-columns: minmax(0, 1fr); gap: 16px; padding: 6px 16px 24px; }
+  .board-row { --board-max: 100vw; }
+  .status { font-size: 15px; min-height: 2.9em; }
+}
 
 /* Board (SVG). Pointer events are resolved by geometry on the svg itself. */
 .board * { pointer-events: none; }
 .cell { fill: var(--cell); }
 .dot { fill: var(--groove); }
-.label { fill: var(--label); font-weight: 700; font-weight: 600; text-anchor: middle; dominant-baseline: middle; }
+.label { fill: var(--label); font-weight: 600; text-anchor: middle; dominant-baseline: middle; }
 .wall { fill: var(--wall); }
 .target { fill: none; stroke: var(--accent); stroke-width: 4; stroke-dasharray: 5 4; }
 .pawn { stroke: var(--text); stroke-width: 2; }

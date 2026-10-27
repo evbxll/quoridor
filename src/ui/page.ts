@@ -1,17 +1,17 @@
 import type { GlobalAction } from "../engine/actions";
 import { Game } from "../engine/game";
 import type { GameState } from "../engine/state";
-import { Analysis, evalBar, replay } from "./analysis";
+import { Analysis, replay } from "./analysis";
 import { describeBoard, renderBoard } from "./board";
-import { element, onPress, renderTray, setEnabled } from "./dom";
+import { element, onPress, setEnabled } from "./dom";
 import { ModelManager, type ModelState } from "../model/manager";
 import type { ModelEnv } from "../model/store";
-import { GameController, type SearchPort, type Side } from "./controller";
+import { GameController, HUMAN, type Player, type Players, type SearchPort, type Side, sideOf, type Speed } from "./controller";
+import { evalBar } from "./evalBar";
 import { boardSpan, cellAt, PAD, wallAt } from "./geometry";
-import { isAvailable, type Level, LEVELS } from "./levels";
+import { isAvailable, type Level, LEVELS, levelSummary } from "./levels";
 import { WallPreview } from "./pointer";
-import { moveRows, statusText } from "./status";
-import { startWatch } from "./watchPage";
+import { moveRows, playerName, statusText } from "./status";
 import { describeTarget, findAction, moveCursor, pawnTargets } from "./targets";
 
 /** How the page gets the network: where to fetch it from, and how to give it to the search worker. */
@@ -20,48 +20,60 @@ export interface NetworkSource {
   readonly start: (model: ArrayBuffer) => Promise<void>;
 }
 
+const SIDES = ["p1", "p2"] as const;
+const NORMAL = LEVELS.find((level) => level.id === "normal")!;
+const STRONG = LEVELS.find((level) => level.id === "strong")!;
+/** A visitor plays player 1 against Strong, the network at 32 searches, unless they choose otherwise. */
+const DEFAULT_PLAYERS: Players = { p1: HUMAN, p2: STRONG };
+
 const megabytes = (bytes: number): string => (bytes / 1e6).toFixed(1);
 
-/** The model note under the board, and the words that go after a disabled level. */
-function describeModel(state: ModelState): { note: string; level: string } {
+/** Where the network stands, in words: the line at the foot of the panel, and the short form for a bot that waits for it. */
+function describeNetwork(state: ModelState, size: number): { line: string; short: string; tone: "ok" | "busy" | "off" | "bad" } {
   switch (state.status) {
     case "checking":
-      return { note: "Looking for the network that plays Strong and Max.", level: "model not available yet" };
+      return { line: "Network: looking for it…", short: "looking for it", tone: "busy" };
     case "unavailable":
       return state.reason === "not-offered"
-        ? { note: "The network is not offered at this board size. Beginner and Normal play with the heuristic.", level: "network not offered at this size" }
-        : { note: "Strong and Max play with a trained network, which is not available yet.", level: "model not available yet" };
+        ? { line: `Network: not offered at ${size} × ${size}. Strong and Max are off; Beginner and Normal play.`, short: "not offered at this size", tone: "off" }
+        : { line: "Network: none is published yet. Strong and Max are off; Beginner and Normal play.", short: "none published", tone: "off" };
     case "downloading": {
+      const percent = state.total === null ? null : Math.floor((state.loaded / state.total) * 100);
       const done = state.total === null ? `${megabytes(state.loaded)} MB` : `${megabytes(state.loaded)} of ${megabytes(state.total)} MB`;
-      return { note: `Downloading the network for Strong and Max: ${done}. Beginner and Normal can be played meanwhile.`, level: "downloading the model" };
+      return { line: `Network: downloading, ${done}.`, short: percent === null ? `downloading, ${done}` : `downloading, ${percent}%`, tone: "busy" };
     }
     case "ready":
       return {
-        note: `Strong and Max are ready.${state.fromCache ? " The network was loaded from this device." : ""}${state.saved ? "" : " It could not be saved for offline use."}`,
-        level: "",
+        line: `Network: ready (${state.model}${state.fromCache ? ", loaded from this device" : ""}).${state.saved ? "" : " It could not be saved for offline use."}`,
+        short: "ready",
+        tone: "ok",
       };
     case "failed":
-      return { note: state.message, level: state.kind === "hash" ? "model failed its checksum" : "model failed to load" };
+      return { line: `Network: failed. ${state.message}`, short: "the download failed; choose Retry download", tone: "bad" };
   }
 }
 
-/** Wires the controller to the page: draws the position and turns clicks and keys into moves. */
+/** Wires the controller to the page: draws the position, the players and the eval bar, and turns clicks and keys into moves. */
 export function startPage(port: SearchPort, network: NetworkSource): GameController {
   const board = element("board", SVGSVGElement);
   const sizeSelect = element("size", HTMLSelectElement);
-  const levelSelect = element("level", HTMLSelectElement);
-  const modeSelect = element("mode", HTMLSelectElement);
-  const levelSelects = [...document.querySelectorAll<HTMLSelectElement>("select.level-select")];
-  const sideSelect = element("side", HTMLSelectElement);
+  const seatSelects = { p1: element("player-p1", HTMLSelectElement), p2: element("player-p2", HTMLSelectElement) };
+  const speedSelect = element("speed", HTMLSelectElement);
   const live = element("live", HTMLElement);
   const statusLine = element("status", HTMLElement);
   const retryButton = element("retry", HTMLButtonElement);
   const undoButton = element("undo", HTMLButtonElement);
+  const toggleButton = element("toggle", HTMLButtonElement);
+  const stepButton = element("step", HTMLButtonElement);
+  const analysisPanel = element("analysis", HTMLDetailsElement);
+  const networkRetry = element("network-retry", HTMLButtonElement);
+  const networkProgress = element("network-progress", HTMLProgressElement);
 
-  const watching = (): boolean => modeSelect.value === "watch";
   const preview = new WallPreview();
   let cursor: GlobalAction | null = null; // shown only once the keyboard is in use on the board
   let drawn = "";
+  /** The eval bar's last fresh percentage, kept (dimmed) while the next position is read. */
+  let shownPercent: number | null = null;
 
   const announce = (text: string): void => {
     live.textContent = text === live.textContent ? `${text} ` : text;
@@ -69,193 +81,228 @@ export function startPage(port: SearchPort, network: NetworkSource): GameControl
 
   const controller = new GameController(port, () => analysis.update());
   let progressFrame = false;
+  let announcedModel = "";
   const models = new ModelManager(network.env, network.start, () => {
     // Progress arrives with every chunk of the download; draw it at most once a frame. Other changes draw at once.
-    if (announcedModel === "downloading" && models.state(Number(sizeSelect.value)).status === "downloading") {
+    if (announcedModel === "downloading" && models.state(controller.size).status === "downloading") {
       if (!progressFrame) {
         progressFrame = true;
         requestAnimationFrame(() => {
           progressFrame = false;
-          renderModel();
+          networkChanged();
         });
       }
       return;
     }
-    renderModel();
-    analysis.update();
+    networkChanged();
   });
-  const analysis = new Analysis(
-    controller,
-    port,
-    () => models.state(controller.size).status === "ready",
-    () => {
-      render();
-      renderAnalysis();
-    },
-  );
-  /** The person may move: it is their turn, and the position on the board is the latest. */
-  const canPlay = (): boolean => !watching() && controller.humanToMove && !analysis.viewingPast;
-  const modelNote = element("model-note", HTMLElement);
-  const modelProgress = element("model-progress", HTMLProgressElement);
-  const modelRetry = element("model-retry", HTMLButtonElement);
-  const modelBanner = element("model-banner", HTMLElement);
-  const modelBannerText = element("model-banner-text", HTMLElement);
-  let announcedModel = "";
+  const modelState = (): ModelState => models.state(controller.size);
+  const analysis = new Analysis(controller, port, () => modelState().status === "ready", render);
 
-  /** If `hiding` has keyboard focus and is about to go away, moves focus to `fallback` so it is not lost to the page. */
-  const keepFocus = (hiding: HTMLElement, fallback: HTMLElement): void => {
-    if (document.activeElement === hiding) fallback.focus();
-  };
+  /** A person may move: it is a person's turn, and the position on the board is the latest. */
+  const canPlay = (): boolean => controller.humanToMove && !analysis.viewingPast;
 
-  for (const select of levelSelects) {
+  for (const select of Object.values(seatSelects)) {
+    const human = document.createElement("option");
+    human.value = HUMAN;
+    human.textContent = "Human";
+    select.append(human);
     for (const level of LEVELS) {
       const option = document.createElement("option");
       option.value = level.id;
+      option.textContent = level.label;
       select.append(option);
     }
-    select.value = LEVELS[1]!.id;
   }
-  const levelOf = (select: HTMLSelectElement): Level => LEVELS.find((l) => l.id === select.value) ?? LEVELS[1]!;
-  const selectedLevel = (): Level => levelOf(levelSelect);
-  /** The level chosen in `select`, or Normal (said aloud, and shown in the select) when the network it needs is not ready for this size. */
-  function usableLevel(select: HTMLSelectElement, size: number): Level {
-    const wanted = levelOf(select);
-    if (isAvailable(wanted, models.state(size).status === "ready")) return wanted;
-    select.value = LEVELS[1]!.id;
-    announce(`${wanted.label} is not available at this board size, so ${LEVELS[1]!.label} is used.`);
-    return LEVELS[1]!;
-  }
+  const playerOf = (select: HTMLSelectElement): Player => LEVELS.find((level) => level.id === select.value) ?? HUMAN;
+  const chosenPlayers = (): Players => ({ p1: playerOf(seatSelects.p1), p2: playerOf(seatSelects.p2) });
+  const showPlayers = (players: Players): void => {
+    for (const side of SIDES) seatSelects[side].value = players[side] === HUMAN ? HUMAN : (players[side] as Level).id;
+  };
 
   /**
-   * Shows where the network stands for the board size in the select: the note,
-   * the progress bar, and which levels can be chosen. A game in progress keeps
-   * its opponent; the new levels apply from the next game or level change.
+   * After the network changed: the bots that wait for it may move, levels it
+   * cannot play at this size are switched off, and a seat that had one of them
+   * goes to Normal (said aloud).
    */
-  function renderModel(): void {
-    const state = models.state(Number(sizeSelect.value));
-    const { note, level } = describeModel(state);
-    if (modelNote.textContent !== note) modelNote.textContent = note;
-    if (state.status === "downloading") {
-      modelProgress.hidden = false;
-      if (state.total === null) modelProgress.removeAttribute("value");
-      else {
-        modelProgress.max = state.total;
-        modelProgress.value = state.loaded;
+  function networkChanged(): void {
+    const state = modelState();
+    const off = state.status === "unavailable";
+    if (off) {
+      const players = { ...controller.players };
+      for (const side of SIDES) {
+        const seat = players[side];
+        if (seat !== HUMAN && !isAvailable(seat, false)) {
+          players[side] = NORMAL;
+          announce(`${seat.label} needs the network, which is not offered at this board size, so player ${side === "p1" ? 1 : 2} plays ${NORMAL.label}.`);
+        }
       }
-    } else modelProgress.hidden = true;
-    // Below the board on a phone the note would be out of sight, so a download or a failure also shows up here.
-    const banner = state.status === "downloading" || state.status === "failed";
-    if (!banner) keepFocus(modelRetry, levelSelect);
-    else if (state.status !== "failed") keepFocus(modelRetry, modelBannerText);
-    modelRetry.hidden = state.status !== "failed";
-    modelBanner.hidden = !banner;
-    modelBannerText.textContent = note;
-    for (const select of levelSelects) {
+      if (players.p1 !== controller.players.p1 || players.p2 !== controller.players.p2) controller.setPlayers(players);
+    }
+    for (const select of Object.values(seatSelects)) {
       for (const option of select.options) {
-        const found = LEVELS.find((l) => l.id === option.value)!;
-        option.disabled = !isAvailable(found, state.status === "ready");
-        option.textContent = option.disabled ? `${found.label} (${level})` : found.label;
+        const level = LEVELS.find((l) => l.id === option.value);
+        option.disabled = level !== undefined && off && !isAvailable(level, false);
+        option.textContent = level === undefined ? "Human" : option.disabled ? `${level.label} (no network)` : level.label;
       }
     }
     if (state.status !== announcedModel) {
       announcedModel = state.status;
       if (state.status === "downloading") announce("Downloading the network for Strong and Max.");
-      else if (state.status === "ready" || state.status === "failed") announce(note);
+      else if (state.status === "ready" || state.status === "failed") announce(describeNetwork(state, controller.size).line);
     }
+    controller.setNetworkReady(state.status === "ready");
+    analysis.update();
   }
 
-  const analysisOn = element("analysis-on", HTMLInputElement);
-  const evalElement = element("eval", HTMLElement);
-
-  /** Analysis mode: the eval bar (only here, never in play), the position being viewed and the network's best moves. */
-  function renderAnalysis(): void {
-    const view = analysis.view;
-    const ready = models.state(controller.size).status === "ready";
-    analysisOn.disabled = !ready && !analysis.enabled;
-    analysisOn.checked = analysis.enabled;
-    element("analysis-tools", HTMLElement).hidden = !analysis.enabled;
-    const bar = evalBar(view);
-    evalElement.hidden = bar === null;
-    element("analysis-lines", HTMLElement).replaceChildren();
-    const count = controller.moves.length;
-    setEnabled(element("step-first", HTMLButtonElement), analysis.ply > 0);
-    setEnabled(element("step-prev", HTMLButtonElement), analysis.ply > 0);
-    setEnabled(element("step-next", HTMLButtonElement), analysis.ply < count);
-    setEnabled(element("step-last", HTMLButtonElement), analysis.ply < count);
-    element("analysis-position", HTMLElement).textContent = analysis.enabled ? `Position after ${analysis.where}.` : "";
-    const note = element("analysis-note", HTMLElement);
-    if (view.status === "ready" && bar) {
-      evalElement.setAttribute("aria-valuenow", String(bar.percent));
-      evalElement.setAttribute("aria-valuetext", bar.label);
-      element("eval-p1", HTMLElement).style.width = `${bar.percent}%`;
-      element("eval-p1-text", HTMLElement).textContent = `Player 1: ${bar.percent}%`;
-      element("eval-p2-text", HTMLElement).textContent = `Player 2: ${100 - bar.percent}%`;
-      const lines = element("analysis-lines", HTMLElement);
-      for (const line of view.reading.lines) {
-        const item = document.createElement("li");
-        item.textContent = `${line.move}: ${Math.round(line.share * 100)}% of the searches`;
-        lines.append(item);
+  function renderNetwork(): void {
+    const state = modelState();
+    const { line, tone } = describeNetwork(state, controller.size);
+    const text = element("network-text", HTMLElement);
+    if (text.textContent !== line) text.textContent = line;
+    element("network-dot", HTMLElement).dataset["tone"] = tone;
+    if (state.status === "downloading") {
+      networkProgress.hidden = false;
+      if (state.total === null) networkProgress.removeAttribute("value");
+      else {
+        networkProgress.max = state.total;
+        networkProgress.value = state.loaded;
       }
-      note.textContent = view.reading.lines.length > 0 ? "Best moves for the player to move, by share of the network's 32 searches." : "The game is over here.";
-      const sentence = analysis.takeAnnouncement();
-      if (sentence) announce(sentence);
-    } else {
-      note.textContent =
-        view.status === "unavailable"
-          ? "Analysis needs the network, which is not ready."
-          : view.status === "searching"
-            ? "The network is looking at this position."
-            : view.status === "failed"
-              ? `The analysis failed (${view.message}).`
-              : "";
-    }
-  }
-
-  /** Shows the controller's board size, side and level in the selects (after a game is opened from a link). */
-  function syncSelects(): void {
-    sizeSelect.value = String(controller.size);
-    sideSelect.value = controller.human;
-    levelSelect.value = controller.level.id;
+    } else networkProgress.hidden = true;
+    if (state.status !== "failed" && document.activeElement === networkRetry) seatSelects.p1.focus();
+    networkRetry.hidden = state.status !== "failed";
   }
 
   function render(): void {
-    if (watching()) return;
     const past = analysis.viewingPast ? replay(controller.size, controller.moves, analysis.ply) : null;
     const state: GameState = past ? past.state : controller.state;
     const canMove = canPlay();
     const wall = canMove ? preview.wall : null;
-    const targets = canMove ? pawnTargets(state) : [];
     const markup = renderBoard(state, {
-      targets,
+      targets: canMove ? pawnTargets(state) : [],
       ghost: wall ? { wall, legal: findAction(state, wall) !== null } : null,
       cursor: cursor ? { target: cursor, legal: findAction(state, cursor) !== null } : null,
       last: past ? past.last : controller.lastMove,
     });
     if (markup !== drawn) {
       drawn = markup;
-      const span = boardSpan(controller.size) + 2 * PAD;
-      board.setAttribute("viewBox", `0 0 ${span} ${span}`);
+      const span = boardSpan(controller.size);
+      board.setAttribute("viewBox", `0 0 ${span + 2 * PAD} ${span + 2 * PAD}`);
       board.innerHTML = markup;
+      // The eval bar's track spans the board's drawn square (its margin is PAD - 6 units), so its ends line up with the board's.
+      element("eval", HTMLElement).style.gridTemplateRows = `minmax(0, ${PAD - 6}fr) minmax(0, ${span + 12}fr) minmax(0, ${PAD - 6}fr)`;
     }
     const viewing = past ? ` Showing the position after move ${analysis.ply} of ${controller.moves.length}.` : "";
     board.setAttribute("aria-label", `Quoridor. ${describeBoard(state)}${viewing}`);
     board.classList.toggle("can-click", canMove);
-    renderTrays(state);
-    renderMoves();
-    const text = statusText(controller);
+    const text = statusText(controller, describeNetwork(modelState(), controller.size).short);
     if (statusLine.textContent !== text) statusLine.textContent = text;
-    // Not read aloud with each change: the position being viewed is in the analysis card and the board's label.
+    // Not read aloud with each change: the position being viewed is in the analysis panel and the board's label.
     const viewingNote = element("viewing", HTMLElement);
     viewingNote.hidden = past === null;
-    viewingNote.textContent = past ? `Showing the position after move ${analysis.ply} of ${controller.moves.length}. Choose Latest to play.` : "";
-    retryButton.hidden = controller.error === null;
-    setEnabled(undoButton, controller.canUndo);
+    viewingNote.textContent = past ? `Showing the position after move ${analysis.ply} of ${controller.moves.length}. Choose Latest to play on.` : "";
+    renderSeats(state);
+    renderControls();
+    renderMoves();
+    renderEval();
+    renderAnalysis();
+    renderNetwork();
     // Some browsers throw if the address is rewritten too often, and a progress bar needs no new address.
     if (location.hash !== controller.hash) history.replaceState(null, "", controller.hash);
   }
 
-  function renderTrays(state: GameState): void {
-    for (const side of ["p1", "p2"] as const) renderTray(side, controller.human === side ? "You" : "Bot", state);
+  function renderSeats(state: GameState): void {
+    const players = controller.players;
+    showPlayers(players);
+    for (const side of SIDES) {
+      const seat = players[side];
+      const toMove = controller.result === null && controller.mover === side && !analysis.viewingPast;
+      const note =
+        seat === HUMAN
+          ? playerName(players, side) === "You"
+            ? "You play this side."
+            : "A person plays this side."
+          : toMove && controller.thinking
+            ? `Thinking… ${levelSummary(seat)}.`
+            : toMove && controller.waiting
+              ? `Waiting for the network: ${describeNetwork(modelState(), controller.size).short}.`
+              : `${levelSummary(seat)}.`;
+      const noteElement = element(`note-${side}`, HTMLElement);
+      if (noteElement.textContent !== note) noteElement.textContent = note;
+      const seatElement = element(`seat-${side}`, HTMLElement);
+      seatElement.classList.toggle("to-move", toMove);
+      seatElement.classList.toggle("thinking", toMove && controller.thinking);
+      const walls = state.wallsLeft(side === "p1" ? 0 : 1);
+      const wallsElement = element(`walls-${side}`, HTMLElement);
+      wallsElement.innerHTML = `<b>${walls}</b> ${walls === 1 ? "wall" : "walls"} left`;
+    }
+  }
+
+  function renderControls(): void {
+    const bots = !controller.hasHuman;
+    element("bot-controls", HTMLElement).hidden = !bots;
+    toggleButton.textContent = controller.running ? "Pause" : controller.moves.length > 0 && controller.result === null ? "Resume" : "Start";
+    setEnabled(toggleButton, controller.running || controller.result === null);
+    setEnabled(stepButton, controller.canStep);
+    undoButton.hidden = bots;
+    setEnabled(undoButton, controller.canUndo);
+    retryButton.hidden = controller.error === null;
+  }
+
+  function renderEval(): void {
+    const meter = element("eval", HTMLElement);
+    const ticks = !controller.hasHuman || analysisPanel.open;
+    const bar = evalBar(analysis.view, shownPercent, ticks ? controller.opinions(analysis.ply) : null);
+    if (!bar.stale) shownPercent = bar.percent;
+    meter.classList.toggle("empty", bar.percent === null);
+    meter.classList.toggle("stale", bar.stale);
+    if (bar.percent === null) meter.removeAttribute("aria-valuenow");
+    else meter.setAttribute("aria-valuenow", String(bar.percent));
+    meter.setAttribute("aria-valuetext", bar.label);
+    element("eval-fill", HTMLElement).style.height = `${bar.percent ?? 0}%`;
+    element("eval-p1", HTMLElement).textContent = bar.percent === null ? "–" : `${bar.percent}%`;
+    element("eval-p2", HTMLElement).textContent = bar.percent === null ? "–" : `${100 - bar.percent}%`;
+    for (const side of SIDES) {
+      const tick = element(`tick-${side}`, HTMLElement);
+      const value = bar.ticks[side];
+      tick.hidden = value === null;
+      if (value !== null) {
+        tick.style.bottom = `${value}%`;
+        tick.title = `${playerName(controller.players, side)}'s own estimate: player 1 ${value}%`;
+      }
+    }
+  }
+
+  function renderAnalysis(): void {
+    const view = analysis.view;
+    const count = controller.moves.length;
+    setEnabled(element("step-first", HTMLButtonElement), analysis.ply > 0);
+    setEnabled(element("step-prev", HTMLButtonElement), analysis.ply > 0);
+    setEnabled(element("step-next", HTMLButtonElement), analysis.ply < count);
+    setEnabled(element("step-last", HTMLButtonElement), analysis.ply < count);
+    element("analysis-position", HTMLElement).textContent = `Position after ${analysis.where}.`;
+    const lines = element("analysis-lines", HTMLElement);
+    lines.replaceChildren();
+    const note = element("analysis-note", HTMLElement);
+    if (view.status === "ready") {
+      for (const line of view.reading.lines) {
+        const item = document.createElement("li");
+        item.textContent = `${line.move}: ${Math.round(line.share * 100)}% of the searches`;
+        lines.append(item);
+      }
+      note.textContent = view.reading.lines.length > 0 ? "Best moves for the player to move, by share of the network's 32 searches." : "The game is over here.";
+      if (analysisPanel.open) {
+        const sentence = analysis.takeAnnouncement();
+        if (sentence) announce(sentence);
+      }
+    } else {
+      note.textContent =
+        view.status === "unavailable"
+          ? "Analysis needs the network, which is not ready."
+          : view.status === "searching"
+            ? "The network is reading this position."
+            : `The analysis failed (${view.message}).`;
+    }
   }
 
   let movesDrawn = "";
@@ -263,7 +310,8 @@ export function startPage(port: SearchPort, network: NetworkSource): GameControl
   function renderMoves(): void {
     const moves = controller.moves;
     const list = element("moves", HTMLOListElement);
-    const signature = `${analysis.enabled}|${moves.join(".")}`;
+    const reviewing = analysisPanel.open;
+    const signature = `${reviewing}|${moves.join(".")}`;
     if (signature !== movesDrawn) {
       movesDrawn = signature;
       // Rebuilding must not take keyboard focus away from the move being used.
@@ -274,9 +322,10 @@ export function startPage(port: SearchPort, network: NetworkSource): GameControl
           const item = document.createElement("li");
           row.forEach((move, k) => {
             const ply = i * 2 + k + 1;
-            const cell = document.createElement(analysis.enabled ? "button" : "span");
+            const cell = document.createElement(reviewing ? "button" : "span");
             cell.textContent = move;
             cell.dataset["ply"] = String(ply);
+            cell.className = sideOf(ply - 1);
             if (cell instanceof HTMLButtonElement) {
               cell.type = "button";
               cell.setAttribute("aria-label", `Show the position after move ${ply}, ${move}`);
@@ -290,10 +339,9 @@ export function startPage(port: SearchPort, network: NetworkSource): GameControl
       if (focusedPly !== undefined) list.querySelector<HTMLElement>(`[data-ply="${focusedPly}"]`)?.focus();
     }
     // The viewed move is marked in place; the entries themselves stay.
-    const shown = analysis.enabled ? analysis.ply : moves.length;
     let viewed: HTMLElement | null = null;
     for (const cell of list.querySelectorAll<HTMLElement>("[data-ply]")) {
-      const current = Number(cell.dataset["ply"]) === shown;
+      const current = Number(cell.dataset["ply"]) === analysis.ply;
       cell.classList.toggle("latest", current);
       if (cell instanceof HTMLButtonElement) {
         if (current) cell.setAttribute("aria-current", "step");
@@ -355,16 +403,16 @@ export function startPage(port: SearchPort, network: NetworkSource): GameControl
     } else render();
   });
 
-  /** Puts the keyboard cursor on the person's pawn the first time the keyboard is used. */
+  /** Puts the keyboard cursor on the pawn of the side to move the first time the keyboard is used. */
   function startCursor(): GlobalAction {
     const state = controller.state;
-    const mine = controller.human === "p1" ? 0 : 1;
-    return { kind: "move", row: state.row(mine), col: state.col(mine) };
+    const mover = controller.mover === "p1" ? 0 : 1;
+    return { kind: "move", row: state.row(mover), col: state.col(mover) };
   }
 
   board.addEventListener("focus", () => {
     // A focus that came from a click or tap is not keyboard use; it draws no cursor.
-    if (watching() || !board.matches(":focus-visible")) return;
+    if (!board.matches(":focus-visible")) return;
     cursor = cursor ?? startCursor();
     render();
     announce(`${describeTarget(controller.state, cursor)}.`);
@@ -374,7 +422,7 @@ export function startPage(port: SearchPort, network: NetworkSource): GameControl
     render();
   });
   board.addEventListener("keydown", (event) => {
-    if (watching() || event.ctrlKey || event.metaKey || event.altKey) return;
+    if (event.ctrlKey || event.metaKey || event.altKey) return;
     const key = event.key.length === 1 ? event.key.toLowerCase() : event.key;
     if (cursor === null) {
       if (!["ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight", "h", "v", "p", "Enter", " "].includes(key)) return;
@@ -387,7 +435,7 @@ export function startPage(port: SearchPort, network: NetworkSource): GameControl
     if (key === "Enter" || key === " ") {
       event.preventDefault();
       if (canPlay()) play(cursor);
-      else announce("It is not your move.");
+      else announce(controller.hasHuman ? "It is not your move." : "Two bots are playing; choose Human for a side to play it.");
       return;
     }
     const next = moveCursor(cursor, key, controller.size);
@@ -398,23 +446,34 @@ export function startPage(port: SearchPort, network: NetworkSource): GameControl
     announce(`${describeTarget(controller.state, next)}.`);
   });
 
-  /** Starts the game the selects ask for. */
+  /** Starts a game on the chosen board size with the chosen players. */
   function newGame(): void {
     preview.clear();
     analysis.reset();
+    shownPercent = null;
     const size = Number(sizeSelect.value);
-    // The network levels need the network of this size; without it the game is played at Normal, and the select says so.
-    controller.newGame(size, sideSelect.value as Side, usableLevel(levelSelect, size));
+    // Before the game starts, so a bot that moves first does not search with another size's network.
+    controller.setNetworkReady(models.state(size).status === "ready");
+    controller.newGame(size, chosenPlayers());
+    networkChanged();
+    void models.select(controller.size);
   }
 
   /** Opens the game in the address bar's hash if it is one the site offers; otherwise says so. Returns whether it did. */
   function openHash(): boolean {
     try {
+      const game = Game.fromHash(location.hash);
+      const chosen = chosenPlayers();
+      const bot = chosen.p1 !== HUMAN ? chosen.p1 : chosen.p2 !== HUMAN ? chosen.p2 : STRONG;
+      // The person plays the side to move, or player 1 if the game is over.
+      const human: Side = game.result === null && !game.state.p1Turn ? "p2" : "p1";
       preview.clear();
       analysis.reset();
-      controller.load(Game.fromHash(location.hash), selectedLevel());
-      syncSelects();
-      renderModel();
+      shownPercent = null;
+      controller.setNetworkReady(models.state(game.size).status === "ready");
+      controller.load(game, human === "p1" ? { p1: HUMAN, p2: bot } : { p1: bot, p2: HUMAN });
+      sizeSelect.value = String(controller.size);
+      networkChanged();
       void models.select(controller.size);
       return true;
     } catch {
@@ -425,36 +484,36 @@ export function startPage(port: SearchPort, network: NetworkSource): GameControl
   }
 
   element("new", HTMLButtonElement).addEventListener("click", newGame);
-  analysisOn.addEventListener("change", () => analysis.setEnabled(analysisOn.checked));
+  sizeSelect.addEventListener("change", newGame);
+  for (const side of SIDES) {
+    seatSelects[side].addEventListener("change", () => {
+      preview.clear();
+      controller.setPlayers({ ...controller.players, [side]: playerOf(seatSelects[side]) });
+      const seat = controller.players[side];
+      announce(`Player ${side === "p1" ? 1 : 2}: ${seat === HUMAN ? "a person" : `${seat.label}, ${levelSummary(seat)}`}.`);
+    });
+  }
+  element("swap", HTMLButtonElement).addEventListener("click", () => {
+    preview.clear();
+    const { p1, p2 } = controller.players;
+    controller.setPlayers({ p1: p2, p2: p1 });
+    announce(`Sides swapped. Player 1: ${playerName(controller.players, "p1")}. Player 2: ${playerName(controller.players, "p2")}.`);
+  });
+  onPress(toggleButton, () => (controller.running ? controller.pause() : controller.start()));
+  onPress(stepButton, () => controller.step());
+  speedSelect.addEventListener("change", () => controller.setSpeed(speedSelect.value as Speed));
+  onPress(undoButton, () => controller.undo());
+  retryButton.addEventListener("click", () => controller.retry());
+  analysisPanel.addEventListener("toggle", () => {
+    // Closing the panel goes back to the game as it stands.
+    if (!analysisPanel.open) analysis.goTo(controller.moves.length);
+    else render();
+  });
   onPress(element("step-first", HTMLButtonElement), () => analysis.goTo(0));
   onPress(element("step-prev", HTMLButtonElement), () => analysis.step(-1));
   onPress(element("step-next", HTMLButtonElement), () => analysis.step(1));
   onPress(element("step-last", HTMLButtonElement), () => analysis.goTo(controller.moves.length));
-  levelSelect.addEventListener("change", () => {
-    controller.setLevel(selectedLevel());
-    announce(`The bot plays at ${selectedLevel().label} from its next move.`);
-  });
-  sizeSelect.addEventListener("change", () => {
-    renderModel();
-    void models.select(Number(sizeSelect.value));
-    if (watching()) watch.restart();
-  });
-  modeSelect.addEventListener("change", () => {
-    document.body.dataset["mode"] = modeSelect.value;
-    if (watching()) {
-      // One worker serves both modes: the game's bot and the analysis step aside.
-      analysis.setEnabled(false);
-      controller.halt();
-      watch.restart();
-    } else {
-      watch.pause();
-      drawn = "";
-      controller.retry();
-    }
-  });
-  modelRetry.addEventListener("click", () => void models.retry(Number(sizeSelect.value)));
-  onPress(undoButton, () => controller.undo());
-  retryButton.addEventListener("click", () => controller.retry());
+  networkRetry.addEventListener("click", () => void models.retry(controller.size));
   element("copy", HTMLButtonElement).addEventListener("click", () => {
     navigator.clipboard.writeText(location.href).then(
       () => announce("Link copied."),
@@ -465,9 +524,7 @@ export function startPage(port: SearchPort, network: NetworkSource): GameControl
     if (location.hash !== controller.hash) openHash();
   });
 
-  const watch = startWatch(port, { size: () => Number(sizeSelect.value), level: (select) => usableLevel(select, Number(sizeSelect.value)), announce });
-  renderModel();
+  showPlayers(DEFAULT_PLAYERS);
   if (location.hash.length <= 1 || !openHash()) newGame();
-  void models.select(controller.size);
   return controller;
 }

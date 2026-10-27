@@ -10,7 +10,7 @@ export type ModelState =
   | { readonly status: "unavailable"; readonly reason: "none-published" | "not-offered" }
   | { readonly status: "checking" }
   | { readonly status: "downloading"; readonly loaded: number; readonly total: number | null }
-  | { readonly status: "ready"; readonly fromCache: boolean; readonly saved: boolean }
+  | { readonly status: "ready"; readonly model: string; readonly fromCache: boolean; readonly saved: boolean }
   | { readonly status: "failed"; readonly message: string; readonly kind: FailureKind };
 
 interface Run {
@@ -115,7 +115,7 @@ export class ModelManager {
         return;
       }
       for (const [other, state] of this.states) if (other !== id && state.status === "ready") this.states.delete(other);
-      this.set(id, { status: "ready", fromCache: model.fromCache, saved: model.saved });
+      this.set(id, { status: "ready", model: id, fromCache: model.fromCache, saved: model.saved });
     } catch (error) {
       if (!current()) return;
       const failure = error instanceof ModelError ? error : new ModelError("network", error instanceof Error ? error.message : String(error));

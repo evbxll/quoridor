@@ -3,7 +3,7 @@ import { HeuristicEvaluator } from "../../src/ai/heuristic";
 import { SearchClient } from "../../src/ai/searchClient";
 import { createSearchService } from "../../src/ai/searchService";
 import { maxPlies } from "../../src/engine/constants";
-import { GameController, type Side } from "../../src/ui/controller";
+import { GameController, HUMAN, type Side } from "../../src/ui/controller";
 import { LEVELS } from "../../src/ui/levels";
 import { LoopbackWorker } from "../helpers/loopback";
 import { findAction, pawnTargets } from "../../src/ui/targets";
@@ -19,7 +19,7 @@ function heuristicClient(): SearchClient {
 async function playOut(size: number, human: Side): Promise<GameController> {
   let wake: () => void = () => {};
   const controller = new GameController(heuristicClient(), () => wake(), () => 0.5);
-  controller.newGame(size, human, LEVELS[1]!);
+  controller.newGame(size, human === "p1" ? { p1: HUMAN, p2: LEVELS[1]! } : { p1: LEVELS[1]!, p2: HUMAN });
   while (controller.result === null) {
     if (controller.error !== null) throw new Error(controller.error);
     if (controller.humanToMove) {

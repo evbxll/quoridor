@@ -3,6 +3,7 @@ import { parseMove } from "../engine/notation";
 import { GameState } from "../engine/state";
 import type { SearchResponse } from "../ai/protocol";
 import type { GameController, SearchPort } from "./controller";
+import { shareLabel, toPercent } from "./evalBar";
 import { LEVELS } from "./levels";
 
 /** Analysis searches with the network at the Strong budget (design doc section 8). */
@@ -21,7 +22,6 @@ export interface Reading {
 }
 
 export type AnalysisView =
-  | { readonly status: "off" }
   | { readonly status: "unavailable" }
   | { readonly status: "searching" }
   | { readonly status: "ready"; readonly reading: Reading }
@@ -50,20 +50,13 @@ export function readingOf(state: GameState, response: SearchResponse): Reading {
   return { p1Share: state.p1Turn ? mover : 1 - mover, lines: ranked.filter((line) => line.share > 0) };
 }
 
-/** The eval bar: drawn only for a ready reading in analysis mode, never in play. */
-export function evalBar(view: AnalysisView): { percent: number; label: string } | null {
-  if (view.status !== "ready") return null;
-  const percent = Math.round(view.reading.p1Share * 100);
-  return { percent, label: `Player 1 ${percent}%, player 2 ${100 - percent}%` };
-}
-
 /**
- * Analysis mode: step through the game's positions and ask the network what it
- * thinks of each. It searches only when the bot is not, because a new search
+ * The network's reading of the position on screen, for the eval bar, and
+ * stepping back through the game's positions to read each. It searches only
+ * when the network is ready and the bot is not searching, because a new search
  * cancels the one in flight and the bot's move comes first.
  */
 export class Analysis {
-  private on = false;
   private viewed = 0;
   private following = true;
   private readonly readings = new Map<string, Reading>();
@@ -80,10 +73,6 @@ export class Analysis {
     private readonly onChange: () => void,
   ) {}
 
-  get enabled(): boolean {
-    return this.on;
-  }
-
   /** The move number being viewed: 0 is the start, the number of moves played is the latest position. */
   get ply(): number {
     return this.viewed;
@@ -91,25 +80,16 @@ export class Analysis {
 
   /** True while an earlier position than the latest is shown. */
   get viewingPast(): boolean {
-    return this.on && this.viewed < this.controller.moves.length;
+    return this.viewed < this.controller.moves.length;
   }
 
   get view(): AnalysisView {
-    if (!this.on) return { status: "off" };
     if (!this.networkReady()) return { status: "unavailable" };
     const key = this.key(this.viewed);
     const failure = this.failures.get(key);
     if (failure !== undefined) return { status: "failed", message: failure };
     const reading = this.readings.get(key);
     return reading ? { status: "ready", reading } : { status: "searching" };
-  }
-
-  setEnabled(on: boolean): void {
-    this.on = on;
-    this.viewed = this.controller.moves.length;
-    this.following = true;
-    this.failures.clear();
-    this.update();
   }
 
   /** Shows the position after `ply` moves (kept within the game). Coming back to a position whose search failed tries it again. */
@@ -132,14 +112,14 @@ export class Analysis {
 
   /** What to say aloud about the reading on screen, once: null if it is not ready or was already said. */
   takeAnnouncement(): string | null {
-    const bar = evalBar(this.view);
     const view = this.view;
-    if (!bar || view.status !== "ready") return null;
-    const said = `${this.key(this.viewed)}|${bar.percent}`;
+    if (view.status !== "ready") return null;
+    const percent = toPercent(view.reading.p1Share);
+    const said = `${this.key(this.viewed)}|${percent}`;
     if (said === this.spoken) return null;
     this.spoken = said;
     const best = view.reading.lines.map((line) => line.move).join(", ");
-    return `After ${this.where}: ${bar.label}.${best ? ` Best moves: ${best}.` : ""}`;
+    return `After ${this.where}: ${shareLabel(percent)}.${best ? ` Best moves: ${best}.` : ""}`;
   }
 
   /** Starts over for a new game. */
@@ -167,7 +147,7 @@ export class Analysis {
   }
 
   private request(): void {
-    if (!this.on || !this.networkReady()) return;
+    if (!this.networkReady()) return;
     const key = this.key(this.viewed);
     if (this.readings.has(key) || this.requested === key) return;
     const { state } = replay(this.controller.size, this.controller.moves, this.viewed);
