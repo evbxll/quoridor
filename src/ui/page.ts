@@ -26,6 +26,25 @@ const STRONG = LEVELS.find((level) => level.id === "strong")!;
 /** A visitor plays player 1 against Strong, the network at 32 searches, unless they choose otherwise. */
 const DEFAULT_PLAYERS: Players = { p1: HUMAN, p2: STRONG };
 
+const SHOW_EVAL_KEY = "quoridor.showEval";
+
+/** Whether the viewer last chose to see the evaluation in games with a person; on until switched off. Storage can be blocked. */
+function savedShowEval(): boolean {
+  try {
+    return localStorage.getItem(SHOW_EVAL_KEY) !== "off";
+  } catch {
+    return true;
+  }
+}
+
+function saveShowEval(on: boolean): void {
+  try {
+    localStorage.setItem(SHOW_EVAL_KEY, on ? "on" : "off");
+  } catch {
+    // The choice then lasts for this visit only.
+  }
+}
+
 const megabytes = (bytes: number): string => (bytes / 1e6).toFixed(1);
 
 /** Where the network stands, in words: the line at the foot of the panel, and the short form for a bot that waits for it. */
@@ -68,6 +87,9 @@ export function startPage(port: SearchPort, network: NetworkSource): GameControl
   const analysisPanel = element("analysis", HTMLDetailsElement);
   const networkRetry = element("network-retry", HTMLButtonElement);
   const networkProgress = element("network-progress", HTMLProgressElement);
+  const showEval = element("show-eval", HTMLInputElement);
+  const newButton = element("new", HTMLButtonElement);
+  showEval.checked = savedShowEval();
 
   const preview = new WallPreview();
   let cursor: GlobalAction | null = null; // shown only once the keyboard is in use on the board
@@ -134,6 +156,7 @@ export function startPage(port: SearchPort, network: NetworkSource): GameControl
         const seat = players[side];
         if (seat !== HUMAN && !isAvailable(seat, false)) {
           players[side] = NORMAL;
+          seatSelects[side].value = NORMAL.id;
           announce(`${seat.label} needs the network, which is not offered at this board size, so player ${side === "p1" ? 1 : 2} plays ${NORMAL.label}.`);
         }
       }
@@ -213,7 +236,6 @@ export function startPage(port: SearchPort, network: NetworkSource): GameControl
 
   function renderSeats(state: GameState): void {
     const players = controller.players;
-    showPlayers(players);
     for (const side of SIDES) {
       const seat = players[side];
       const toMove = controller.result === null && controller.mover === side && !analysis.viewingPast;
@@ -241,6 +263,11 @@ export function startPage(port: SearchPort, network: NetworkSource): GameControl
   function renderControls(): void {
     const bots = !controller.hasHuman;
     element("bot-controls", HTMLElement).hidden = !bots;
+    element("eval-toggle", HTMLElement).hidden = bots;
+    // Choices of board size and players wait for New game; the button says so while they differ from the game on the board.
+    const pending = Number(sizeSelect.value) !== controller.size || SIDES.some((side) => playerOf(seatSelects[side]) !== controller.players[side]);
+    newButton.classList.toggle("pending", pending);
+    newButton.title = pending ? "Your choices of board size and players start when you press New game" : "";
     toggleButton.textContent = controller.running ? "Pause" : controller.moves.length > 0 && controller.result === null ? "Resume" : "Start";
     setEnabled(toggleButton, controller.running || controller.result === null);
     setEnabled(stepButton, controller.canStep);
@@ -251,8 +278,12 @@ export function startPage(port: SearchPort, network: NetworkSource): GameControl
 
   function renderEval(): void {
     const meter = element("eval", HTMLElement);
-    const ticks = !controller.hasHuman || analysisPanel.open;
+    // A person may hide the evaluation so as not to lean on it; two bots playing always show it.
+    const visible = !controller.hasHuman || showEval.checked;
+    const ticks = visible && (!controller.hasHuman || analysisPanel.open);
     const bar = evalBar(analysis.view, shownPercent, ticks ? controller.opinions(analysis.ply) : null);
+    meter.classList.toggle("off", !visible);
+    meter.setAttribute("aria-hidden", String(!visible));
     if (!bar.stale) shownPercent = bar.percent;
     meter.classList.toggle("empty", bar.percent === null);
     meter.classList.toggle("stale", bar.stale);
@@ -473,6 +504,7 @@ export function startPage(port: SearchPort, network: NetworkSource): GameControl
       controller.setNetworkReady(models.state(game.size).status === "ready");
       controller.load(game, human === "p1" ? { p1: HUMAN, p2: bot } : { p1: bot, p2: HUMAN });
       sizeSelect.value = String(controller.size);
+      showPlayers(controller.players);
       networkChanged();
       void models.select(controller.size);
       return true;
@@ -483,21 +515,27 @@ export function startPage(port: SearchPort, network: NetworkSource): GameControl
     }
   }
 
-  element("new", HTMLButtonElement).addEventListener("click", newGame);
-  sizeSelect.addEventListener("change", newGame);
+  newButton.addEventListener("click", newGame);
+  sizeSelect.addEventListener("change", () => {
+    render();
+    announce("Board size chosen. It applies when you press New game.");
+  });
   for (const side of SIDES) {
     seatSelects[side].addEventListener("change", () => {
-      preview.clear();
-      controller.setPlayers({ ...controller.players, [side]: playerOf(seatSelects[side]) });
-      const seat = controller.players[side];
-      announce(`Player ${side === "p1" ? 1 : 2}: ${seat === HUMAN ? "a person" : `${seat.label}, ${levelSummary(seat)}`}.`);
+      render();
+      const seat = playerOf(seatSelects[side]);
+      announce(`Player ${side === "p1" ? 1 : 2}: ${seat === HUMAN ? "a person" : `${seat.label}, ${levelSummary(seat)}`}. It applies when you press New game.`);
     });
   }
   element("swap", HTMLButtonElement).addEventListener("click", () => {
-    preview.clear();
-    const { p1, p2 } = controller.players;
-    controller.setPlayers({ p1: p2, p2: p1 });
-    announce(`Sides swapped. Player 1: ${playerName(controller.players, "p1")}. Player 2: ${playerName(controller.players, "p2")}.`);
+    const { p1, p2 } = chosenPlayers();
+    showPlayers({ p1: p2, p2: p1 });
+    render();
+    announce("Sides swapped. They apply when you press New game.");
+  });
+  showEval.addEventListener("change", () => {
+    saveShowEval(showEval.checked);
+    render();
   });
   onPress(toggleButton, () => (controller.running ? controller.pause() : controller.start()));
   onPress(stepButton, () => controller.step());

@@ -32,6 +32,7 @@
           </div>
           <svg id="board" class="board" tabindex="0" role="application" aria-describedby="board-help"></svg>
         </div>
+        <label id="eval-toggle" class="eval-toggle" hidden><input id="show-eval" type="checkbox" checked /> Show evaluation</label>
         <p id="status" class="status" role="status"></p>
         <p id="viewing" class="viewing" hidden></p>
       </section>
@@ -61,17 +62,19 @@
               <p id="note-p1" class="seat-note"></p>
             </div>
           </div>
-          <div id="bot-controls" class="row" role="group" aria-label="Bot game controls">
-            <button id="toggle" class="primary" type="button">Start</button>
-            <button id="step" type="button">Step</button>
-            <label class="inline">Speed
-              <select id="speed">
-                <option value="slow">Slow</option>
-                <option value="normal" selected>Normal</option>
-                <option value="fast">Fast</option>
-                <option value="instant">Instant</option>
-              </select>
-            </label>
+          <div id="bot-controls" class="bot-controls" role="group" aria-label="Bot game controls">
+            <button id="toggle" class="primary run" type="button">Start</button>
+            <div class="row">
+              <button id="step" type="button">Step</button>
+              <label class="inline">Speed
+                <select id="speed">
+                  <option value="slow">Slow</option>
+                  <option value="normal" selected>Normal</option>
+                  <option value="fast">Fast</option>
+                  <option value="instant">Instant</option>
+                </select>
+              </label>
+            </div>
           </div>
           <div class="row">
             <button id="undo" type="button">Undo</button>
