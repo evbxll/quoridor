@@ -44,7 +44,6 @@
         </div>
         <label id="eval-toggle" class="eval-toggle" hidden><input id="show-eval" type="checkbox" checked /> Show evaluation</label>
         <p id="status" class="status" role="status"></p>
-        <p id="viewing" class="viewing" hidden></p>
       </section>
 
       <aside class="panel">
@@ -104,28 +103,32 @@
           </div>
         </section>
 
-        <section class="card" aria-labelledby="moves-title">
-          <h2 id="moves-title">Moves</h2>
+        <section class="card review" aria-labelledby="moves-title">
+          <div class="review-head">
+            <h2 id="moves-title">Moves &amp; analysis</h2>
+            <label class="inline"><input id="analysis-toggle" type="checkbox" /> Analysis</label>
+          </div>
+          <div class="review-nav">
+            <div class="row" role="group" aria-label="Step through the game">
+              <button id="step-first" class="icon" type="button" aria-label="First position" title="First position (Home)"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M3 3v10M13 3L6 8l7 5z"/></svg></button>
+              <button id="step-prev" class="icon" type="button" aria-label="Previous position" title="Previous position (Left arrow)"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M12 3L5 8l7 5z"/></svg></button>
+              <button id="step-next" class="icon" type="button" aria-label="Next position" title="Next position (Right arrow)"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M4 3l7 5-7 5z"/></svg></button>
+              <button id="step-last" class="icon" type="button" aria-label="Latest position" title="Latest position (End)"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M13 3v10M3 3l7 5-7 5z"/></svg></button>
+            </div>
+            <button id="step-live" type="button" class="quiet">Back to live</button>
+          </div>
+          <p id="viewing" class="viewing"></p>
           <div class="moves-box">
-            <ol id="moves" class="moves" aria-label="Moves in standard notation"></ol>
+            <ol id="moves" class="moves" aria-label="Moves in standard notation; choose one to see that position"></ol>
             <p id="moves-empty" class="hint">No moves yet.</p>
           </div>
-        </section>
-
-        <details id="analysis" class="card">
-          <summary>Analysis</summary>
-          <p class="hint">Step through the game, or choose a move in the list, to see the network's reading of that position.</p>
-          <div class="row" role="group" aria-label="Step through the game">
-            <button id="step-first" type="button" aria-label="First position">First</button>
-            <button id="step-prev" type="button" aria-label="Previous position">Back</button>
-            <button id="step-next" type="button" aria-label="Next position">Next</button>
-            <button id="step-last" type="button" aria-label="Latest position">Latest</button>
+          <div id="analysis-box" class="analysis-box" hidden>
+            <h3>Best moves <span class="hint">share of the network's 32 searches</span></h3>
+            <ol id="analysis-lines" class="lines" aria-label="Best moves"></ol>
+            <p id="analysis-note" class="hint"></p>
+            <p class="hint">The bar beside the board is the network's reading at 32 searches. The numbered markers are each bot's own estimate from its latest move.</p>
           </div>
-          <p id="analysis-position"></p>
-          <ol id="analysis-lines" aria-label="Best moves"></ol>
-          <p id="analysis-note" class="hint"></p>
-          <p class="hint">The bar beside the board is the network's reading at 32 searches. The numbered markers are each bot's own estimate from its latest move.</p>
-        </details>
+        </section>
 
         <details class="card">
           <summary>How to move</summary>
@@ -133,6 +136,7 @@
             Click a cell to move your pawn, or a groove between cells to place a wall; on a touch screen tap a groove
             once to preview a wall and again to place it. With the keyboard, focus the board, move the cursor with the
             arrow keys, press H or V to choose a horizontal or vertical wall, P to go back to pawn moves, and Enter to play.
+            Page Up and Page Down step back and forward through the game, and Home and End jump to its start and its latest position.
           </p>
         </details>
       </aside>

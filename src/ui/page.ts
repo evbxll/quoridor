@@ -21,6 +21,8 @@ export interface NetworkSource {
 }
 
 const SIDES = ["p1", "p2"] as const;
+/** How many suggested moves the analysis lists; matches the three rows reserved for them. */
+const TOP_LINES = 3;
 const NORMAL = LEVELS.find((level) => level.id === "normal")!;
 const STRONG = LEVELS.find((level) => level.id === "strong")!;
 /** A visitor plays player 1 against Strong, the network at 32 searches, unless they choose otherwise. */
@@ -85,7 +87,7 @@ export function startPage(port: SearchPort, network: NetworkSource): GameControl
   const undoButton = element("undo", HTMLButtonElement);
   const toggleButton = element("toggle", HTMLButtonElement);
   const stepButton = element("step", HTMLButtonElement);
-  const analysisPanel = element("analysis", HTMLDetailsElement);
+  const analysisToggle = element("analysis-toggle", HTMLInputElement);
   const networkRetry = element("network-retry", HTMLButtonElement);
   const networkProgress = element("network-progress", HTMLProgressElement);
   const showEval = element("show-eval", HTMLInputElement);
@@ -228,13 +230,10 @@ export function startPage(port: SearchPort, network: NetworkSource): GameControl
     }
     const viewing = past ? ` Showing the position after move ${analysis.ply} of ${controller.moves.length}.` : "";
     board.setAttribute("aria-label", `Quoridor. ${describeBoard(state)}${viewing}`);
+    renderViewing();
     board.classList.toggle("can-click", canMove);
     const text = statusText(controller, describeNetwork(modelState(), controller.size).short);
     if (statusLine.textContent !== text) statusLine.textContent = text;
-    // Not read aloud with each change: the position being viewed is in the analysis panel and the board's label.
-    const viewingNote = element("viewing", HTMLElement);
-    viewingNote.classList.toggle("idle", past === null);
-    viewingNote.textContent = past ? `Showing the position after move ${analysis.ply} of ${controller.moves.length}. Choose Latest to play on.` : "";
     renderSeats(state);
     renderControls();
     renderMoves();
@@ -291,7 +290,7 @@ export function startPage(port: SearchPort, network: NetworkSource): GameControl
     const meter = element("eval", HTMLElement);
     // A person may hide the evaluation so as not to lean on it; two bots playing always show it.
     const visible = !controller.hasHuman || showEval.checked;
-    const ticks = visible && (!controller.hasHuman || analysisPanel.open);
+    const ticks = visible && (!controller.hasHuman || analysisToggle.checked);
     const bar = evalBar(analysis.view, shownPercent, ticks ? controller.opinions(analysis.ply) : null);
     meter.classList.toggle("off", !visible);
     meter.setAttribute("aria-hidden", String(!visible));
@@ -315,28 +314,45 @@ export function startPage(port: SearchPort, network: NetworkSource): GameControl
     }
   }
 
-  function renderAnalysis(): void {
-    const view = analysis.view;
+  /** Says which position is on the board: the latest, or an earlier one with the way back. Not read aloud with each change; the board's label carries it. */
+  function renderViewing(): void {
     const count = controller.moves.length;
+    const past = analysis.viewingPast;
+    const note = element("viewing", HTMLElement);
+    note.classList.toggle("past", past);
+    note.textContent = past ? `Viewing ${analysis.where}` : count === 0 ? "The start of the game." : `Live: move ${count} of ${count}.`;
+    element("step-live", HTMLButtonElement).classList.toggle("live", !past);
     setEnabled(element("step-first", HTMLButtonElement), analysis.ply > 0);
     setEnabled(element("step-prev", HTMLButtonElement), analysis.ply > 0);
     setEnabled(element("step-next", HTMLButtonElement), analysis.ply < count);
     setEnabled(element("step-last", HTMLButtonElement), analysis.ply < count);
-    element("analysis-position", HTMLElement).textContent = `Position after ${analysis.where}.`;
-    const lines = element("analysis-lines", HTMLElement);
-    lines.replaceChildren();
+  }
+
+  function renderAnalysis(): void {
+    element("analysis-box", HTMLElement).hidden = !analysisToggle.checked;
+    if (!analysisToggle.checked) return;
+    const view = analysis.view;
+    const lines = element("analysis-lines", HTMLOListElement);
     const note = element("analysis-note", HTMLElement);
+    const reading = view.status === "ready" ? view.reading.lines : [];
+    const rows: HTMLLIElement[] = [];
+    for (let i = 0; i < TOP_LINES; i++) {
+      const line = reading[i];
+      const item = document.createElement("li");
+      if (line === undefined) item.className = "blank";
+      else {
+        const percent = Math.round(line.share * 100);
+        item.className = i === 0 ? "best" : "";
+        item.innerHTML = `<span class="rank">${i + 1}</span><span class="move"></span><span class="share"><span style="width:${percent}%"></span></span><span class="percent">${percent}%</span>`;
+        item.querySelector(".move")!.textContent = line.move;
+      }
+      rows.push(item);
+    }
+    lines.replaceChildren(...rows);
     if (view.status === "ready") {
-      for (const line of view.reading.lines) {
-        const item = document.createElement("li");
-        item.textContent = `${line.move}: ${Math.round(line.share * 100)}% of the searches`;
-        lines.append(item);
-      }
-      note.textContent = view.reading.lines.length > 0 ? "Best moves for the player to move, by share of the network's 32 searches." : "The game is over here.";
-      if (analysisPanel.open) {
-        const sentence = analysis.takeAnnouncement();
-        if (sentence) announce(sentence);
-      }
+      note.textContent = reading.length > 0 ? "The player to move would choose these most often." : "The game is over here.";
+      const sentence = analysis.takeAnnouncement();
+      if (sentence) announce(sentence);
     } else {
       note.textContent =
         view.status === "unavailable"
@@ -352,8 +368,7 @@ export function startPage(port: SearchPort, network: NetworkSource): GameControl
   function renderMoves(): void {
     const moves = controller.moves;
     const list = element("moves", HTMLOListElement);
-    const reviewing = analysisPanel.open;
-    const signature = `${reviewing}|${moves.join(".")}`;
+    const signature = moves.join(".");
     if (signature !== movesDrawn) {
       movesDrawn = signature;
       // Rebuilding must not take keyboard focus away from the move being used.
@@ -364,15 +379,13 @@ export function startPage(port: SearchPort, network: NetworkSource): GameControl
           const item = document.createElement("li");
           row.forEach((move, k) => {
             const ply = i * 2 + k + 1;
-            const cell = document.createElement(reviewing ? "button" : "span");
+            const cell = document.createElement("button");
+            cell.type = "button";
             cell.textContent = move;
             cell.dataset["ply"] = String(ply);
             cell.className = sideOf(ply - 1);
-            if (cell instanceof HTMLButtonElement) {
-              cell.type = "button";
-              cell.setAttribute("aria-label", `Show the position after move ${ply}, ${move}`);
-              cell.addEventListener("click", () => analysis.goTo(ply));
-            }
+            cell.setAttribute("aria-label", `Show the position after move ${ply}, ${move}`);
+            cell.addEventListener("click", () => analysis.goTo(ply));
             item.append(cell);
           });
           return item;
@@ -385,10 +398,8 @@ export function startPage(port: SearchPort, network: NetworkSource): GameControl
     for (const cell of list.querySelectorAll<HTMLElement>("[data-ply]")) {
       const current = Number(cell.dataset["ply"]) === analysis.ply;
       cell.classList.toggle("latest", current);
-      if (cell instanceof HTMLButtonElement) {
-        if (current) cell.setAttribute("aria-current", "step");
-        else cell.removeAttribute("aria-current");
-      }
+      if (current) cell.setAttribute("aria-current", "step");
+      else cell.removeAttribute("aria-current");
       if (current) viewed = cell;
     }
     if (!analysis.viewingPast) list.scrollTop = list.scrollHeight;
@@ -445,6 +456,16 @@ export function startPage(port: SearchPort, network: NetworkSource): GameControl
     } else render();
   });
 
+  /** Steps through the game for a key (`back` and `forward` name the two arrows; Home and End jump to the ends); returns whether it was one. */
+  function review(key: string, back: string, forward: string): boolean {
+    if (key === back) analysis.step(-1);
+    else if (key === forward) analysis.step(1);
+    else if (key === "Home") analysis.goTo(0);
+    else if (key === "End") analysis.goTo(controller.moves.length);
+    else return false;
+    return true;
+  }
+
   /** Puts the keyboard cursor on the pawn of the side to move the first time the keyboard is used. */
   function startCursor(): GlobalAction {
     const state = controller.state;
@@ -466,6 +487,10 @@ export function startPage(port: SearchPort, network: NetworkSource): GameControl
   board.addEventListener("keydown", (event) => {
     if (event.ctrlKey || event.metaKey || event.altKey) return;
     const key = event.key.length === 1 ? event.key.toLowerCase() : event.key;
+    if (review(key, "PageUp", "PageDown")) {
+      event.preventDefault();
+      return;
+    }
     if (cursor === null) {
       if (!["ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight", "h", "v", "p", "Enter", " "].includes(key)) return;
       event.preventDefault();
@@ -553,10 +578,12 @@ export function startPage(port: SearchPort, network: NetworkSource): GameControl
   speedSelect.addEventListener("change", () => controller.setSpeed(speedSelect.value as Speed));
   onPress(undoButton, () => controller.undo());
   retryButton.addEventListener("click", () => controller.retry());
-  analysisPanel.addEventListener("toggle", () => {
-    // Closing the panel goes back to the game as it stands.
-    if (!analysisPanel.open) analysis.goTo(controller.moves.length);
-    else render();
+  analysisToggle.addEventListener("change", render);
+  onPress(element("step-live", HTMLButtonElement), () => analysis.goTo(controller.moves.length));
+  // Left and Right step through the game from the move list and its buttons; Home and End jump to the ends.
+  element("moves-title", HTMLElement).closest("section")!.addEventListener("keydown", (event) => {
+    if (event.ctrlKey || event.metaKey || event.altKey || event.target instanceof HTMLInputElement) return;
+    if (review(event.key, "ArrowLeft", "ArrowRight")) event.preventDefault();
   });
   onPress(element("step-first", HTMLButtonElement), () => analysis.goTo(0));
   onPress(element("step-prev", HTMLButtonElement), () => analysis.step(-1));

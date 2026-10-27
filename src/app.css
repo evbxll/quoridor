@@ -112,8 +112,6 @@ select {
 .board:focus:not(:focus-visible) { outline: none; } /* a click focuses the board too; only keyboard focus is outlined */
 .board.can-click { cursor: pointer; }
 .status { margin: 4px 0 0; width: 100%; min-height: 2.9em; max-width: 60ch; font-size: 16px; font-weight: 600; text-align: center; }
-.viewing { margin: 0; min-height: 1.45em; color: var(--muted); text-align: center; }
-.viewing.idle { visibility: hidden; }
 
 /* Eval bar: player 1's share rises from the bottom (player 1's side of the board) in a
    soft blue over player 2's soft red. Its rows line up with the board's edges (set from
@@ -188,7 +186,7 @@ select {
 .players .row { margin-top: 8px; padding: 0 2px; }
 
 /* A fixed height, so the card keeps its size as the game goes on; the list scrolls inside. */
-.moves-box { position: relative; height: 196px; }
+.moves-box { position: relative; height: 168px; }
 .moves-box .hint { position: absolute; top: 0; left: 0; }
 .moves {
   list-style: none; margin: 0; padding: 0; height: 100%; overflow-y: auto; scrollbar-gutter: stable; counter-reset: turn;
@@ -203,9 +201,31 @@ select {
 details.card > summary { cursor: pointer; font-weight: 650; }
 details.card[open] > summary { margin-bottom: 10px; }
 details.card > :not(summary) + * { margin-top: 10px; }
-#analysis-position { margin: 10px 0 0; min-height: 1.45em; font-weight: 600; }
-#analysis-lines { margin: 6px 0; padding-left: 1.4em; min-height: 4.35em; } /* three best moves */
-#analysis-note { min-height: 2.9em; }
+
+/* Moves and analysis in one card: the move list is the history navigator, the suggestions sit below it. */
+.review-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; }
+.review-head h2 { margin: 0; }
+.review-nav { display: flex; justify-content: space-between; align-items: center; min-height: 36px; }
+button.icon { width: 36px; height: 32px; padding: 0; display: grid; place-items: center; }
+button.icon svg { width: 16px; height: 16px; fill: currentColor; stroke: currentColor; stroke-width: 2; stroke-linejoin: round; }
+.viewing { margin: 6px 0 8px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; padding: 3px 8px; min-height: 2em; border-radius: 8px; font-size: 13px; font-variant-numeric: tabular-nums; }
+.viewing.past { background: var(--surface); box-shadow: inset 3px 0 0 var(--accent); font-weight: 600; }
+.review-nav .quiet.live { visibility: hidden; }
+.analysis-box { margin-top: 12px; padding-top: 10px; border-top: 1px solid var(--line); }
+.analysis-box h3 { margin: 0 0 6px; font-size: 13px; font-weight: 650; }
+.analysis-box h3 .hint { font-weight: 400; }
+.analysis-box > * + * { margin-top: 8px; }
+.analysis-box > .hint { min-height: 2.9em; }
+.lines { list-style: none; margin: 0; padding: 0; height: 90px; display: flex; flex-direction: column; gap: 4px; } /* three rows */
+.lines li { height: 26px; display: grid; grid-template-columns: 1.2em 3.4em minmax(0, 1fr) 3em; gap: 8px; align-items: center; font-variant-numeric: tabular-nums; }
+.lines .rank { color: var(--muted); font-size: 13px; }
+.lines .move { font-weight: 650; }
+.lines .share { height: 10px; border-radius: 5px; background: var(--surface); box-shadow: inset 0 0 0 1px var(--line); overflow: hidden; }
+.lines .share > span { display: block; height: 100%; background: var(--muted); }
+.lines .percent { text-align: right; font-size: 13px; }
+.lines li.best .move, .lines li.best .percent { font-weight: 800; }
+.lines li.best .share > span { background: var(--accent); }
+.lines li.blank { visibility: hidden; }
 
 /* The network's status chip in the top bar: the dot and a few words, with the detail in a popover beneath it. */
 .network { font-size: 13px; color: var(--muted); }
@@ -230,7 +250,6 @@ details.card > :not(summary) + * { margin-top: 10px; }
   .layout { grid-template-columns: minmax(0, 1fr); gap: 16px; padding: 6px 16px 24px; }
   .stage { --board-max: 100vw; }
   .status { font-size: 15px; }
-  .viewing { min-height: 2.9em; }
 }
 
 /* Board (SVG). Pointer events are resolved by geometry on the svg itself. */
