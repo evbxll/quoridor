@@ -105,8 +105,9 @@ select {
 .board:focus-visible { outline: 3px solid var(--focus); outline-offset: 3px; border-radius: 10px; }
 .board:focus:not(:focus-visible) { outline: none; } /* a click focuses the board too; only keyboard focus is outlined */
 .board.can-click { cursor: pointer; }
-.status { margin: 4px 0 0; min-height: 2.9em; max-width: 60ch; font-size: 16px; font-weight: 600; text-align: center; }
-.viewing { margin: 0; color: var(--muted); text-align: center; }
+.status { margin: 4px 0 0; width: 100%; min-height: 2.9em; max-width: 60ch; font-size: 16px; font-weight: 600; text-align: center; }
+.viewing { margin: 0; min-height: 1.45em; color: var(--muted); text-align: center; }
+.viewing.idle { visibility: hidden; }
 
 /* Eval bar: player 1's share rises from the bottom (player 1's side of the board) in a
    soft blue over player 2's soft red. Its rows line up with the board's edges (set from
@@ -117,7 +118,7 @@ select {
   display: flex; align-items: center; justify-content: center; gap: 2px;
   font-size: 12px; line-height: 1; font-variant-numeric: tabular-nums;
 }
-.eval-end b { font-weight: 700; }
+.eval-end b { font-weight: 700; min-width: 4ch; text-align: center; }
 .eval-end span { color: var(--muted); font-size: 10px; }
 .eval-end:first-child b { color: var(--p2); }
 .eval-end:last-child b { color: var(--p1); }
@@ -168,15 +169,21 @@ select {
 .seat-head { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
 .seat-head label { font-weight: 650; font-size: 14px; }
 .seat-body select { width: 100%; }
-.seat-note { margin: 0; color: var(--muted); font-size: 13px; }
+.seat-note { margin: 0; min-height: 2.9em; color: var(--muted); font-size: 13px; }
 .seat.thinking .seat-note { color: var(--text); font-weight: 600; }
 .walls { color: var(--muted); font-size: 13px; white-space: nowrap; font-variant-numeric: tabular-nums; }
 .walls b { color: var(--text); font-size: 15px; }
 .swap { align-self: center; font-size: 13px; margin: -2px 0; }
+.players .row { min-height: 36px; }
+#bot-controls { min-height: 80px; } /* Start, Step and Speed wrap the same way whichever label Start carries */
+#toggle { min-width: 6.5em; }
 .players .row { margin-top: 8px; padding: 0 2px; }
 
+/* A fixed height, so the card keeps its size as the game goes on; the list scrolls inside. */
+.moves-box { position: relative; height: 196px; }
+.moves-box .hint { position: absolute; top: 0; left: 0; }
 .moves {
-  list-style: none; margin: 0; padding: 0; max-height: 196px; overflow: auto; counter-reset: turn;
+  list-style: none; margin: 0; padding: 0; height: 100%; overflow-y: auto; scrollbar-gutter: stable; counter-reset: turn;
   font-variant-numeric: tabular-nums;
 }
 .moves li { display: grid; grid-template-columns: 2.4em 1fr 1fr; counter-increment: turn; padding: 1px 0; }
@@ -188,12 +195,13 @@ select {
 details.card > summary { cursor: pointer; font-weight: 650; }
 details.card[open] > summary { margin-bottom: 10px; }
 details.card > :not(summary) + * { margin-top: 10px; }
-#analysis-position { margin: 10px 0 0; font-weight: 600; }
-#analysis-lines { margin: 6px 0; padding-left: 1.4em; }
-#analysis-lines:empty { display: none; }
+#analysis-position { margin: 10px 0 0; min-height: 1.45em; font-weight: 600; }
+#analysis-lines { margin: 6px 0; padding-left: 1.4em; min-height: 4.35em; } /* three best moves */
+#analysis-note { min-height: 2.9em; }
 
 .network { padding: 0 4px; font-size: 13px; color: var(--muted); display: flex; flex-direction: column; gap: 6px; }
 .network p { margin: 0; }
+.network p:first-child { min-height: 2.9em; }
 .network progress { width: 100%; accent-color: var(--accent); }
 .network button { align-self: start; }
 .net-dot { display: inline-block; width: 9px; height: 9px; border-radius: 50%; margin-right: 7px; background: var(--muted); }
@@ -206,7 +214,8 @@ details.card > :not(summary) + * { margin-top: 10px; }
   .topbar { padding: 10px 16px 2px; }
   .layout { grid-template-columns: minmax(0, 1fr); gap: 16px; padding: 6px 16px 24px; }
   .board-row { --board-max: 100vw; }
-  .status { font-size: 15px; min-height: 2.9em; }
+  .status { font-size: 15px; }
+  .viewing { min-height: 2.9em; }
 }
 
 /* Board (SVG). Pointer events are resolved by geometry on the svg itself. */

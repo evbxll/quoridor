@@ -199,7 +199,7 @@ export function startPage(port: SearchPort, network: NetworkSource): GameControl
     if (statusLine.textContent !== text) statusLine.textContent = text;
     // Not read aloud with each change: the position being viewed is in the analysis panel and the board's label.
     const viewingNote = element("viewing", HTMLElement);
-    viewingNote.hidden = past === null;
+    viewingNote.classList.toggle("idle", past === null);
     viewingNote.textContent = past ? `Showing the position after move ${analysis.ply} of ${controller.moves.length}. Choose Latest to play on.` : "";
     renderSeats(state);
     renderControls();
