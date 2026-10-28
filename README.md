@@ -2,7 +2,7 @@
 
 Play a Quoridor bot in the browser at https://evanbell.site/quoridor/. The site is static and runs entirely client-side: no server, no accounts, no analytics, no third-party requests.
 
-Status: scaffold only. The page is a placeholder; the rules, the search and the model arrive in later pull requests.
+Status: playable. The rules, a heuristic search (the Beginner and Normal bots) and the page are in place, with 5 x 5, 7 x 7, 9 x 9 and 11 x 11 boards. The Strong and Max bots play with a neural network and are offered only for the board sizes that have a published model (see Models and fixtures); with none published they stay off and the heuristic bots play.
 
 ## Licenses
 
