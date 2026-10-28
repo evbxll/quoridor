@@ -5,7 +5,7 @@ import { playerAction } from "../../src/engine/actions";
 import { Game } from "../../src/engine/game";
 import { formatAction, parseMove } from "../../src/engine/notation";
 import { GameState } from "../../src/engine/state";
-import { GameController, HUMAN, type Players, type SearchPort, SPEEDS, type Speed } from "../../src/ui/controller";
+import { GameController, HUMAN, isOfferedSize, type Players, type SearchPort, SPEEDS, type Speed } from "../../src/ui/controller";
 import { LEVELS } from "../../src/ui/levels";
 
 const [BEGINNER, NORMAL, STRONG, MAX] = [LEVELS[0]!, LEVELS[1]!, LEVELS[2]!, LEVELS[3]!];
@@ -234,6 +234,22 @@ describe("GameController with a person playing", () => {
     expect(controller.moves).toEqual(["c2", "c4"]);
   });
 
+  it("carries on a game of two bots after a failure when asked to try again", async () => {
+    const { engine, controller } = setup(5, { p1: NORMAL, p2: NORMAL });
+    controller.setSpeed("instant");
+    controller.start();
+    engine.fail("boom");
+    await settle();
+    expect(controller.error).toBe("boom");
+    expect(controller.running).toBe(false);
+    controller.retry();
+    expect(controller.running).toBe(true);
+    expect(controller.thinking).toBe(true);
+    controller.pause();
+    controller.retry();
+    expect(controller.running).toBe(true);
+  });
+
   it("asks again when the worker cancels a search nobody cancelled", async () => {
     const { engine, controller, play } = setup();
     play("c2");
@@ -331,6 +347,7 @@ describe("GameController with a person playing", () => {
     const { controller } = setup();
     for (const size of [0, 3, 6, 13]) expect(() => controller.newGame(size, { p1: HUMAN, p2: NORMAL })).toThrow("no ");
     expect(() => controller.load(Game.fromHash("#n=13"), { p1: HUMAN, p2: NORMAL })).toThrow("13x13");
+    expect([3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13].filter(isOfferedSize)).toEqual([5, 7, 9, 11]);
     expect(controller.size).toBe(5);
   });
 

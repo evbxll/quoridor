@@ -53,7 +53,7 @@ export function readingOf(state: GameState, response: SearchResponse): Reading {
 /**
  * The network's reading of the position on screen, for the eval bar, and
  * stepping back through the game's positions to read each. It searches only
- * when the network is ready and the bot is not searching, because a new search
+ * when the network is ready, something shows the reading and the bot is not searching, because a new search
  * cancels the one in flight and the bot's move comes first.
  */
 export class Analysis {
@@ -71,6 +71,8 @@ export class Analysis {
     private readonly port: SearchPort,
     private readonly networkReady: () => boolean,
     private readonly onChange: () => void,
+    /** Whether anything on the page shows a reading now; if not, no search is made for one. */
+    private readonly shown: () => boolean = () => true,
   ) {}
 
   /** The move number being viewed: 0 is the start, the number of moves played is the latest position. */
@@ -147,7 +149,7 @@ export class Analysis {
   }
 
   private request(): void {
-    if (!this.networkReady()) return;
+    if (!this.networkReady() || !this.shown()) return;
     const key = this.key(this.viewed);
     if (this.readings.has(key) || this.requested === key) return;
     const { state } = replay(this.controller.size, this.controller.moves, this.viewed);

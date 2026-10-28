@@ -37,17 +37,18 @@ class FakeNetwork implements SearchPort {
 
 const settle = (): Promise<void> => new Promise((resolve) => setImmediate(resolve));
 
-function setup(hash: string, ready = true) {
+function setup(hash: string, ready = true, shown = true) {
   const botPort = new FakeNetwork();
   const controller = new GameController(botPort, () => analysis.update());
   const network = new FakeNetwork();
   let changes = 0;
   let isReady = ready;
-  const analysis: Analysis = new Analysis(controller, network, () => isReady, () => changes++);
+  let isShown = shown;
+  const analysis: Analysis = new Analysis(controller, network, () => isReady, () => changes++, () => isShown);
   // The person plays the side to move, as the page seats them for a link.
   const game = Game.fromHash(hash);
   controller.load(game, game.result === null && !game.state.p1Turn ? { p1: NORMAL, p2: HUMAN } : { p1: HUMAN, p2: NORMAL });
-  return { controller, analysis, network, botPort, changes: () => changes, setReady: (value: boolean) => (isReady = value) };
+  return { controller, analysis, network, botPort, changes: () => changes, setReady: (value: boolean) => (isReady = value), setShown: (value: boolean) => (isShown = value) };
 }
 
 describe("readingOf", () => {
@@ -68,6 +69,15 @@ describe("Analysis", () => {
     const { analysis, network } = setup("#n=5&m=c2.c4", false);
     expect(analysis.view).toEqual({ status: "unavailable" });
     expect(network.requests).toEqual([]);
+  });
+
+  it("makes no search while nothing shows a reading, and reads the position once something does", () => {
+    const { analysis, network, setShown } = setup("#n=5&m=c2.c4", true, false);
+    analysis.update();
+    expect(network.requests).toEqual([]);
+    setShown(true);
+    analysis.update();
+    expect(network.requests).toHaveLength(1);
   });
 
   it("searches the latest position with the network at the Strong budget and shows the reading", async () => {

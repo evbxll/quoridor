@@ -15,7 +15,7 @@
       <div class="topbar-end">
         <button id="network-retry" type="button" hidden>Retry download</button>
         <details id="network" class="network">
-          <summary><span id="network-dot" class="net-dot" aria-hidden="true"></span><span id="network-chip"></span><progress id="network-progress" aria-label="Network download progress" hidden></progress></summary>
+          <summary id="network-summary"><span id="network-dot" class="net-dot" aria-hidden="true"></span><span id="network-chip"></span><progress id="network-progress" aria-label="Network download progress" hidden></progress></summary>
           <div class="network-pop">
             <p id="network-text"></p>
             <p id="isolation" class="hint"></p>
@@ -106,7 +106,8 @@
         <section class="card review" aria-labelledby="moves-title">
           <div class="review-head">
             <h2 id="moves-title">Moves &amp; analysis</h2>
-            <label class="inline"><input id="analysis-toggle" type="checkbox" /> Analysis</label>
+            <label id="analysis-label" class="inline"><input id="analysis-toggle" type="checkbox" /> Analysis</label>
+            <span id="analysis-off" class="hint" hidden>Analysis needs the network.</span>
           </div>
           <div class="review-nav">
             <div class="row" role="group" aria-label="Step through the game">

@@ -52,6 +52,12 @@ export class ModelManager {
     return this.states.get(entry.id) ?? { status: "checking" };
   }
 
+  /** Whether any network is published for any size: false once the index is read and names none, null until then (or if it could not be read). */
+  get publishesAny(): boolean | null {
+    if (this.indexFailure || this.index === undefined) return null;
+    return this.index !== null && Object.values(this.index.bots).some((id) => this.index!.models.some((entry) => entry.id === id));
+  }
+
   /** Starts loading the network for `size` if it is not loaded or loading; reads the index first time. */
   async select(size: number): Promise<void> {
     await this.load(size, false);

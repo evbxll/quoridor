@@ -22,6 +22,9 @@ export type Players = Readonly<Record<Side, Player>>;
 /** The board sizes the site offers. */
 export const BOARD_SIZES = [5, 7, 9, 11] as const;
 
+/** Whether the site offers a board of this size (a link can name others, which the engine reads but the page does not play). */
+export const isOfferedSize = (size: number): boolean => BOARD_SIZES.some((offered) => offered === size);
+
 /** The pause between one move and the next while two bots play, in milliseconds. */
 export const SPEEDS = { slow: 1500, normal: 600, fast: 150, instant: 0 } as const;
 export type Speed = keyof typeof SPEEDS;
@@ -173,13 +176,13 @@ export class GameController {
 
   /** Starts a game; a bot that moves first starts at once if a person plays. Throws for a size the site does not offer. */
   newGame(size: number, players: Players): void {
-    if (!BOARD_SIZES.some((offered) => offered === size)) throw new RangeError(`The site has no ${size}x${size} board`);
+    if (!isOfferedSize(size)) throw new RangeError(`The site has no ${size}x${size} board`);
     this.reset(new Game(size), players);
   }
 
   /** Continues a game made elsewhere (a link). Throws for a size the site does not offer. */
   load(game: Game, players: Players): void {
-    if (!BOARD_SIZES.some((offered) => offered === game.size)) throw new RangeError(`The site has no ${game.size}x${game.size} board`);
+    if (!isOfferedSize(game.size)) throw new RangeError(`The site has no ${game.size}x${game.size} board`);
     this.reset(game, players);
   }
 
@@ -259,6 +262,8 @@ export class GameController {
   /** Asks the bot for its move again after a failure. */
   retry(): void {
     this.failure = null;
+    // A failure stops two bots; asking again carries on the game they were playing.
+    if (!this.hasHuman && this.game.result === null) this.playing = true;
     this.advance();
   }
 

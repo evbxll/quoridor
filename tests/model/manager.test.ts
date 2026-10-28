@@ -141,6 +141,27 @@ describe("ModelManager", () => {
   });
 });
 
+describe("ModelManager.publishesAny", () => {
+  it("is unknown until the index is read, then says whether any size has a network", async () => {
+    const some = setup();
+    expect(some.manager.publishesAny).toBeNull();
+    await some.manager.select(7);
+    expect(some.manager.publishesAny).toBe(true);
+
+    const missing = setup({ files: { "models/index.json": () => new Response("nope", { status: 404 }) } });
+    await missing.manager.select(9);
+    expect(missing.manager.publishesAny).toBe(false);
+
+    const withheld = setup({ files: { "models/index.json": () => new Response(index({ 5: "heuristic", 9: "heuristic" })) } });
+    await withheld.manager.select(9);
+    expect(withheld.manager.publishesAny).toBe(false);
+
+    const broken = setup({ files: { "models/index.json": () => new Response("x", { status: 500 }) } });
+    await broken.manager.select(9);
+    expect(broken.manager.publishesAny).toBeNull();
+  });
+});
+
 describe("ModelManager and the index", () => {
   it("shows a failed index read as a failure with a retry, not as no model, and reads again on retry", async () => {
     let down = true;

@@ -42,3 +42,11 @@ export function moveRows(moves: readonly string[]): string[][] {
   for (let i = 0; i < moves.length; i += 2) rows.push(moves.slice(i, i + 2));
   return rows;
 }
+
+/**
+ * Whether the status line should stay quiet for screen readers: two bots playing on by themselves change it
+ * with every move, which would drown out everything else. The end of the game is announced separately.
+ */
+export function statusIsMuted(controller: Pick<GameController, "hasHuman" | "running">): boolean {
+  return !controller.hasHuman && controller.running;
+}

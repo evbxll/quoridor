@@ -3,15 +3,15 @@ import { Game } from "../engine/game";
 import type { GameState } from "../engine/state";
 import { Analysis, replay } from "./analysis";
 import { describeBoard, renderBoard, wallOwners } from "./board";
-import { element, onPress, setEnabled } from "./dom";
+import { closePopoverOnEscapeOrOutside, element, onPress, setEnabled } from "./dom";
 import { ModelManager, type ModelState } from "../model/manager";
 import type { ModelEnv } from "../model/store";
-import { GameController, HUMAN, type Player, type Players, type SearchPort, type Side, sideOf, type Speed } from "./controller";
+import { GameController, HUMAN, isOfferedSize, type Player, type Players, type SearchPort, type Side, sideOf, type Speed } from "./controller";
 import { evalBar } from "./evalBar";
 import { boardSpan, cellAt, PAD, wallAt } from "./geometry";
 import { isAvailable, type Level, LEVELS, levelSummary } from "./levels";
 import { WallPreview } from "./pointer";
-import { moveRows, playerName, statusText } from "./status";
+import { moveRows, playerName, statusIsMuted, statusText } from "./status";
 import { describeTarget, findAction, moveCursor, pawnTargets } from "./targets";
 
 /** How the page gets the network: where to fetch it from, and how to give it to the search worker. */
@@ -93,6 +93,7 @@ export function startPage(port: SearchPort, network: NetworkSource): GameControl
   const showEval = element("show-eval", HTMLInputElement);
   const newButton = element("new", HTMLButtonElement);
   showEval.checked = savedShowEval();
+  closePopoverOnEscapeOrOutside(element("network", HTMLDetailsElement), document);
 
   const preview = new WallPreview();
   let cursor: GlobalAction | null = null; // shown only once the keyboard is in use on the board
@@ -101,6 +102,10 @@ export function startPage(port: SearchPort, network: NetworkSource): GameControl
   let owners = new Map<string, 0 | 1>();
   /** The eval bar's last fresh percentage, kept (dimmed) while the next position is read. */
   let shownPercent: number | null = null;
+  /** Whether the viewer has picked a seat, or opened a link that did: until then the seats are the site's default, which follows the network. */
+  let seatsChosen = false;
+  /** The game whose end was last announced, so a finished game of two bots is announced once. */
+  let announcedEnd = "";
 
   const announce = (text: string): void => {
     live.textContent = text === live.textContent ? `${text} ` : text;
@@ -124,7 +129,13 @@ export function startPage(port: SearchPort, network: NetworkSource): GameControl
     networkChanged();
   });
   const modelState = (): ModelState => models.state(controller.size);
-  const analysis = new Analysis(controller, port, () => modelState().status === "ready", render);
+  /** False once the model index is read and publishes no network at any size; true while that is not known yet. */
+  const networkPublished = (): boolean => models.publishesAny !== false;
+  /** The evaluation is shown: a network is published, and either two bots play or the viewer left "Show evaluation" on. */
+  const evalVisible = (): boolean => networkPublished() && (!controller.hasHuman || showEval.checked);
+  const analysisOpen = (): boolean => networkPublished() && analysisToggle.checked;
+  // Readings cost searches: they are made only for the eval bar or the Analysis list, when one of them is showing.
+  const analysis = new Analysis(controller, port, () => modelState().status === "ready", render, () => evalVisible() || analysisOpen());
 
   /** A person may move: it is a person's turn, and the position on the board is the latest. */
   const canPlay = (): boolean => controller.humanToMove && !analysis.viewingPast;
@@ -156,13 +167,18 @@ export function startPage(port: SearchPort, network: NetworkSource): GameControl
     const state = modelState();
     const off = state.status === "unavailable";
     if (off) {
+      // With no network published the default seat is Normal from the start; nothing was lost, so nothing is said.
+      const silent = !seatsChosen && state.reason === "none-published";
       const players = { ...controller.players };
       for (const side of SIDES) {
         const seat = players[side];
         if (seat !== HUMAN && !isAvailable(seat, false)) {
           players[side] = NORMAL;
           seatSelects[side].value = NORMAL.id;
-          announce(`${seat.label} needs the network, which is not offered at this board size, so player ${side === "p1" ? 1 : 2} plays ${NORMAL.label}.`);
+          if (!silent) {
+            const why = state.reason === "none-published" ? "which is not published yet" : "which is not offered at this board size";
+            announce(`${seat.label} needs the network, ${why}, so player ${side === "p1" ? 1 : 2} plays ${NORMAL.label}.`);
+          }
         }
       }
       if (players.p1 !== controller.players.p1 || players.p2 !== controller.players.p2) controller.setPlayers(players);
@@ -198,7 +214,7 @@ export function startPage(port: SearchPort, network: NetworkSource): GameControl
         networkProgress.value = state.loaded;
       }
     } else networkProgress.hidden = true;
-    if (state.status !== "failed" && document.activeElement === networkRetry) seatSelects.p1.focus();
+    if (state.status !== "failed" && document.activeElement === networkRetry) element("network-summary", HTMLElement).focus();
     networkRetry.hidden = state.status !== "failed";
   }
 
@@ -234,6 +250,12 @@ export function startPage(port: SearchPort, network: NetworkSource): GameControl
     board.classList.toggle("can-click", canMove);
     const text = statusText(controller, describeNetwork(modelState(), controller.size).short);
     if (statusLine.textContent !== text) statusLine.textContent = text;
+    // Two bots playing on change the line with every move; keep it quiet and say the end of the game once.
+    statusLine.setAttribute("aria-live", statusIsMuted(controller) ? "off" : "polite");
+    if (!controller.hasHuman && controller.result !== null && announcedEnd !== controller.hash) {
+      announcedEnd = controller.hash;
+      announce(text);
+    }
     renderSeats(state);
     renderControls();
     renderMoves();
@@ -273,7 +295,13 @@ export function startPage(port: SearchPort, network: NetworkSource): GameControl
   function renderControls(): void {
     const bots = !controller.hasHuman;
     element("bot-controls", HTMLElement).hidden = !bots;
-    element("eval-toggle", HTMLElement).hidden = bots;
+    const published = networkPublished();
+    const evalToggle = element("eval-toggle", HTMLElement);
+    evalToggle.hidden = bots;
+    evalToggle.classList.toggle("off", !published); // keeps its row, so the status line below does not move
+    // Without a network there is nothing to analyse; the note takes the checkbox's place, so the card does not change size.
+    element("analysis-label", HTMLElement).hidden = !published;
+    element("analysis-off", HTMLElement).hidden = published;
     // Choices of board size and players wait for New game; the button says so while they differ from the game on the board.
     const pending = Number(sizeSelect.value) !== controller.size || SIDES.some((side) => playerOf(seatSelects[side]) !== controller.players[side]);
     newButton.classList.toggle("pending", pending);
@@ -289,7 +317,7 @@ export function startPage(port: SearchPort, network: NetworkSource): GameControl
   function renderEval(): void {
     const meter = element("eval", HTMLElement);
     // A person may hide the evaluation so as not to lean on it; two bots playing always show it.
-    const visible = !controller.hasHuman || showEval.checked;
+    const visible = evalVisible();
     const ticks = visible && (!controller.hasHuman || analysisToggle.checked);
     const bar = evalBar(analysis.view, shownPercent, ticks ? controller.opinions(analysis.ply) : null);
     meter.classList.toggle("off", !visible);
@@ -329,8 +357,8 @@ export function startPage(port: SearchPort, network: NetworkSource): GameControl
   }
 
   function renderAnalysis(): void {
-    element("analysis-box", HTMLElement).hidden = !analysisToggle.checked;
-    if (!analysisToggle.checked) return;
+    element("analysis-box", HTMLElement).hidden = !analysisOpen();
+    if (!analysisOpen()) return;
     const view = analysis.view;
     const lines = element("analysis-lines", HTMLOListElement);
     const note = element("analysis-note", HTMLElement);
@@ -502,6 +530,7 @@ export function startPage(port: SearchPort, network: NetworkSource): GameControl
     if (key === "Enter" || key === " ") {
       event.preventDefault();
       if (canPlay()) play(cursor);
+      else if (analysis.viewingPast) announce(`Viewing ${analysis.where}; choose Back to live to play.`);
       else announce(controller.hasHuman ? "It is not your move." : "Two bots are playing; choose Human for a side to play it.");
       return;
     }
@@ -530,6 +559,8 @@ export function startPage(port: SearchPort, network: NetworkSource): GameControl
   function openHash(): boolean {
     try {
       const game = Game.fromHash(location.hash);
+      // Before anything changes: a link may name a size the engine reads and the site does not offer.
+      if (!isOfferedSize(game.size)) throw new RangeError(`The site has no ${game.size}x${game.size} board`);
       const chosen = chosenPlayers();
       const bot = chosen.p1 !== HUMAN ? chosen.p1 : chosen.p2 !== HUMAN ? chosen.p2 : STRONG;
       // The person plays the side to move, or player 1 if the game is over.
@@ -541,11 +572,13 @@ export function startPage(port: SearchPort, network: NetworkSource): GameControl
       controller.load(game, human === "p1" ? { p1: HUMAN, p2: bot } : { p1: bot, p2: HUMAN });
       sizeSelect.value = String(controller.size);
       showPlayers(controller.players);
+      seatsChosen = true;
       networkChanged();
       void models.select(controller.size);
       return true;
     } catch {
       announce("That link could not be opened, so it was ignored.");
+      networkChanged();
       if (location.hash !== controller.hash) history.replaceState(null, "", controller.hash);
       return false;
     }
@@ -558,6 +591,7 @@ export function startPage(port: SearchPort, network: NetworkSource): GameControl
   });
   for (const side of SIDES) {
     seatSelects[side].addEventListener("change", () => {
+      seatsChosen = true;
       render();
       const seat = playerOf(seatSelects[side]);
       announce(`Player ${side === "p1" ? 1 : 2}: ${seat === HUMAN ? "a person" : `${seat.label}, ${levelSummary(seat)}`}. It applies when you press New game.`);
@@ -566,19 +600,20 @@ export function startPage(port: SearchPort, network: NetworkSource): GameControl
   element("swap", HTMLButtonElement).addEventListener("click", () => {
     const { p1, p2 } = chosenPlayers();
     showPlayers({ p1: p2, p2: p1 });
+    seatsChosen = true;
     render();
     announce("Sides swapped. They apply when you press New game.");
   });
   showEval.addEventListener("change", () => {
     saveShowEval(showEval.checked);
-    render();
+    analysis.update();
   });
   onPress(toggleButton, () => (controller.running ? controller.pause() : controller.start()));
   onPress(stepButton, () => controller.step());
   speedSelect.addEventListener("change", () => controller.setSpeed(speedSelect.value as Speed));
   onPress(undoButton, () => controller.undo());
   retryButton.addEventListener("click", () => controller.retry());
-  analysisToggle.addEventListener("change", render);
+  analysisToggle.addEventListener("change", () => analysis.update());
   onPress(element("step-live", HTMLButtonElement), () => analysis.goTo(controller.moves.length));
   // Left and Right step through the game from the move list and its buttons; Home and End jump to the ends.
   element("moves-title", HTMLElement).closest("section")!.addEventListener("keydown", (event) => {

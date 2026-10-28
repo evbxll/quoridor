@@ -3,7 +3,7 @@ import { parseMove } from "../../src/engine/notation";
 import { Game } from "../../src/engine/game";
 import { GameController, HUMAN, type Players } from "../../src/ui/controller";
 import { LEVELS } from "../../src/ui/levels";
-import { moveRows, playerName, statusText } from "../../src/ui/status";
+import { moveRows, playerName, statusIsMuted, statusText } from "../../src/ui/status";
 
 const [NORMAL, STRONG] = [LEVELS[1]!, LEVELS[2]!];
 const idle = { search: () => new Promise<never>(() => {}), cancel: () => {} };
@@ -77,5 +77,18 @@ describe("moveRows", () => {
   it("pairs the moves of each turn", () => {
     expect(moveRows(["e2", "e8", "d4h"])).toEqual([["e2", "e8"], ["d4h"]]);
     expect(moveRows([])).toEqual([]);
+  });
+});
+
+describe("statusIsMuted", () => {
+  it("mutes the status line only while two bots play on by themselves", () => {
+    const bots = loaded("#n=5", { p1: NORMAL, p2: STRONG });
+    expect(statusIsMuted(bots)).toBe(false);
+    bots.start();
+    expect(statusIsMuted(bots)).toBe(true);
+    bots.pause();
+    expect(statusIsMuted(bots)).toBe(false);
+    const person = loaded("#n=5", { p1: HUMAN, p2: NORMAL });
+    expect(statusIsMuted(person)).toBe(false);
   });
 });

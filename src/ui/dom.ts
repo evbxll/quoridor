@@ -15,3 +15,19 @@ export function onPress(button: HTMLButtonElement, handler: () => void): void {
     if (button.getAttribute("aria-disabled") !== "true") handler();
   });
 }
+
+/**
+ * Lets a `<details>` popover close the way one is expected to: Escape closes it and returns focus to its
+ * summary, and a press outside it closes it (without moving focus away from what was pressed).
+ */
+export function closePopoverOnEscapeOrOutside(details: HTMLDetailsElement, doc: Document): void {
+  doc.addEventListener("keydown", (event) => {
+    if (event.key !== "Escape" || !details.open) return;
+    details.open = false;
+    details.querySelector("summary")?.focus();
+  });
+  doc.addEventListener("pointerdown", (event) => {
+    const target = event.target as Node | null;
+    if (details.open && target !== null && !details.contains(target)) details.open = false;
+  });
+}
