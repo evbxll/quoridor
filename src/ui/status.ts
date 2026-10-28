@@ -43,10 +43,16 @@ export function moveRows(moves: readonly string[]): string[][] {
   return rows;
 }
 
+/** Whether two bots are playing on by themselves. */
+export function botsArePlaying(controller: Pick<GameController, "hasHuman" | "running">): boolean {
+  return !controller.hasHuman && controller.running;
+}
+
 /**
  * Whether the status line should stay quiet for screen readers: two bots playing on by themselves change it
- * with every move, which would drown out everything else. The end of the game is announced separately.
+ * with every move, which would drown out everything else. It stays quiet once such a game is over, because the
+ * end of the game is announced once, separately; otherwise the final text would be read twice.
  */
-export function statusIsMuted(controller: Pick<GameController, "hasHuman" | "running">): boolean {
-  return !controller.hasHuman && controller.running;
+export function statusIsMuted(controller: Pick<GameController, "hasHuman" | "running" | "result">): boolean {
+  return botsArePlaying(controller) || (!controller.hasHuman && controller.result !== null);
 }

@@ -3,7 +3,7 @@ import { parseMove } from "../../src/engine/notation";
 import { Game } from "../../src/engine/game";
 import { GameController, HUMAN, type Players } from "../../src/ui/controller";
 import { LEVELS } from "../../src/ui/levels";
-import { moveRows, playerName, statusIsMuted, statusText } from "../../src/ui/status";
+import { botsArePlaying, moveRows, playerName, statusIsMuted, statusText } from "../../src/ui/status";
 
 const [NORMAL, STRONG] = [LEVELS[1]!, LEVELS[2]!];
 const idle = { search: () => new Promise<never>(() => {}), cancel: () => {} };
@@ -90,5 +90,25 @@ describe("statusIsMuted", () => {
     expect(statusIsMuted(bots)).toBe(false);
     const person = loaded("#n=5", { p1: HUMAN, p2: NORMAL });
     expect(statusIsMuted(person)).toBe(false);
+  });
+
+  it("stays muted after a bot game ends, so its final text is announced once, but not in a human game", () => {
+    const finished = "#n=5&m=c2.b5.c3.a5.c4.b5.c5";
+    const bots = loaded(finished, { p1: NORMAL, p2: STRONG });
+    expect(bots.result).not.toBeNull();
+    expect(bots.running).toBe(false);
+    expect(statusIsMuted(bots)).toBe(true);
+    expect(botsArePlaying(bots)).toBe(false);
+    const person = loaded(finished, { p1: HUMAN, p2: NORMAL });
+    expect(statusIsMuted(person)).toBe(false);
+  });
+
+  it("botsArePlaying is true only while two bots run", () => {
+    const bots = loaded("#n=5", { p1: NORMAL, p2: STRONG });
+    expect(botsArePlaying(bots)).toBe(false);
+    bots.start();
+    expect(botsArePlaying(bots)).toBe(true);
+    bots.pause();
+    expect(botsArePlaying(bots)).toBe(false);
   });
 });

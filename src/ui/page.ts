@@ -11,7 +11,7 @@ import { evalBar } from "./evalBar";
 import { boardSpan, cellAt, PAD, wallAt } from "./geometry";
 import { isAvailable, type Level, LEVELS, levelSummary } from "./levels";
 import { WallPreview } from "./pointer";
-import { moveRows, playerName, statusIsMuted, statusText } from "./status";
+import { botsArePlaying, moveRows, playerName, statusIsMuted, statusText } from "./status";
 import { describeTarget, findAction, moveCursor, pawnTargets } from "./targets";
 
 /** How the page gets the network: where to fetch it from, and how to give it to the search worker. */
@@ -250,7 +250,7 @@ export function startPage(port: SearchPort, network: NetworkSource): GameControl
     board.classList.toggle("can-click", canMove);
     const text = statusText(controller, describeNetwork(modelState(), controller.size).short);
     if (statusLine.textContent !== text) statusLine.textContent = text;
-    // Two bots playing on change the line with every move; keep it quiet and say the end of the game once.
+    // Two bots playing on change the line with every move; keep it quiet, also after the end, and say the end of the game once through #live.
     statusLine.setAttribute("aria-live", statusIsMuted(controller) ? "off" : "polite");
     if (!controller.hasHuman && controller.result !== null && announcedEnd !== controller.hash) {
       announcedEnd = controller.hash;
@@ -379,7 +379,8 @@ export function startPage(port: SearchPort, network: NetworkSource): GameControl
     lines.replaceChildren(...rows);
     if (view.status === "ready") {
       note.textContent = reading.length > 0 ? "The player to move would choose these most often." : "The game is over here.";
-      const sentence = analysis.takeAnnouncement();
+      // While two bots play on, a new reading arrives with every move; it stays on screen but is not read aloud.
+      const sentence = botsArePlaying(controller) ? null : analysis.takeAnnouncement();
       if (sentence) announce(sentence);
     } else {
       note.textContent =
