@@ -1,12 +1,12 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
-import { encodeState } from "../../src/ai/encoding";
+import { encodeState, INPUT_PLANES } from "../../src/ai/encoding";
 import type { Evaluation } from "../../src/ai/evaluator";
 import { Mcts, selectAction } from "../../src/ai/mcts";
 import { type Network, OnnxEvaluator } from "../../src/ai/onnxEvaluator";
 import * as ort from "onnxruntime-web";
-import { createOrtNetwork, type OrtRuntime } from "../../src/ai/ort";
+import { checkInputShape, createOrtNetwork, type InputShape, type OrtRuntime } from "../../src/ai/ort";
 import { HORIZONTAL, squareName, VERTICAL, wallName } from "../../src/engine/actions";
 import { actionCount, wallCount } from "../../src/engine/constants";
 import { formatAction } from "../../src/engine/notation";
@@ -103,7 +103,7 @@ describe("OnnxEvaluator with a stand-in network", () => {
 /** A stand-in for onnxruntime-web whose session answers with the given policy length and value. */
 const released = { count: 0 };
 
-function stubRuntime(policyLength: (size: number) => number, value: number): OrtRuntime {
+function stubRuntime(policyLength: (size: number) => number, value: number, inputShape: InputShape = ["batch", INPUT_PLANES, "h", "w"]): OrtRuntime {
   let size = 0;
   return {
     env: { wasm: {} },
@@ -115,11 +115,26 @@ function stubRuntime(policyLength: (size: number) => number, value: number): Ort
     InferenceSession: {
       create: async () => ({
         release: async () => void (released.count += 1),
+        inputMetadata: [{ name: "input", isTensor: true, type: "float32", shape: inputShape }],
         run: async () => ({ policy: { data: new Float32Array(policyLength(size)) }, value: { data: Float32Array.of(value) } }),
       }),
     },
   } as unknown as OrtRuntime;
 }
+
+describe("checkInputShape", () => {
+  it("accepts the site's plane count, fixed or free, at any board size", () => {
+    expect(() => checkInputShape(["batch", INPUT_PLANES, "h", "w"])).not.toThrow();
+    expect(() => checkInputShape([1, INPUT_PLANES, 9, 9])).not.toThrow();
+    expect(() => checkInputShape([-1, "planes", 7, 7])).not.toThrow();
+  });
+
+  it("refuses another plane count or rank", () => {
+    expect(() => checkInputShape(["batch", INPUT_PLANES - 1, "h", "w"])).toThrow(`needs ${INPUT_PLANES - 1} planes`);
+    expect(() => checkInputShape([INPUT_PLANES, 9, 9])).toThrow("shaped [10, 9, 9]");
+    expect(() => checkInputShape([])).toThrow("shaped []");
+  });
+});
 
 describe("createOrtNetwork", () => {
   it("rejects an answer of the wrong length or a value that is not a number", async () => {
@@ -129,6 +144,15 @@ describe("createOrtNetwork", () => {
     await expect(nan.infer(new Float32Array(250), 5)).rejects.toThrow("a number");
     const fine = await createOrtNetwork(stubRuntime(actionCount, 0.5), new Uint8Array(), { threads: 1 });
     expect((await fine.infer(new Float32Array(250), 5)).value).toBe(0.5);
+  });
+
+  it("fails at start, naming both plane counts, for a model that needs another encoding", async () => {
+    const before = released.count;
+    await expect(createOrtNetwork(stubRuntime(actionCount, 0, ["batch", 12, "h", "w"]), new Uint8Array(), { threads: 1 })).rejects.toThrow(
+      `needs 12 planes; this site encodes ${INPUT_PLANES}`,
+    );
+    expect(released.count).toBe(before + 1);
+    await expect(createOrtNetwork(stubRuntime(actionCount, 0, [1, 10, 9, 9, 1]), new Uint8Array(), { threads: 1 })).rejects.toThrow("[1, 10, 9, 9, 1]");
   });
 
   it("lets the session go on release", async () => {
