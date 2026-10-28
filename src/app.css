@@ -13,6 +13,7 @@
   --wall: #4a3f30;
   --wall-p1: #2c4a78; /* darker than player 2's, so the two differ in lightness as well as hue; 5.2:1 and 3.1:1 on --board, 1.7:1 apart */
   --wall-p2: #9c5c32;
+  --wall-edge: #1f1f1e; /* outlines a player's wall: 12.8:1 on --cell, 9.6:1 on --board */
   --p1: #1d5fb4;
   --p2: #b23c0a;
   --pawn-text: #ffffff; /* 6.3:1 on --p1, 5.9:1 on --p2 */
@@ -39,6 +40,7 @@
     --wall: #f0e6d2;
     --wall-p1: #c2d8fb; /* lighter than player 2's; 7.1:1 and 3.4:1 on --board, 2.1:1 apart */
     --wall-p2: #d17f48;
+    --wall-edge: #f0efec; /* 5.7:1 on --cell, 8.9:1 on --board; the fills alone were 4.5:1 (player 1) and 2.1:1 (player 2) on --cell */
     --p1: #7db3f5;
     --p2: #f2905f;
     --pawn-text: #000000; /* 9.6:1 on --p1, 8.9:1 on --p2 */
@@ -87,7 +89,7 @@ select {
   clip: rect(0 0 0 0); white-space: nowrap; border: 0;
 }
 .hint { margin: 0; color: var(--muted); font-size: 13px; }
-.inline { display: inline-flex; gap: 6px; align-items: center; }
+.inline { display: inline-flex; gap: 6px; align-items: center; min-height: 24px; }
 .row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
 
 .topbar {
@@ -106,7 +108,8 @@ select {
 .stage { display: flex; flex-direction: column; align-items: center; gap: 8px; min-width: 0; }
 .stage { --board-max: calc(100vh - 140px); }
 .board-row { display: flex; gap: 8px; width: 100%; max-width: calc(var(--board-max) + 56px); }
-.eval-toggle { width: 100%; max-width: calc(var(--board-max) + 56px); padding-left: 56px; color: var(--muted); font-size: 13px; }
+.eval-toggle { display: flex; align-items: center; min-height: 24px; width: 100%; max-width: calc(var(--board-max) + 56px); padding-left: 56px; color: var(--muted); font-size: 13px; }
+.eval-toggle.off { visibility: hidden; }
 .board { flex: 1 1 0; min-width: 0; aspect-ratio: 1; user-select: none; touch-action: manipulation; }
 .board:focus-visible { outline: 3px solid var(--focus); outline-offset: 3px; border-radius: 10px; }
 .board:focus:not(:focus-visible) { outline: none; } /* a click focuses the board too; only keyboard focus is outlined */
@@ -195,10 +198,10 @@ select {
 .moves li { display: grid; grid-template-columns: 2.4em 1fr 1fr; counter-increment: turn; padding: 1px 0; }
 .moves li::before { content: counter(turn) "."; color: var(--muted); }
 .moves li > * { justify-self: start; }
-.moves li button { border: none; background: none; padding: 0 6px; margin-left: -6px; border-radius: 6px; }
+.moves li button { border: none; background: none; padding: 0 6px; margin-left: -6px; border-radius: 6px; min-height: 24px; min-width: 28px; }
 .moves .latest { font-weight: 700; text-decoration: underline; text-underline-offset: 3px; }
 
-details.card > summary { cursor: pointer; font-weight: 650; }
+details.card > summary { cursor: pointer; font-weight: 650; padding: 2px 0; }
 details.card[open] > summary { margin-bottom: 10px; }
 details.card > :not(summary) + * { margin-top: 10px; }
 
@@ -260,6 +263,8 @@ button.icon svg { width: 16px; height: 16px; fill: currentColor; stroke: current
 .wall { fill: var(--wall); }
 .wall.p1 { fill: var(--wall-p1); }
 .wall.p2 { fill: var(--wall-p2); }
+/* The outline sits on the edge between the wall and the cells, so a wall shows against them in both themes. */
+.wall.p1, .wall.p2 { stroke: var(--wall-edge); stroke-width: 2; }
 .target { fill: none; stroke: var(--accent); stroke-width: 4; stroke-dasharray: 5 4; }
 .pawn { stroke: var(--text); stroke-width: 2; }
 .pawn.p1 { fill: var(--p1); }
