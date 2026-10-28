@@ -2,10 +2,10 @@ import { describe, expect, it } from "vitest";
 import { parseMove } from "../../src/engine/notation";
 import { Game } from "../../src/engine/game";
 import { GameController, HUMAN, type Players } from "../../src/ui/controller";
-import { LEVELS } from "../../src/ui/levels";
+import { botOf } from "../../src/ui/bots";
 import { botsArePlaying, moveRows, playerName, statusIsMuted, statusText } from "../../src/ui/status";
 
-const [NORMAL, STRONG] = [LEVELS[1]!, LEVELS[2]!];
+const [NORMAL, STRONG] = [botOf("normal"), botOf("strong")];
 const idle = { search: () => new Promise<never>(() => {}), cancel: () => {} };
 
 function loaded(hash: string, players: Players): GameController {

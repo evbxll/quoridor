@@ -1,0 +1,52 @@
+{
+  "presets": [
+    { "id": "beginner", "label": "Beginner", "engine": "heuristic", "simulations": 5, "vary": true },
+    { "id": "normal", "label": "Normal", "engine": "heuristic", "simulations": 100, "vary": false },
+    { "id": "strong", "label": "Strong", "engine": "network", "simulations": 32, "vary": false },
+    { "id": "max", "label": "Max", "engine": "network", "simulations": 200, "vary": false }
+  ],
+  "steps": {
+    "network": [1, 8, 16, 32, 64, 100, 200, 400, 800],
+    "heuristic": [1, 5, 25, 50, 100, 200, 400, 800, 1600]
+  },
+  "caps": {
+    "network": { "default": 800, "bySize": { "11": 400 } },
+    "heuristic": { "default": 1600, "bySize": {} }
+  },
+  "capReasons": {
+    "network": {
+      "default": "about 4 s a move on a fast desktop; weaker devices are slower.",
+      "bySize": {
+        "11": "200 already take about 0.8 s a move on a fast desktop; weaker devices are slower."
+      }
+    },
+    "heuristic": {
+      "default": "the largest budget with a measured strength; its browser time is unmeasured.",
+      "bySize": {}
+    }
+  },
+  "calibration": {
+    "engine": "heuristic",
+    "simulations": 100,
+    "size": 9,
+    "holds": "This is Normal, the Evan bot: about even with its author.",
+    "otherwise": "Normal's calibration to a human average holds only at 100 simulations on 9 × 9."
+  },
+  "times": {
+    "device": "a fast desktop",
+    "deviceDetail": "Ryzen 7 7700X, Edge, 4 threads; PR #177 of the private research repo, median ms per move with tree reuse",
+    "network": {
+      "model": "s9-conv-paths-g105",
+      "bySize": {
+        "5": [[32, 50], [200, 185], [400, 417], [800, 508]],
+        "7": [[32, 98], [200, 425]],
+        "9": [[32, 155], [200, 635], [400, 2377], [800, 3865]],
+        "11": [[32, 200], [200, 848]]
+      }
+    },
+    "heuristic": {
+      "source": "Derived from PR #177's Normal (100 simulations) median ms per move, assuming time grows in proportion to simulations; not measured at other budgets",
+      "msAt100": { "5": 1, "7": 2, "9": 11, "11": 24 }
+    }
+  }
+}

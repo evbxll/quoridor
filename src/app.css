@@ -168,6 +168,7 @@ select {
 #seat-p1.to-move { border-color: var(--p1); }
 #seat-p2.to-move { border-color: var(--p2); }
 .disc {
+  align-self: start;
   width: 30px; height: 30px; border-radius: 50%; display: grid; place-items: center;
   font-weight: 800; color: var(--pawn-text); border: 2px solid var(--text);
 }
@@ -179,6 +180,24 @@ select {
 .seat-body select { width: 100%; }
 .seat-note { margin: 0; min-height: 2.9em; color: var(--muted); font-size: 13px; }
 .seat.thinking .seat-note { color: var(--text); font-weight: 600; }
+/* A bot's settings. Each line has room for its longest text, so changing the engine, the preset or the board size moves nothing. */
+.bot-settings { display: flex; flex-direction: column; gap: 6px; }
+.pair { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 8px; }
+.field { display: flex; flex-direction: column; gap: 2px; font-size: 13px; color: var(--muted); }
+.field select { color: var(--text); font-size: 14px; width: 100%; }
+.sims-row { display: flex; align-items: center; gap: 10px; min-height: 32px; }
+.sims-row input[type="range"] { flex: 1 1 auto; min-width: 0; height: 24px; margin: 0; accent-color: var(--accent); }
+.sims-row output { flex: none; width: 4.2ch; text-align: right; color: var(--text); font-size: 15px; font-weight: 650; font-variant-numeric: tabular-nums; }
+.check { display: flex; align-items: center; gap: 6px; min-height: 28px; font-size: 14px; }
+.check input { width: 18px; height: 18px; margin: 0; }
+.seat-hint { margin: 0; color: var(--muted); font-size: 13px; line-height: 1.35; font-variant-numeric: tabular-nums; }
+.seat-hint.limit { min-height: 4.05em; }
+.seat-hint.estimate { min-height: 2.7em; }
+.seat-hint.vary { min-height: 2.7em; }
+.seat-hint.calibration { min-height: 4.05em; }
+.sources { margin-top: 6px; font-size: 13px; color: var(--muted); }
+.sources > summary { cursor: pointer; padding: 4px 2px; }
+.sources > p { margin-top: 4px; }
 .walls { color: var(--muted); font-size: 13px; white-space: nowrap; font-variant-numeric: tabular-nums; }
 .walls b { color: var(--text); font-size: 15px; }
 .swap { align-self: center; font-size: 13px; margin: -2px 0; }

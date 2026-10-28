@@ -69,6 +69,7 @@
                 <span id="walls-p2" class="walls"></span>
               </div>
               <select id="player-p2" class="player"></select>
+              <div id="bot-p2" class="bot-settings" role="group" aria-label="Player 2 bot settings" hidden></div>
               <p id="note-p2" class="seat-note"></p>
             </div>
           </div>
@@ -81,6 +82,7 @@
                 <span id="walls-p1" class="walls"></span>
               </div>
               <select id="player-p1" class="player"></select>
+              <div id="bot-p1" class="bot-settings" role="group" aria-label="Player 1 bot settings" hidden></div>
               <p id="note-p1" class="seat-note"></p>
             </div>
           </div>
@@ -98,6 +100,10 @@
               </label>
             </div>
           </div>
+          <details class="sources">
+            <summary>Where the times come from</summary>
+            <p id="time-sources" class="hint"></p>
+          </details>
           <div class="row">
             <button id="undo" type="button">Undo</button>
             <button id="retry" type="button" hidden>Retry</button>

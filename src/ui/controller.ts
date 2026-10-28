@@ -4,7 +4,7 @@ import { parseMove } from "../engine/notation";
 import { GameState } from "../engine/state";
 import type { SearchResponse } from "../ai/protocol";
 import type { SearchParams } from "../ai/searchClient";
-import { LEVELS, type Level } from "./levels";
+import { type Bot, botOf, sameBot, temperatureOf } from "./bots";
 
 /** The part of the search client the game flow uses. */
 export interface SearchPort {
@@ -14,9 +14,12 @@ export interface SearchPort {
 
 export type Side = "p1" | "p2";
 
-/** A seat at the board: a person, or a bot at one of the levels. */
+/** A seat at the board: a person, or a bot with its settings. */
 export const HUMAN = "human";
-export type Player = Level | typeof HUMAN;
+export type Player = Bot | typeof HUMAN;
+
+/** Whether two seats hold the same player (a person, or bots with the same settings). */
+export const samePlayer = (a: Player, b: Player): boolean => (a === HUMAN || b === HUMAN ? a === b : sameBot(a, b));
 export type Players = Readonly<Record<Side, Player>>;
 
 /** The board sizes the site offers. */
@@ -51,6 +54,13 @@ function p1ShareOf(mover: Side, response: SearchResponse): number {
   return mover === "p1" ? moverShare : 1 - moverShare;
 }
 
+/** How long a bot's move took on this device, and what it played with. */
+export interface MoveTime {
+  readonly ms: number;
+  readonly bot: Bot;
+  readonly size: number;
+}
+
 /** How often a search the worker cancelled without being asked is tried again before it is reported. */
 const RETRIES_AFTER_CANCEL = 2;
 
@@ -60,13 +70,15 @@ const SEED_RANGE = 2 ** 32;
 /**
  * One game with a player in each seat, a person or a bot. With a person in
  * either seat a bot replies as soon as it is its turn; between two bots the
- * game plays on only after `start` (or one move per `step`). A bot whose level
+ * game plays on only after `start` (or one move per `step`). A bot whose engine
  * needs the network waits for `setNetworkReady(true)`. It has no DOM;
  * `onChange` is called after every change.
  */
 export class GameController {
   private game = new Game(9);
-  private seats: Record<Side, Player> = { p1: HUMAN, p2: LEVELS[1]! };
+  private seats: Record<Side, Player> = { p1: HUMAN, p2: botOf("normal") };
+  /** How long each side's latest bot move took by the page's clock, with the settings and board it was made with. */
+  private durations: Record<Side, MoveTime | null> = { p1: null, p2: null };
   /** Where each move so far landed, kept so the board need not replay the game to show the last one. */
   private targets: GlobalAction[] = [];
   /** Per move, the reading of the bot that made it (player 1's share), or null for a person's move. */
@@ -84,7 +96,13 @@ export class GameController {
     private readonly port: SearchPort,
     private readonly onChange: () => void,
     private readonly random: () => number = Math.random,
+    private readonly clock: () => number = () => performance.now(),
   ) {}
+
+  /** How long the latest move of a bot on `side` took here (search and reply), or null before it has moved this game. */
+  moveTime(side: Side): MoveTime | null {
+    return this.durations[side];
+  }
 
   get size(): number {
     return this.game.size;
@@ -133,7 +151,7 @@ export class GameController {
     return this.playing;
   }
 
-  /** A bot is due to move but its level needs the network, which is not ready. */
+  /** A bot is due to move but its engine needs the network, which is not ready. */
   get waiting(): boolean {
     const seat = this.seats[this.mover];
     return seat !== HUMAN && seat.engine === "network" && !this.network && this.due();
@@ -193,7 +211,7 @@ export class GameController {
    */
   setPlayers(players: Players): void {
     const hadHuman = this.hasHuman;
-    if (players[this.mover] !== this.seats[this.mover]) this.dropSearch();
+    if (!samePlayer(players[this.mover], this.seats[this.mover])) this.dropSearch();
     this.seats = { ...players };
     if (hadHuman && !this.hasHuman) this.stop();
     this.advance();
@@ -272,6 +290,7 @@ export class GameController {
     this.game = game;
     this.targets = replayTargets(game.size, game.moves);
     this.readings = game.moves.map(() => null);
+    this.durations = { p1: null, p2: null };
     this.seats = { ...players };
     this.failure = null;
     this.advance();
@@ -330,26 +349,28 @@ export class GameController {
     }, this.delayMs);
   }
 
-  private async botMove(level: Level): Promise<void> {
+  private async botMove(bot: Bot): Promise<void> {
     const epoch = ++this.epoch;
     const mover = this.mover;
     this.searching = true;
+    const started = this.clock();
     this.onChange();
     try {
       let reply: SearchResponse | null = null;
       // A null answer that nobody asked for (the worker was reconfigured, say) is not a failure: ask again.
       for (let attempt = 0; attempt <= RETRIES_AFTER_CANCEL && reply === null; attempt++) {
         reply = await this.port.search({
-          engine: level.engine,
+          engine: bot.engine,
           size: this.game.size,
           moves: this.game.moves,
-          simulations: level.simulations,
-          temperature: level.temperature,
+          simulations: bot.simulations,
+          temperature: temperatureOf(bot),
           seed: Math.floor(this.random() * SEED_RANGE),
         });
         if (epoch !== this.epoch) return;
       }
       if (reply === null) throw new Error("The search was cancelled");
+      this.durations[mover] = { ms: this.clock() - started, bot, size: this.game.size };
       this.record(parseMove(this.game.state, reply.move), p1ShareOf(mover, reply));
     } catch (error) {
       if (epoch !== this.epoch) return;

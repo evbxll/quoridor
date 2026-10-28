@@ -6,9 +6,9 @@ import { Game } from "../../src/engine/game";
 import { formatAction, parseMove } from "../../src/engine/notation";
 import { GameState } from "../../src/engine/state";
 import { GameController, HUMAN, isOfferedSize, type Players, type SearchPort, SPEEDS, type Speed } from "../../src/ui/controller";
-import { LEVELS } from "../../src/ui/levels";
+import { botOf } from "../../src/ui/bots";
 
-const [BEGINNER, NORMAL, STRONG, MAX] = [LEVELS[0]!, LEVELS[1]!, LEVELS[2]!, LEVELS[3]!];
+const [BEGINNER, NORMAL, STRONG, MAX] = [botOf("beginner"), botOf("normal"), botOf("strong"), botOf("max")];
 
 const result = (move: string, value = 0): SearchResponse => ({ type: "result", id: 0, move, moves: [move], visits: [1], value, principalVariation: [move] });
 
@@ -555,5 +555,69 @@ describe("GameController with two bots", () => {
     controller.start();
     controller.step();
     expect(engine.searches).toBe(controller.moves.length);
+  });
+});
+
+describe("GameController with custom bots", () => {
+  const custom = (simulations: number, vary: boolean, engine: "heuristic" | "network" = "network") => ({ engine, simulations, vary });
+
+  it("searches at the budget and the move choice the seat holds, not at a preset's", () => {
+    const { engine, play } = setup(5, { p1: HUMAN, p2: custom(64, true) });
+    play("c2");
+    expect(engine.requests[0]).toMatchObject({ engine: "network", simulations: 64, temperature: 1 });
+  });
+
+  it("plays the most visited move (temperature 0) for a bot that does not vary, even Beginner's budget", () => {
+    const { engine, play } = setup(5, { p1: HUMAN, p2: { ...BEGINNER, vary: false } });
+    play("c2");
+    expect(engine.requests[0]).toMatchObject({ engine: "heuristic", simulations: 5, temperature: 0 });
+  });
+
+  it("gives each seat of a bot game its own budget", async () => {
+    const { engine, controller } = bots("instant", { p1: custom(8, false), p2: custom(800, false) });
+    controller.step();
+    engine.answer("c2");
+    await settle();
+    controller.step();
+    engine.answer("c4");
+    await settle();
+    expect(engine.requests.map((r) => r.simulations)).toEqual([8, 800]);
+  });
+
+  it("does not drop a search when the seat is given again with the same settings", () => {
+    const { engine, controller, play } = setup(5, { p1: HUMAN, p2: custom(64, false) });
+    play("c2");
+    controller.setPlayers({ p1: HUMAN, p2: custom(64, false) });
+    expect(engine.cancels).toBe(0);
+    controller.setPlayers({ p1: HUMAN, p2: custom(65, false) });
+    expect(engine.cancels).toBe(1);
+  });
+
+  it("times each bot's latest move with the page's clock, per side, and clears it with a new game", async () => {
+    let now = 1000;
+    const engine = new FakeEngine();
+    const controller = new GameController(engine, () => {}, () => 0, () => now);
+    controller.setNetworkReady(true);
+    controller.newGame(5, { p1: HUMAN, p2: STRONG });
+    expect(controller.moveTime("p2")).toBeNull();
+    controller.playHuman(parseMove(controller.state, "c2"));
+    now += 1400;
+    engine.answer("c4");
+    await settle();
+    expect(controller.moveTime("p2")).toEqual({ ms: 1400, bot: STRONG, size: 5 });
+    expect(controller.moveTime("p1")).toBeNull();
+    controller.newGame(5, { p1: HUMAN, p2: STRONG });
+    expect(controller.moveTime("p2")).toBeNull();
+  });
+
+  it("keeps the link format: the hash holds the game and no seat settings", async () => {
+    const { engine, controller, play } = setup(5, { p1: HUMAN, p2: custom(64, true) });
+    play("c2");
+    engine.answer("c4");
+    await settle();
+    expect(controller.hash).toBe("#n=5&m=c2.c4");
+    const reopened = new GameController(new FakeEngine(), () => {});
+    reopened.load(Game.fromHash(controller.hash), { p1: HUMAN, p2: STRONG });
+    expect(reopened.hash).toBe("#n=5&m=c2.c4");
   });
 });

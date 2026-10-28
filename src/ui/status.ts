@@ -1,11 +1,12 @@
 import { maxPlies } from "../engine/constants";
+import { botLabel } from "./bots";
 import { type GameController, HUMAN, type Players, type Side, sideOf } from "./controller";
 
 /** A seat in words: "You" for the one person against a bot, "Player 1" for either of two people, "Player 2 (Strong)" for a bot. */
 export function playerName(players: Players, side: Side): string {
   const seat = players[side];
   const number = side === "p1" ? 1 : 2;
-  if (seat !== HUMAN) return `Player ${number} (${seat.label})`;
+  if (seat !== HUMAN) return `Player ${number} (${botLabel(seat)})`;
   return players[side === "p1" ? "p2" : "p1"] === HUMAN ? `Player ${number}` : "You";
 }
 

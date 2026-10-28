@@ -1,6 +1,5 @@
 import { describe, expect, it } from "vitest";
 import { evalBar, shareLabel, toPercent } from "../../src/ui/evalBar";
-import { levelSummary, LEVELS } from "../../src/ui/levels";
 
 const ready = (p1Share: number) => ({ status: "ready" as const, reading: { p1Share, lines: [] } });
 
@@ -30,16 +29,5 @@ describe("the eval bar", () => {
   it("places each bot's own estimate as a tick, and hides a side without one", () => {
     expect(evalBar(ready(0.5), null, { p1: 0.754, p2: null }).ticks).toEqual({ p1: 75, p2: null });
     expect(evalBar({ status: "unavailable" }, null, { p1: 0.2, p2: 0.9 }).ticks).toEqual({ p1: 20, p2: 90 });
-  });
-});
-
-describe("levelSummary", () => {
-  it("says what each level plays with", () => {
-    expect(LEVELS.map(levelSummary)).toEqual([
-      "Heuristic, 5 searches a move, varied",
-      "Heuristic, 100 searches a move",
-      "Neural network, 32 searches a move",
-      "Neural network, 200 searches a move",
-    ]);
   });
 });

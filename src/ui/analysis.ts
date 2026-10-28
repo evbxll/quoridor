@@ -4,10 +4,10 @@ import { GameState } from "../engine/state";
 import type { SearchResponse } from "../ai/protocol";
 import type { GameController, SearchPort } from "./controller";
 import { shareLabel, toPercent } from "./evalBar";
-import { LEVELS } from "./levels";
+import { botOf } from "./bots";
 
 /** Analysis searches with the network at the Strong budget (design doc section 8). */
-export const ANALYSIS_SIMULATIONS = LEVELS.find((level) => level.id === "strong")!.simulations;
+export const ANALYSIS_SIMULATIONS = botOf("strong").simulations;
 
 /** How many of the most visited moves are listed. */
 const TOP_MOVES = 3;

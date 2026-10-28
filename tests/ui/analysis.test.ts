@@ -4,11 +4,11 @@ import type { SearchParams } from "../../src/ai/searchClient";
 import { Game } from "../../src/engine/game";
 import { Analysis, ANALYSIS_SIMULATIONS, readingOf, replay } from "../../src/ui/analysis";
 import { GameController, HUMAN, type SearchPort } from "../../src/ui/controller";
-import { LEVELS } from "../../src/ui/levels";
+import { botOf } from "../../src/ui/bots";
 import { formatAction } from "../../src/engine/notation";
 import { GameState } from "../../src/engine/state";
 
-const NORMAL = LEVELS[1]!;
+const NORMAL = botOf("normal");
 
 /** A network the test answers by hand. */
 class FakeNetwork implements SearchPort {
