@@ -25,6 +25,7 @@ beforeEach(() => {
   write("index.html", '<script src="/quoridor/assets/a.js"></script>');
   write("coi-serviceworker.js", "// worker");
   write("coi-config.js", "// config");
+  write("THIRD-PARTY-NOTICES.txt", "notices");
 });
 
 afterEach(() => {
@@ -39,6 +40,11 @@ describe("verifyDist", () => {
   it("requires the service worker", () => {
     rmSync(join(dist, "coi-serviceworker.js"));
     expect(verifyDist(dist, root)).toEqual(["coi-serviceworker.js is missing"]);
+  });
+
+  it("requires the third-party notices", () => {
+    rmSync(join(dist, "THIRD-PARTY-NOTICES.txt"));
+    expect(verifyDist(dist, root)).toEqual(["THIRD-PARTY-NOTICES.txt is missing"]);
   });
 
   it("requires a wasm file only when onnxruntime-web is a dependency", () => {

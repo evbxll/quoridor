@@ -9,6 +9,7 @@ Status: playable. The rules, a heuristic search (the Beginner and Normal bots) a
 - Code: MIT, see `LICENSE`. This covers everything except `public/models/**`.
 - Model weights and model cards in `public/models/**`: CC-BY-4.0, see `LICENSE-CC-BY-4.0`.
 - `public/coi-serviceworker.js` is vendored unmodified from `coi-serviceworker` 0.1.7 (MIT, Guido Zuidhof and contributors).
+- `public/THIRD-PARTY-NOTICES.txt` carries the licence texts the shipped third-party code requires: the ONNX Runtime MIT licence and its `ThirdPartyNotices.txt` (abseil, protobuf, Eigen, flatbuffers, onnx, SafeInt, nlohmann/json, re2, GSL and others, all compiled into the `.wasm`), copied from `microsoft/onnxruntime` at the tag matching the installed `onnxruntime-web`, and the coi-serviceworker MIT licence. It deploys next to the `.wasm`, and `verify-dist` requires it. When `onnxruntime-web` is upgraded, replace its two sections from the new tag.
 
 ## Development
 

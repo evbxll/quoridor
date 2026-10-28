@@ -127,7 +127,7 @@ function checkModels(distDir) {
  */
 function checkRuntimeFiles(distDir, projectDir) {
   const errors = [];
-  for (const name of ["coi-serviceworker.js", "coi-config.js"]) {
+  for (const name of ["coi-serviceworker.js", "coi-config.js", "THIRD-PARTY-NOTICES.txt"]) {
     if (!existsSync(join(distDir, name))) {
       errors.push(`${name} is missing`);
     }
