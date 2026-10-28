@@ -1,11 +1,15 @@
-/* The board's look follows the research app's app.css (copied once, same author). */
+/* The board's look follows the research app's app.css (copied once, same author).
+   Every colour on the page is a token below. The light set is the default; the dark set applies
+   under [data-theme="dark"] (the toggle) and, when the viewer has not chosen, under the system's
+   dark preference. The two dark blocks must stay identical (tests/ui/contrast.test.ts checks it).
+   Contrast of every pair in use is checked by scripts/contrast.mjs. */
 :root {
   color-scheme: light;
   --surface: #f4f3ef;
   --card: #ffffff;
   --text: #1f1f1e;
   --muted: #5f5e58;
-  --line: #dddcd4;
+  --line: #d0cec3;
   --board: #d9c3a0;
   --cell: #efe1c6;
   --groove: #b9a07a;
@@ -14,9 +18,9 @@
   --wall-p1: #2c4a78; /* darker than player 2's, so the two differ in lightness as well as hue; 5.2:1 and 3.1:1 on --board, 1.7:1 apart */
   --wall-p2: #9c5c32;
   --wall-edge: #1f1f1e; /* outlines a player's wall: 12.8:1 on --cell, 9.6:1 on --board */
-  --p1: #1d5fb4;
-  --p2: #b23c0a;
-  --pawn-text: #ffffff; /* 6.3:1 on --p1, 5.9:1 on --p2 */
+  --p1: #14437e;
+  --p2: #b64616;
+  --pawn-text: #ffffff;
   --eval-p1: #6c9de0;
   --eval-p2: #f0b7a2;
   --accent: #0f7a54;
@@ -24,9 +28,38 @@
   --bad: #c0392b;
   --busy: #b7791f;
   --focus: #1456a8;
+  --shadow: rgb(0 0 0 / .18);
+}
+:root[data-theme="light"] { color-scheme: light; }
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --surface: #141413;
+  --card: #1f1f1d;
+  --text: #f0efec;
+  --muted: #b0afa7;
+  --line: #34332f;
+  --board: #4a3f30;
+  --cell: #6b5b45;
+  --groove: #3a3126;
+  --label: #eadfc6;
+  --wall: #f0e6d2;
+  --wall-p1: #c2d8fb; /* lighter than player 2's; 7.1:1 and 3.4:1 on --board, 2.1:1 apart */
+  --wall-p2: #d17f48;
+  --wall-edge: #f0efec; /* 5.7:1 on --cell, 8.9:1 on --board; the fills alone were 4.5:1 (player 1) and 2.1:1 (player 2) on --cell */
+  --p1: #c4ddfa;
+  --p2: #f39b6f;
+  --pawn-text: #000000;
+  --eval-p1: #4f86cf;
+  --eval-p2: #8f4a37;
+  --accent: #3ec99a;
+  --on-accent: #06281c;
+  --bad: #ff7b6b;
+  --busy: #e8b04f;
+  --focus: #7ab4ff;
+  --shadow: rgb(0 0 0 / .6);
 }
 @media (prefers-color-scheme: dark) {
-  :root {
+  :root:not([data-theme]) {
     color-scheme: dark;
     --surface: #141413;
     --card: #1f1f1d;
@@ -36,14 +69,14 @@
     --board: #4a3f30;
     --cell: #6b5b45;
     --groove: #3a3126;
-    --label: #e0d2b4;
+    --label: #eadfc6;
     --wall: #f0e6d2;
     --wall-p1: #c2d8fb; /* lighter than player 2's; 7.1:1 and 3.4:1 on --board, 2.1:1 apart */
     --wall-p2: #d17f48;
     --wall-edge: #f0efec; /* 5.7:1 on --cell, 8.9:1 on --board; the fills alone were 4.5:1 (player 1) and 2.1:1 (player 2) on --cell */
-    --p1: #7db3f5;
-    --p2: #f2905f;
-    --pawn-text: #000000; /* 9.6:1 on --p1, 8.9:1 on --p2 */
+    --p1: #c4ddfa;
+    --p2: #f39b6f;
+    --pawn-text: #000000;
     --eval-p1: #4f86cf;
     --eval-p2: #8f4a37;
     --accent: #3ec99a;
@@ -51,6 +84,7 @@
     --bad: #ff7b6b;
     --busy: #e8b04f;
     --focus: #7ab4ff;
+    --shadow: rgb(0 0 0 / .6);
   }
 }
 
@@ -145,7 +179,7 @@ select {
 }
 .eval-even { position: absolute; left: 0; right: 0; bottom: 50%; border-top: 1px dashed var(--text); opacity: .55; }
 .eval.off { visibility: hidden; }
-.eval.stale .eval-track, .eval.stale .eval-end b { opacity: .55; }
+.eval.stale .eval-track { opacity: .55; } /* only the bar dims: the printed shares stay at full contrast */
 .eval.empty .eval-track { background: var(--surface); }
 .eval.empty .eval-fill { display: none; }
 .eval-ticks { position: relative; width: 17px; }
@@ -240,6 +274,7 @@ details.card > :not(summary) + * { margin-top: 10px; }
 .review-nav { display: flex; justify-content: space-between; align-items: center; min-height: 36px; }
 button.icon { width: 36px; height: 32px; padding: 0; display: grid; place-items: center; }
 button.icon svg { width: 16px; height: 16px; fill: currentColor; stroke: currentColor; stroke-width: 2; stroke-linejoin: round; }
+button.theme-toggle svg { width: 20px; height: 20px; stroke-linecap: round; }
 .viewing { margin: 6px 0 8px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; padding: 3px 8px; min-height: 2em; border-radius: 8px; font-size: 13px; font-variant-numeric: tabular-nums; }
 .viewing.past { background: var(--surface); box-shadow: inset 3px 0 0 var(--accent); font-weight: 600; }
 .review-nav .quiet.live { visibility: hidden; }
@@ -267,7 +302,7 @@ button.icon svg { width: 16px; height: 16px; fill: currentColor; stroke: current
 .network-pop {
   position: absolute; right: 24px; top: calc(100% - 2px); z-index: 2; width: min(320px, calc(100vw - 32px));
   display: flex; flex-direction: column; gap: 6px; padding: 12px 14px;
-  background: var(--card); border: 1px solid var(--line); border-radius: 12px; box-shadow: 0 6px 20px rgb(0 0 0 / .18);
+  background: var(--card); border: 1px solid var(--line); border-radius: 12px; box-shadow: 0 6px 20px var(--shadow);
 }
 .network-pop p { margin: 0; }
 .net-dot { flex: none; width: 9px; height: 9px; border-radius: 50%; background: var(--muted); }
@@ -279,11 +314,26 @@ button.icon svg { width: 16px; height: 16px; fill: currentColor; stroke: current
 @media (max-width: 820px) {
   .topbar { padding: 10px 16px 2px; }
   .topbar-end { flex-wrap: wrap; justify-content: flex-end; }
-  .copy-note { order: 3; flex-basis: 100%; text-align: right; }
+  /* One header line: the note (still the Copy link button's description) is not shown, the chip is narrower and the buttons are tighter, so the theme button fits beside them. */
+  .copy-note { display: none; }
+  .network summary { width: 140px; }
+  .topbar-end button.quiet { padding: 4px 6px; }
+  .topbar-end .theme-toggle { width: 32px; }
   .network-pop { right: 16px; }
   .layout { grid-template-columns: minmax(0, 1fr); gap: 16px; padding: 6px 16px 24px; }
   .stage { --board-max: 100vw; }
   .status { font-size: 15px; }
+}
+
+/* Very narrow phones: the title and the theme button share the first line, the chip and Copy link the second. */
+@media (max-width: 379px) {
+  .topbar { flex-wrap: wrap; gap: 2px 8px; padding-top: 6px; }
+  .topbar-end { display: contents; }
+  .topbar h1 { flex: 1 1 0; min-width: 0; order: 0; }
+  .topbar-end .theme-toggle { order: 1; width: 28px; height: 28px; }
+  .network { order: 2; }
+  #copy { order: 3; }
+  #network-retry { order: 4; }
 }
 
 /* Board (SVG). Pointer events are resolved by geometry on the svg itself. */
@@ -320,12 +370,11 @@ button.icon svg { width: 16px; height: 16px; fill: currentColor; stroke: current
   --tip-bg: var(--text);
   --tip-text: var(--card);
   --tip-line: var(--card);
-  --tip-shadow: rgb(0 0 0 / .3);
   position: fixed; left: 0; top: 0; z-index: 30; pointer-events: none;
   width: max-content; max-width: min(19rem, calc(100vw - 16px));
   padding: 8px 10px; border-radius: 8px; border: 1px solid var(--tip-line);
   background: var(--tip-bg); color: var(--tip-text);
-  font-size: 13px; font-weight: 500; line-height: 1.4; box-shadow: 0 2px 8px var(--tip-shadow);
+  font-size: 13px; font-weight: 500; line-height: 1.4; box-shadow: 0 2px 8px var(--shadow);
 }
 /* The markers keep their 16px look; a 24px box around each is the hit area. */
 .eval-main[data-tip], .eval-end[data-tip] { cursor: help; }

@@ -5,7 +5,16 @@
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Quoridor</title>
     <meta name="description" content="Play Quoridor against a bot in your browser, on 5x5 to 11x11 boards, with no server and no account." />
+    <meta name="theme-color" content="#f4f3ef" media="(prefers-color-scheme: light)" />
+    <meta name="theme-color" content="#141413" media="(prefers-color-scheme: dark)" />
     <link rel="icon" href="data:," />
+    <script>
+      // Before the first paint: a viewer's saved theme goes on the root element, so the page never shows the other one first. With no choice the CSS follows the system.
+      try {
+        var theme = localStorage.getItem("quoridor.theme");
+        if (theme === "light" || theme === "dark") document.documentElement.setAttribute("data-theme", theme);
+      } catch (error) {}
+    </script>
     <script src="/coi-config.js"></script>
     <script src="/coi-serviceworker.js"></script>
     <script type="module" src="/src/main.ts"></script>
@@ -24,6 +33,10 @@
         </details>
         <span id="copy-note" class="hint copy-note">Players are not in the link.</span>
         <button id="copy" class="quiet" type="button" aria-describedby="copy-note">Copy link</button>
+        <button id="theme" class="icon theme-toggle" type="button" aria-label="Switch theme">
+          <svg class="sun" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="4.5"/><path d="M12 2.5v3M12 18.5v3M2.5 12h3M18.5 12h3M5.3 5.3l2.1 2.1M16.6 16.6l2.1 2.1M5.3 18.7l2.1-2.1M16.6 7.4l2.1-2.1"/></svg>
+          <svg class="moon" viewBox="0 0 24 24" aria-hidden="true" hidden><path d="M20 14.5A8.5 8.5 0 0 1 9.5 4 8.5 8.5 0 1 0 20 14.5z"/></svg>
+        </button>
       </div>
     </header>
 

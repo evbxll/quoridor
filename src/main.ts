@@ -1,7 +1,9 @@
 import "./app.css";
 import { SearchClient } from "./ai/searchClient";
 import { describeIsolation, searchThreads } from "./isolation";
+import { element } from "./ui/dom";
 import { startPage } from "./ui/page";
+import { startTheme } from "./ui/theme";
 
 const client = new SearchClient(() => new Worker(new URL("./ai/worker.ts", import.meta.url), { type: "module" }));
 client.configure({ kind: "heuristic" }).catch((error: unknown) => console.error(error));
@@ -14,6 +16,8 @@ function cacheStorage(): CacheStorage | undefined {
     return undefined;
   }
 }
+
+startTheme(element("theme", HTMLButtonElement), document, window);
 
 startPage(client, {
   env: { fetch: globalThis.fetch.bind(globalThis), caches: cacheStorage(), base: new URL(import.meta.env.BASE_URL, location.href).href },
