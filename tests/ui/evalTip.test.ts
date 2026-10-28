@@ -3,7 +3,7 @@ import { botOf, type Bot } from "../../src/ui/bots";
 import { HUMAN } from "../../src/ui/controller";
 import { barBlurb, botKind, markerBlurb, type BarInput, type MarkerInput } from "../../src/ui/evalTip";
 
-const marker = (over: Partial<MarkerInput>): MarkerInput => ({ side: "p2", seat: botOf("strong"), p1Percent: 59, move: 14, viewingPast: false, ...over });
+const marker = (over: Partial<MarkerInput>): MarkerInput => ({ side: "p2", seat: botOf("strong"), p1Percent: 59, source: { move: 14, bot: botOf("strong") }, viewingPast: false, ...over });
 const bar = (over: Partial<BarInput>): BarInput => ({ percent: 62, stale: false, unavailable: false, failed: false, ply: 14, moves: 14, simulations: 32, ...over });
 
 describe("a marker's blurb", () => {
@@ -14,7 +14,7 @@ describe("a marker's blurb", () => {
   });
 
   it("gives the named player's number first, whichever side it is", () => {
-    expect(markerBlurb(marker({ side: "p1", seat: botOf("normal"), p1Percent: 75, move: 13 }))).toBe(
+    expect(markerBlurb(marker({ side: "p1", seat: botOf("normal"), p1Percent: 75, source: { move: 13, bot: botOf("normal") } }))).toBe(
       "Player 1 (Normal, heuristic, 100 simulations) rated the position at 75% for Player 1 (25% for Player 2) when it searched for its move 13, before playing it.",
     );
   });
@@ -22,7 +22,7 @@ describe("a marker's blurb", () => {
   it("says Custom for settings no preset has, and a single simulation in the singular", () => {
     const custom: Bot = { engine: "heuristic", simulations: 1, vary: false };
     expect(botKind(custom)).toBe("Custom, heuristic, 1 simulation");
-    expect(markerBlurb(marker({ seat: custom }))).toContain("Player 2 (Custom, heuristic, 1 simulation) rated");
+    expect(markerBlurb(marker({ seat: custom, source: { move: 14, bot: custom } }))).toContain("Player 2 (Custom, heuristic, 1 simulation) rated");
   });
 
   it("handles the extremes", () => {
@@ -35,13 +35,20 @@ describe("a marker's blurb", () => {
   });
 
   it("says there is no reading yet before the bot has searched", () => {
-    expect(markerBlurb(marker({ p1Percent: null, move: null }))).toBe("No reading yet: Player 2 has not searched.");
+    expect(markerBlurb(marker({ p1Percent: null, source: null }))).toBe("No reading yet: Player 2 has not searched.");
+  });
+
+  it("names the bot that made the reading when the seat has changed hands", () => {
+    expect(markerBlurb(marker({ seat: botOf("normal") }))).toBe(
+      "Player 2's previous bot (Strong, network, 32 simulations) rated the position at 41% for Player 2 (59% for Player 1) when it searched for its move 14, before playing it. Player 2 is now a bot: Normal, heuristic, 100 simulations.",
+    );
+    expect(markerBlurb(marker({ seat: botOf("beginner"), source: { move: 8, bot: botOf("strong") } }))).toContain("Player 2's previous bot (Strong, network, 32 simulations) rated");
   });
 
   it("says a person has no reading, and credits an earlier bot's reading", () => {
-    expect(markerBlurb(marker({ seat: HUMAN, p1Percent: null, move: null }))).toBe("No reading: Player 2 is a person, not a bot.");
+    expect(markerBlurb(marker({ seat: HUMAN, p1Percent: null, source: null }))).toBe("No reading: Player 2 is a person, not a bot.");
     expect(markerBlurb(marker({ seat: HUMAN }))).toBe(
-      "Before a person took over Player 2, its bot rated the position at 41% for Player 2 (59% for Player 1) when it searched for its move 14, before playing it.",
+      "Player 2's previous bot (Strong, network, 32 simulations) rated the position at 41% for Player 2 (59% for Player 1) when it searched for its move 14, before playing it. Player 2 is now a person.",
     );
   });
 });

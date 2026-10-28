@@ -392,17 +392,35 @@ describe("GameController and the network", () => {
     expect(controller.opinions(0)).toEqual({ p1: null, p2: null });
   });
 
-  it("says which move each reading was made for, counting from 1", async () => {
+  it("says which move each reading was made for, counting from 1, and which bot made it", async () => {
     const { engine, controller } = bots();
-    expect(controller.opinionMoves()).toEqual({ p1: null, p2: null });
+    expect(controller.opinionSources()).toEqual({ p1: null, p2: null });
     controller.step();
     engine.answer("c2", 0.5);
     await settle();
     controller.step();
     engine.answer("c4", 0.5);
     await settle();
-    expect(controller.opinionMoves()).toEqual({ p1: 1, p2: 2 });
-    expect(controller.opinionMoves(1)).toEqual({ p1: 1, p2: null });
+    expect(controller.opinionSources()).toEqual({ p1: { move: 1, bot: STRONG }, p2: { move: 2, bot: NORMAL } });
+    expect(controller.opinionSources(1)).toEqual({ p1: { move: 1, bot: STRONG }, p2: null });
+  });
+
+  it("keeps naming the bot that made a reading after the seats swap or a preset changes", async () => {
+    const { engine, controller } = bots();
+    controller.step();
+    engine.answer("c2", 0.5);
+    await settle();
+    controller.step();
+    engine.answer("c4", 0.5);
+    await settle();
+    controller.setPlayers({ p1: NORMAL, p2: STRONG });
+    expect(controller.opinionSources()).toEqual({ p1: { move: 1, bot: STRONG }, p2: { move: 2, bot: NORMAL } });
+    controller.setPlayers({ p1: NORMAL, p2: BEGINNER });
+    expect(controller.opinionSources().p2).toEqual({ move: 2, bot: NORMAL });
+    controller.step();
+    engine.answer("c3", 0.5);
+    await settle();
+    expect(controller.opinionSources().p1).toEqual({ move: 3, bot: NORMAL });
   });
 
   it("forgets the readings of moves taken back", async () => {

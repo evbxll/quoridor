@@ -62,6 +62,8 @@ export function placeTip(trigger: DOMRect, size: { width: number; height: number
  * it stays in the document (hidden) so that description is always there.
  * It opens on mouse hover, keyboard focus and touch tap, and closes on
  * Escape, a tap elsewhere, and (after a short delay) pointer or focus leaving.
+ * A blurb is descriptive only: it takes no pointer events, so the pointer
+ * cannot hold it open, and a click or tap on the board under it goes through.
  */
 export class Tooltips {
   private readonly state = new TipState();
@@ -95,12 +97,10 @@ export class Tooltips {
     this.draw();
   }
 
-  private tipOf(target: EventTarget | null): { id: string; trigger: Element | null } | null {
-    if (!(target instanceof Element)) return null;
-    const trigger = target.closest("[data-tip]");
-    if (trigger !== null) return { id: trigger.getAttribute("data-tip")!, trigger };
-    const tip = target.closest('[role="tooltip"]');
-    return tip === null ? null : { id: tip.id, trigger: null };
+  /** The trigger at or around `target` and the id of the blurb it opens. Blurbs take no pointer events, so only triggers are ever hit. */
+  private tipOf(target: EventTarget | null): { id: string; trigger: Element } | null {
+    const trigger = target instanceof Element ? target.closest("[data-tip]") : null;
+    return trigger === null ? null : { id: trigger.getAttribute("data-tip")!, trigger };
   }
 
   private cancelLeave(): void {
@@ -114,7 +114,7 @@ export class Tooltips {
     if (hit === null) return;
     this.cancelLeave();
     if (over) {
-      if (hit.trigger !== null) this.anchor = hit.trigger;
+      this.anchor = hit.trigger;
       this.state.add(hit.id, "hover");
       this.draw();
     } else {
@@ -127,7 +127,7 @@ export class Tooltips {
 
   private focus(event: FocusEvent, into: boolean): void {
     const hit = this.tipOf(event.target);
-    if (hit === null || hit.trigger === null) return;
+    if (hit === null) return;
     if (into) {
       if (this.touching) return;
       this.anchor = hit.trigger;
@@ -148,7 +148,7 @@ export class Tooltips {
   private up(event: PointerEvent): void {
     if (event.pointerType === "touch") {
       const hit = this.tipOf(event.target);
-      if (hit?.trigger != null) {
+      if (hit !== null) {
         this.anchor = hit.trigger;
         this.state.tap(hit.id);
         this.draw();

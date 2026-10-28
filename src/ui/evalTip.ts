@@ -1,5 +1,5 @@
-import { type Bot, botLabel } from "./bots";
-import { type Player, type Side, HUMAN } from "./controller";
+import { type Bot, botLabel, sameBot } from "./bots";
+import { type OpinionSource, type Player, type Side, HUMAN } from "./controller";
 
 const NUMBER: Readonly<Record<Side, number>> = { p1: 1, p2: 2 };
 
@@ -22,10 +22,10 @@ export interface MarkerInput {
   readonly side: Side;
   /** Who holds the seat now. */
   readonly seat: Player;
-  /** The marker's value: player 1's share in whole percent, from the bot's last search; null before it has searched. */
+  /** Player 1's share in whole percent from the bot's last search, or null before it has searched. */
   readonly p1Percent: number | null;
-  /** The number of the move that search chose, counting from 1; null when there is no reading. */
-  readonly move: number | null;
+  /** The move that search chose (from 1) and the bot that made it, who may have left the seat since; null when there is no reading. */
+  readonly source: OpinionSource | null;
   /** The position on the board is an earlier one, so the reading is the latest up to it. */
   readonly viewingPast: boolean;
 }
@@ -33,18 +33,20 @@ export interface MarkerInput {
 /**
  * The blurb for a bot's marker. The marker's number is the bot's own value from
  * the root of its last search, which looked at the position before the move it
- * then played, so it is one ply older than the position the bar reads.
+ * then played, so it is one ply older than the position the bar reads. It names
+ * the bot that made the reading, and says so when the seat has changed hands since.
  */
 export function markerBlurb(input: MarkerInput): string {
-  const { side, seat, p1Percent, move, viewingPast } = input;
+  const { side, seat, p1Percent, source, viewingPast } = input;
   const who = `Player ${NUMBER[side]}`;
-  if (p1Percent === null || move === null) {
+  if (p1Percent === null || source === null) {
     return seat === HUMAN ? `No reading: ${who} is a person, not a bot.` : `No reading yet: ${who} has not searched.`;
   }
-  const rated = `rated the position at ${bothWays(side, p1Percent)} when it searched for its move ${move}, before playing it`;
+  const rated = `rated the position at ${bothWays(side, p1Percent)} when it searched for its move ${source.move}, before playing it`;
   const upTo = viewingPast ? " (the latest search up to the position you are viewing)" : "";
-  if (seat === HUMAN) return `Before a person took over ${who}, its bot ${rated}${upTo}.`;
-  return `${who} (${botKind(seat)}) ${rated}${upTo}.`;
+  if (seat !== HUMAN && sameBot(seat, source.bot)) return `${who} (${botKind(source.bot)}) ${rated}${upTo}.`;
+  const now = seat === HUMAN ? "a person" : `a bot: ${botKind(seat)}`;
+  return `${who}'s previous bot (${botKind(source.bot)}) ${rated}${upTo}. ${who} is now ${now}.`;
 }
 
 /** What the eval bar itself says. */

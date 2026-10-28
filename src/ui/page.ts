@@ -351,13 +351,13 @@ export function startPage(port: SearchPort, network: NetworkSource): GameControl
     element("eval-fill", HTMLElement).style.height = `${bar.percent ?? 0}%`;
     element("eval-p1", HTMLElement).textContent = bar.percent === null ? "–" : `${bar.percent}%`;
     element("eval-p2", HTMLElement).textContent = bar.percent === null ? "–" : `${100 - bar.percent}%`;
-    const moves = ticks ? controller.opinionMoves(analysis.ply) : null;
+    const sources = ticks ? controller.opinionSources(analysis.ply) : null;
     for (const side of SIDES) {
       const tick = element(`tick-${side}`, HTMLElement);
       const value = bar.ticks[side];
       tick.hidden = value === null;
       if (value !== null) tick.style.bottom = `${value}%`;
-      setTip(`tip-${side}`, markerBlurb({ side, seat: controller.players[side], p1Percent: value, move: moves?.[side] ?? null, viewingPast: analysis.viewingPast }));
+      setTip(`tip-${side}`, markerBlurb({ side, seat: controller.players[side], p1Percent: value, source: sources?.[side] ?? null, viewingPast: analysis.viewingPast }));
     }
     const status = analysis.view.status;
     setTip("tip-bar", barBlurb({ percent: bar.percent, stale: bar.stale, unavailable: status === "unavailable", failed: status === "failed", ply: analysis.ply, moves: controller.moves.length, simulations: ANALYSIS_SIMULATIONS }));

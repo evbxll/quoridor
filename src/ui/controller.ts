@@ -35,6 +35,18 @@ export type Speed = keyof typeof SPEEDS;
 /** Each bot's own reading of the position at its latest move: player 1's expected score, 0 to 1. */
 export type Opinions = Readonly<Record<Side, number | null>>;
 
+/** Where a bot's reading came from: the move its search chose (from 1) and the bot, as it was then. */
+export interface OpinionSource {
+  readonly move: number;
+  readonly bot: Bot;
+}
+
+/** A bot's value for the position it searched (player 1's share), kept with the bot that made it, since seats can change hands. */
+interface Reading {
+  readonly share: number;
+  readonly bot: Bot;
+}
+
 export const sideOf = (ply: number): Side => (ply % 2 === 0 ? "p1" : "p2");
 
 /** Where each of `moves` landed on the board, in order. */
@@ -82,7 +94,7 @@ export class GameController {
   /** Where each move so far landed, kept so the board need not replay the game to show the last one. */
   private targets: GlobalAction[] = [];
   /** Per move, the reading of the bot that made it (player 1's share), or null for a person's move. */
-  private readings: (number | null)[] = [];
+  private readings: (Reading | null)[] = [];
   private searching = false;
   private failure: string | null = null;
   private playing = false;
@@ -185,20 +197,20 @@ export class GameController {
 
   /** Each bot's reading at its latest move among the first `ply` moves (all of them by default). */
   opinions(ply = this.readings.length): Opinions {
-    return { p1: this.latestReading("p1", ply)?.share ?? null, p2: this.latestReading("p2", ply)?.share ?? null };
+    return { p1: this.latestReading("p1", ply)?.reading.share ?? null, p2: this.latestReading("p2", ply)?.reading.share ?? null };
   }
 
-  /** The number (from 1) of the move each bot's reading in `opinions` was made for. */
-  opinionMoves(ply = this.readings.length): Readonly<Record<Side, number | null>> {
-    const move = (side: Side): number | null => {
-      const reading = this.latestReading(side, ply);
-      return reading === null ? null : reading.index + 1;
+  /** The number (from 1) of the move each reading in `opinions` was made for, and the bot that made it (who held the seat then, not now). */
+  opinionSources(ply = this.readings.length): Readonly<Record<Side, OpinionSource | null>> {
+    const source = (side: Side): OpinionSource | null => {
+      const found = this.latestReading(side, ply);
+      return found === null ? null : { move: found.index + 1, bot: found.reading.bot };
     };
-    return { p1: move("p1"), p2: move("p2") };
+    return { p1: source("p1"), p2: source("p2") };
   }
 
-  private latestReading(side: Side, ply: number): { index: number; share: number } | null {
-    for (let i = Math.min(ply, this.readings.length) - 1; i >= 0; i--) if (sideOf(i) === side && this.readings[i] !== null) return { index: i, share: this.readings[i]! };
+  private latestReading(side: Side, ply: number): { index: number; reading: Reading } | null {
+    for (let i = Math.min(ply, this.readings.length) - 1; i >= 0; i--) if (sideOf(i) === side && this.readings[i] !== null) return { index: i, reading: this.readings[i]! };
     return null;
   }
 
@@ -312,7 +324,7 @@ export class GameController {
     this.advance();
   }
 
-  private record(action: PlayerAction, reading: number | null): void {
+  private record(action: PlayerAction, reading: Reading | null): void {
     this.targets.push(this.state.globalAction(action));
     this.readings.push(reading);
     this.game.play(action);
@@ -388,7 +400,7 @@ export class GameController {
       }
       if (reply === null) throw new Error("The search was cancelled");
       this.durations[mover] = { ms: this.clock() - started, bot, size: this.game.size };
-      this.record(parseMove(this.game.state, reply.move), p1ShareOf(mover, reply));
+      this.record(parseMove(this.game.state, reply.move), { share: p1ShareOf(mover, reply), bot: { ...bot } });
     } catch (error) {
       if (epoch !== this.epoch) return;
       this.failure = error instanceof Error ? error.message : String(error);
