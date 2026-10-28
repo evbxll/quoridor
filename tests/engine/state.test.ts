@@ -44,8 +44,14 @@ function perft(state: GameState, depth: number): number {
 }
 
 describe("constants", () => {
+  it("pins the hybrid wall count for every size a link can name", () => {
+    expect([5, 6, 7, 8, 9, 10, 11, 12, 13].map(wallCount)).toEqual([3, 4, 6, 8, 10, 11, 12, 13, 14]);
+    expect(GameState.initial(11).wallsLeft(0)).toBe(12);
+    expect(GameState.initial(11).wallsLeft(1)).toBe(12);
+  });
+
   it("match the design table", () => {
-    expect([5, 7, 9, 11].map(wallCount)).toEqual([3, 6, 10, 16]);
+    expect([5, 7, 9, 11].map(wallCount)).toEqual([3, 6, 10, 12]);
     expect([5, 7, 9, 11].map(maxPlies)).toEqual([63, 123, 203, 303]);
     expect([5, 7, 9, 11].map(actionCount)).toEqual([44, 84, 140, 212]);
   });
