@@ -6,7 +6,7 @@ const DEFAULT_BOT: Bot = botOf("strong");
 
 /** What a seat's controls need to know about the page when they are drawn. */
 export interface SeatContext {
-  /** The board size the next game is set up for. */
+  /** The board size of the game on the board; the seats are fitted to it. */
   readonly size: number;
   /** True when no network can play at this size, so the choices that need it are off. */
   readonly networkOff: boolean;
@@ -127,16 +127,28 @@ export class SeatControls {
       const engine = this.engine.value as EngineKind;
       edit({ ...this.bot, engine, simulations: this.wanted[engine] || this.bot.simulations }, true, true);
     });
+    // Dragging only previews the value (label, estimate); the game gets it when the slider is released or a key step is made.
     this.slider.addEventListener("input", () => {
       const step = stepsFor(this.bot.engine, this.context().size)[Number(this.slider.value)];
-      if (step !== undefined) edit({ ...this.bot, simulations: step }, false, true);
+      if (step === undefined) return;
+      this.wanted[this.bot.engine] = step;
+      this.bot = fitTo({ ...this.bot, simulations: step }, this.context().size);
+      this.draw();
     });
+    this.slider.addEventListener("change", () => onEdit(null));
     this.vary.addEventListener("change", () => edit({ ...this.bot, vary: this.vary.checked }, true, false));
   }
 
   /** Who the next game seats here. */
   get player(): Player {
     return this.human ? HUMAN : this.bot;
+  }
+
+  /** Who a game on a board of `size` seats here: the bot as last chosen, fitted to that board. */
+  playerFor(size: number): Player {
+    if (this.human) return HUMAN;
+    const wanted = this.wanted[this.bot.engine];
+    return fitTo(wanted > 0 ? { ...this.bot, simulations: wanted } : this.bot, size);
   }
 
   /** Shows `player`; a person keeps the bot last chosen for when Bot is picked again. */
@@ -163,9 +175,7 @@ export class SeatControls {
     this.bot = fitTo(wanted > 0 ? { ...this.bot, simulations: wanted } : this.bot, size);
     const bot = this.bot;
     if (this.type.value !== (this.human ? HUMAN : "bot")) this.type.value = this.human ? HUMAN : "bot";
-    // A person's seat keeps the room a bot's settings take, so switching Human and Bot moves nothing below.
-    this.settings.classList.toggle("idle", this.human);
-    this.settings.inert = this.human;
+    this.settings.hidden = this.human;
     this.preset.hidden = this.human;
     this.pick.classList.toggle("solo", this.human);
     if (this.human) return;

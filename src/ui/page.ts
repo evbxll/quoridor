@@ -2,12 +2,12 @@ import type { GlobalAction } from "../engine/actions";
 import { Game } from "../engine/game";
 import type { GameState } from "../engine/state";
 import { Analysis, replay } from "./analysis";
-import { botLabel, botOf, capFor, fitTo, TIME_SOURCES } from "./bots";
+import { botLabel, botOf, capFor, TIME_SOURCES } from "./bots";
 import { describeBoard, renderBoard, wallOwners } from "./board";
 import { closePopoverOnEscapeOrOutside, element, onPress, setEnabled } from "./dom";
 import { ModelManager, type ModelState } from "../model/manager";
 import type { ModelEnv } from "../model/store";
-import { GameController, HUMAN, isOfferedSize, type Player, type Players, samePlayer, type SearchPort, type Side, sideOf, type Speed } from "./controller";
+import { GameController, HUMAN, isOfferedSize, type Players, samePlayer, type SearchPort, type Side, sideOf, type Speed } from "./controller";
 import { evalBar } from "./evalBar";
 import { boardSpan, cellAt, PAD, wallAt } from "./geometry";
 import { WallPreview } from "./pointer";
@@ -106,6 +106,15 @@ export function startPage(port: SearchPort, network: NetworkSource): GameControl
   let seatsChosen = false;
   /** The game whose end was last announced, so a finished game of two bots is announced once. */
   let announcedEnd = "";
+  /** The status line is not read aloud for a moment after a seat change, which announces itself; it is polite again after. */
+  let quietStatus = false;
+  const quietForSeatChange = (): void => {
+    quietStatus = true;
+    setTimeout(() => {
+      quietStatus = false;
+      render();
+    }, 300);
+  };
 
   const announce = (text: string): void => {
     live.textContent = text === live.textContent ? `${text} ` : text;
@@ -143,20 +152,20 @@ export function startPage(port: SearchPort, network: NetworkSource): GameControl
 
   const seatContext = (side: Side) => (): SeatContext => {
     const state = modelState();
-    return { size: Number(sizeSelect.value), networkOff: state.status === "unavailable", model: state.status === "ready" ? state.model : null, moveTime: controller.moveTime(side) };
+    return { size: controller.size, networkOff: state.status === "unavailable", model: state.status === "ready" ? state.model : null, moveTime: controller.moveTime(side) };
   };
   /** A change to one seat's controls reaches the game at once; the board size alone waits for New game. */
   const seatEdited = (side: Side) => (announcement: string | null): void => {
     seatsChosen = true;
     const hadHuman = controller.hasHuman;
-    const seat = controls[side].player;
-    controller.setPlayers({ ...controller.players, [side]: fitted(seat) });
+    // The sentence below says it; the status line stays quiet for this change, so a toggle is read once.
+    quietForSeatChange();
+    controller.setPlayers({ ...controller.players, [side]: controls[side].player });
     render();
     if (hadHuman !== controller.hasHuman) announce(controller.hasHuman ? `${announcement ?? ""} Undo and How to move are shown; Start is hidden.`.trim() : "Both players are bots: press Start to watch.");
     else if (announcement !== null) announce(announcement);
   };
   const controls = { p1: new SeatControls("p1", seatContext("p1"), seatEdited("p1")), p2: new SeatControls("p2", seatContext("p2"), seatEdited("p2")) };
-  const fitted = (seat: Player): Player => (seat === HUMAN ? seat : fitTo(seat, controller.size));
   const chosenPlayers = (): Players => ({ p1: controls.p1.player, p2: controls.p2.player });
   const showPlayers = (players: Players): void => {
     for (const side of SIDES) controls[side].set(players[side]);
@@ -248,7 +257,7 @@ export function startPage(port: SearchPort, network: NetworkSource): GameControl
     const text = statusText(controller, describeNetwork(modelState(), controller.size).short);
     if (statusLine.textContent !== text) statusLine.textContent = text;
     // Two bots playing on change the line with every move; keep it quiet, also after the end, and say the end of the game once through #live.
-    statusLine.setAttribute("aria-live", statusIsMuted(controller) ? "off" : "polite");
+    statusLine.setAttribute("aria-live", statusIsMuted(controller) || quietStatus ? "off" : "polite");
     if (!controller.hasHuman && controller.result !== null && announcedEnd !== controller.hash) {
       announcedEnd = controller.hash;
       announce(text);
@@ -292,11 +301,8 @@ export function startPage(port: SearchPort, network: NetworkSource): GameControl
 
   function renderControls(): void {
     const shown = controlsNow();
-    for (const [id, on] of [["bot-controls", shown.botControls], ["person-controls", !shown.botControls]] as const) {
-      const group = element(id, HTMLElement);
-      group.classList.toggle("off", !on);
-      group.inert = !on;
-    }
+    element("bot-controls", HTMLElement).hidden = !shown.botControls;
+    element("person-controls", HTMLElement).hidden = !shown.undo;
     element("how-to-move", HTMLElement).hidden = !shown.howToMove;
     const published = shown.analysis;
     // Hidden by visibility, not removed, so the status line below does not move.
@@ -308,10 +314,13 @@ export function startPage(port: SearchPort, network: NetworkSource): GameControl
     const pending = Number(sizeSelect.value) !== controller.size;
     newButton.classList.toggle("pending", pending);
     newButton.title = pending ? "The board size you chose starts when you press New game" : "";
+    toggleButton.classList.toggle("blocked", shown.startBlocked);
     toggleButton.textContent = shown.startBlocked ? "Game over: press New game" : controller.running ? "Pause" : controller.moves.length > 0 ? "Resume" : "Start";
     setEnabled(toggleButton, !shown.startBlocked);
     setEnabled(stepButton, controller.canStep);
     setEnabled(undoButton, controller.canUndo);
+    // The row is about to go; keep the keyboard on the page instead of dropping it to the top.
+    if (controller.error === null && document.activeElement === retryButton) statusLine.focus();
     element("retry-row", HTMLElement).hidden = controller.error === null;
   }
 
@@ -552,7 +561,7 @@ export function startPage(port: SearchPort, network: NetworkSource): GameControl
     const size = Number(sizeSelect.value);
     // Before the game starts, so a bot that moves first does not search with another size's network.
     controller.setNetworkReady(models.state(size).status === "ready");
-    controller.newGame(size, chosenPlayers());
+    controller.newGame(size, { p1: controls.p1.playerFor(size), p2: controls.p2.playerFor(size) });
     networkChanged();
     void models.select(controller.size);
   }
@@ -563,7 +572,7 @@ export function startPage(port: SearchPort, network: NetworkSource): GameControl
       const game = Game.fromHash(location.hash);
       // Before anything changes: a link may name a size the engine reads and the site does not offer.
       if (!isOfferedSize(game.size)) throw new RangeError(`The site has no ${game.size}x${game.size} board`);
-      const chosen = chosenPlayers();
+      const chosen: Players = { p1: controls.p1.playerFor(game.size), p2: controls.p2.playerFor(game.size) };
       const bot = chosen.p1 !== HUMAN ? chosen.p1 : chosen.p2 !== HUMAN ? chosen.p2 : DEFAULT_PLAYERS.p2;
       // The person plays the side to move, or player 1 if the game is over.
       const human: Side = game.result === null && !game.state.p1Turn ? "p2" : "p1";
@@ -571,9 +580,8 @@ export function startPage(port: SearchPort, network: NetworkSource): GameControl
       analysis.reset();
       shownPercent = null;
       controller.setNetworkReady(models.state(game.size).status === "ready");
-      // The bot in the form was fitted to the board size chosen there, which may differ from the link's.
-      const fitted = bot === HUMAN ? bot : fitTo(bot, game.size);
-      controller.load(game, human === "p1" ? { p1: HUMAN, p2: fitted } : { p1: fitted, p2: HUMAN });
+      // The bot is fitted to the link's board size.
+      controller.load(game, human === "p1" ? { p1: HUMAN, p2: bot } : { p1: bot, p2: HUMAN });
       sizeSelect.value = String(controller.size);
       showPlayers(controller.players);
       seatsChosen = true;
@@ -590,22 +598,22 @@ export function startPage(port: SearchPort, network: NetworkSource): GameControl
 
   newButton.addEventListener("click", newGame);
   sizeSelect.addEventListener("change", () => {
-    const before = chosenPlayers();
     render();
     const size = Number(sizeSelect.value);
     const lowered = SIDES.flatMap((side) => {
-      const was = before[side];
-      const now = controls[side].player;
+      const was = controls[side].player;
+      const now = controls[side].playerFor(size);
       return was !== HUMAN && now !== HUMAN && now.simulations < was.simulations ? [`player ${side === "p1" ? 1 : 2} to ${now.simulations}`] : [];
     });
-    const limit = lowered.length === 0 ? "" : ` Limit ${capFor("network", size)} on ${size} × ${size}: simulations lowered, ${lowered.join(" and ")}.`;
+    const limit = lowered.length === 0 ? "" : ` Limit ${capFor("network", size)} on ${size} × ${size}: simulations will be lowered, ${lowered.join(" and ")}.`;
     announce(`Board size chosen. It applies when you press New game.${limit}`);
   });
   element("swap", HTMLButtonElement).addEventListener("click", () => {
     const { p1, p2 } = chosenPlayers();
     showPlayers({ p1: p2, p2: p1 });
     seatsChosen = true;
-    controller.setPlayers({ p1: fitted(p2), p2: fitted(p1) });
+    quietForSeatChange();
+    controller.setPlayers({ p1: p2, p2: p1 });
     render();
     announce("Sides swapped.");
   });

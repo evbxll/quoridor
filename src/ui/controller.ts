@@ -213,11 +213,14 @@ export class GameController {
    */
   setPlayers(players: Players): void {
     const hadHuman = this.hasHuman;
-    if (!samePlayer(players[this.mover], this.seats[this.mover])) this.dropSearch();
+    // With two bots and no run, a search in flight is a step; if its seat changes the step is made again by the new player.
+    const stepping = this.searching && !this.playing && !hadHuman;
+    const dropped = !samePlayer(players[this.mover], this.seats[this.mover]);
+    if (dropped) this.dropSearch();
     this.seats = { ...players };
     if (hadHuman && !this.hasHuman) this.stop();
     else if (this.hasHuman) this.playing = false;
-    this.advance();
+    this.advance(stepping && dropped && !this.hasHuman);
   }
 
   /** Tells the controller whether the network can search; a bot that waited for it moves now. */

@@ -73,6 +73,8 @@ button {
 button:hover:not(:disabled):not([aria-disabled="true"]) { border-color: var(--text); }
 button[aria-disabled="true"] { opacity: .5; cursor: default; border-style: dashed; }
 button.primary { background: var(--accent); border-color: var(--accent); color: var(--on-accent); font-weight: 600; }
+/* A finished game of two bots: Start cannot be used, and says what to do, at full contrast. */
+button.primary.run.blocked { opacity: 1; background: var(--card); border-color: var(--muted); color: var(--muted); }
 button.pending { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent); }
 button.quiet { background: none; border-color: transparent; color: var(--muted); padding: 4px 8px; }
 button.quiet:hover { color: var(--text); text-decoration: underline; }
@@ -115,6 +117,8 @@ select {
 .board:focus-visible { outline: 3px solid var(--focus); outline-offset: 3px; border-radius: 10px; }
 .board:focus:not(:focus-visible) { outline: none; } /* a click focuses the board too; only keyboard focus is outlined */
 .board.can-click { cursor: pointer; }
+/* Focus lands here when Retry goes away; it is not a control, so it draws no ring. */
+.status:focus { outline: none; }
 .status { margin: 4px 0 0; width: 100%; min-height: 2.9em; max-width: 60ch; font-size: 16px; font-weight: 600; text-align: center; }
 
 /* Eval bar: player 1's share rises from the bottom (player 1's side of the board) in a
@@ -207,13 +211,6 @@ select {
 .walls b { color: var(--text); font-size: 15px; }
 .swap { align-self: center; font-size: 13px; margin: -2px 0; }
 .players .row { min-height: 36px; }
-/* A person's seat keeps the room a bot's settings take (one closed disclosure line), so switching Human and Bot moves nothing below it. */
-.bot-settings.idle { visibility: hidden; }
-.bot-settings.idle .seat-more-body { display: none; }
-/* The controls of a bot game and of a game with a person share one slot, so the card keeps its size whichever shows. */
-.actions { display: grid; }
-.actions > * { grid-area: 1 / 1; }
-.actions > .off { visibility: hidden; }
 /* Start, Pause and Resume is the main control of a bot game: large, and the same size under each label. */
 .bot-controls { display: flex; flex-direction: column; gap: 8px; margin-top: 8px; }
 .person-controls { margin-top: 8px; padding: 0 2px; align-self: start; }

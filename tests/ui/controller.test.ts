@@ -739,6 +739,20 @@ describe("changing a seat in a game under way", () => {
     expect(engine.requests[2]).toMatchObject({ engine: "network", simulations: 200 });
   });
 
+  it("makes a step again with the new settings when the mover's seat changes during it", async () => {
+    const { engine, controller } = setup(5, { p1: NORMAL, p2: NORMAL });
+    controller.step();
+    controller.setPlayers({ p1: BEGINNER, p2: NORMAL });
+    expect(engine.cancels).toBe(1);
+    expect(engine.requests[1]).toMatchObject({ simulations: 5, moves: [] });
+    engine.answer("a2");
+    await settle();
+    engine.answer("c2");
+    await settle();
+    expect(controller.moves).toEqual(["c2"]);
+    expect(controller.running).toBe(false);
+  });
+
   it("does not start a finished game of two bots", async () => {
     const engine = new FirstMoveEngine();
     const controller = new GameController(engine, () => {});
