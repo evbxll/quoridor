@@ -627,3 +627,129 @@ describe("GameController with custom bots", () => {
     expect(reopened.hash).toBe("#n=5&m=c2.c4");
   });
 });
+
+describe("changing a seat in a game under way", () => {
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it("lets a bot take over a seat of a person: it searches and moves at once", async () => {
+    const { engine, controller } = setup(5, { p1: HUMAN, p2: HUMAN });
+    controller.setPlayers({ p1: NORMAL, p2: HUMAN });
+    expect(controller.thinking).toBe(true);
+    expect(engine.requests).toHaveLength(1);
+    engine.answer("c2");
+    await settle();
+    expect(controller.moves).toEqual(["c2"]);
+    expect(controller.humanToMove).toBe(true);
+  });
+
+  it("gives the seat back to a person while the bot thinks: the search is cancelled and its late answer dropped", async () => {
+    const { engine, controller, play } = setup(5, { p1: HUMAN, p2: NORMAL });
+    play("c2");
+    expect(controller.thinking).toBe(true);
+    controller.setPlayers({ p1: HUMAN, p2: HUMAN });
+    expect(engine.cancels).toBe(1);
+    expect(controller.thinking).toBe(false);
+    expect(controller.humanToMove).toBe(true);
+    engine.answer("c4");
+    await settle();
+    expect(controller.moves).toEqual(["c2"]);
+    expect(play("c4")).toBe(true);
+  });
+
+  it("restarts the search of the bot to move when its settings change, and drops the old answer", async () => {
+    const { engine, controller, play } = setup(5, { p1: HUMAN, p2: NORMAL });
+    play("c2");
+    controller.setPlayers({ p1: HUMAN, p2: STRONG });
+    expect(engine.cancels).toBe(1);
+    expect(engine.requests).toHaveLength(2);
+    expect(engine.requests[1]).toMatchObject({ engine: "network", moves: ["c2"] });
+    // The first search answers late, with a move that must not be played.
+    engine.answer("a4");
+    await settle();
+    expect(controller.moves).toEqual(["c2"]);
+    engine.answer("c4");
+    await settle();
+    expect(controller.moves).toEqual(["c2", "c4"]);
+  });
+
+  it("waits for Start when both seats become bots", async () => {
+    const { engine, controller, play } = setup(5, { p1: HUMAN, p2: NORMAL });
+    play("c2");
+    engine.answer("c4");
+    await settle();
+    controller.setPlayers({ p1: NORMAL, p2: NORMAL });
+    expect(controller.hasHuman).toBe(false);
+    expect(controller.running).toBe(false);
+    expect(controller.thinking).toBe(false);
+    expect(controller.canStep).toBe(true);
+    expect(engine.requests).toHaveLength(1);
+    controller.start();
+    expect(engine.requests).toHaveLength(2);
+  });
+
+  it("stays paused when a bot changes its settings between two bots", () => {
+    const { engine, controller } = setup(5, { p1: NORMAL, p2: NORMAL });
+    controller.setPlayers({ p1: BEGINNER, p2: NORMAL });
+    controller.setPlayers({ p1: BEGINNER, p2: MAX });
+    expect(controller.running).toBe(false);
+    expect(engine.requests).toHaveLength(0);
+  });
+
+  it("stops the run when a person sits down, and never moves for that seat", async () => {
+    const { engine, controller } = setup(5, { p1: NORMAL, p2: NORMAL });
+    controller.start();
+    engine.answer("c2");
+    await settle();
+    // Player 2 is to move (after the pause) and becomes a person.
+    controller.setPlayers({ p1: NORMAL, p2: HUMAN });
+    expect(controller.running).toBe(false);
+    expect(controller.thinking).toBe(false);
+    expect(controller.humanToMove).toBe(true);
+    expect(engine.requests).toHaveLength(1);
+  });
+
+  it("lets the bot to move finish when the other seat becomes a person, then waits for the person", async () => {
+    const { engine, controller } = setup(5, { p1: NORMAL, p2: NORMAL });
+    controller.start();
+    expect(controller.thinking).toBe(true);
+    controller.setPlayers({ p1: NORMAL, p2: HUMAN });
+    expect(controller.running).toBe(false);
+    expect(engine.cancels).toBe(0);
+    engine.answer("c2");
+    await settle();
+    expect(controller.moves).toEqual(["c2"]);
+    expect(controller.humanToMove).toBe(true);
+    expect(engine.requests).toHaveLength(1);
+  });
+
+  it("keeps a running game of two bots going with new settings from the next move", async () => {
+    vi.useFakeTimers();
+    const { engine, controller } = setup(5, { p1: NORMAL, p2: NORMAL });
+    controller.start();
+    engine.answer("c2");
+    await vi.advanceTimersByTimeAsync(0);
+    // Player 2 is to move after the pause; player 1's change must wait for its own turn.
+    controller.setPlayers({ p1: MAX, p2: NORMAL });
+    expect(controller.running).toBe(true);
+    await vi.advanceTimersByTimeAsync(SPEEDS.normal);
+    engine.answer("c4");
+    await vi.advanceTimersByTimeAsync(SPEEDS.normal);
+    expect(engine.requests[2]).toMatchObject({ engine: "network", simulations: 200 });
+  });
+
+  it("does not start a finished game of two bots", async () => {
+    const engine = new FirstMoveEngine();
+    const controller = new GameController(engine, () => {});
+    controller.newGame(5, { p1: BEGINNER, p2: NORMAL });
+    controller.setSpeed("instant");
+    controller.start();
+    while (controller.running) await settle();
+    const moves = controller.moves.length;
+    controller.setPlayers({ p1: NORMAL, p2: NORMAL });
+    controller.start();
+    expect(controller.running).toBe(false);
+    expect(controller.moves).toHaveLength(moves);
+  });
+});

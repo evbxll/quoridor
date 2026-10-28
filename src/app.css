@@ -207,8 +207,16 @@ select {
 .walls b { color: var(--text); font-size: 15px; }
 .swap { align-self: center; font-size: 13px; margin: -2px 0; }
 .players .row { min-height: 36px; }
+/* A person's seat keeps the room a bot's settings take (one closed disclosure line), so switching Human and Bot moves nothing below it. */
+.bot-settings.idle { visibility: hidden; }
+.bot-settings.idle .seat-more-body { display: none; }
+/* The controls of a bot game and of a game with a person share one slot, so the card keeps its size whichever shows. */
+.actions { display: grid; }
+.actions > * { grid-area: 1 / 1; }
+.actions > .off { visibility: hidden; }
 /* Start, Pause and Resume is the main control of a bot game: large, and the same size under each label. */
 .bot-controls { display: flex; flex-direction: column; gap: 8px; margin-top: 8px; }
+.person-controls { margin-top: 8px; padding: 0 2px; align-self: start; }
 .run { width: 100%; padding: 12px 14px; font-size: 18px; }
 .players .row { margin-top: 8px; padding: 0 2px; }
 

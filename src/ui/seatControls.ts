@@ -30,10 +30,10 @@ function setText(target: HTMLElement, text: string): void {
 
 /**
  * The controls of one seat: Human or Bot, and for a bot its preset, engine,
- * stepped simulations, "Vary moves", the limit and the time estimate. They
- * hold the settings the next game starts with; the page reads them with
- * `player`. `onEdit` is called after each change, with a sentence to announce
- * or null when the control already announces itself (the slider).
+ * stepped simulations, "Vary moves", the limit and the time estimate. The page
+ * reads the seat with `player`. `onEdit` is called after each change, with a
+ * sentence to announce or null when the control already announces itself (the
+ * slider); the page applies the change to the game at once.
  */
 export class SeatControls {
   private human = true;
@@ -151,7 +151,7 @@ export class SeatControls {
 
   /** What the seat holds, in words, for an announcement. */
   describe(): string {
-    return `Player ${this.side === "p1" ? 1 : 2}: ${this.human ? "a person" : `${botLabel(this.bot)}, ${botSummary(this.bot)}`}. It applies when you press New game.`;
+    return `Player ${this.side === "p1" ? 1 : 2}: ${this.human ? "a person" : `${botLabel(this.bot)}, ${botSummary(this.bot)}`}.`;
   }
 
   /** Brings every control in line with the settings and the page: caps for the board size, choices that need the network, the estimate. */
@@ -163,7 +163,9 @@ export class SeatControls {
     this.bot = fitTo(wanted > 0 ? { ...this.bot, simulations: wanted } : this.bot, size);
     const bot = this.bot;
     if (this.type.value !== (this.human ? HUMAN : "bot")) this.type.value = this.human ? HUMAN : "bot";
-    this.settings.hidden = this.human;
+    // A person's seat keeps the room a bot's settings take, so switching Human and Bot moves nothing below.
+    this.settings.classList.toggle("idle", this.human);
+    this.settings.inert = this.human;
     this.preset.hidden = this.human;
     this.pick.classList.toggle("solo", this.human);
     if (this.human) return;

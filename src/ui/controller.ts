@@ -205,15 +205,18 @@ export class GameController {
   }
 
   /**
-   * Changes who plays in the game under way. A search for a side whose player
-   * changed is dropped and made again by the new one. When the last person
-   * leaves, the two bots wait for `start`.
+   * Changes who plays in the game under way, at once. A search for the side to
+   * move is dropped (its late answer ignored) when that seat's player changed,
+   * and made again by the new one; a bot that gave its seat to a person never
+   * moves. When the last person leaves, the two bots wait for `start`; when a
+   * person joins, the run of two bots ends.
    */
   setPlayers(players: Players): void {
     const hadHuman = this.hasHuman;
     if (!samePlayer(players[this.mover], this.seats[this.mover])) this.dropSearch();
     this.seats = { ...players };
     if (hadHuman && !this.hasHuman) this.stop();
+    else if (this.hasHuman) this.playing = false;
     this.advance();
   }
 

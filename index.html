@@ -44,7 +44,7 @@
           </div>
           <svg id="board" class="board" tabindex="0" role="application" aria-describedby="board-help"></svg>
         </div>
-        <label id="eval-toggle" class="eval-toggle" hidden><input id="show-eval" type="checkbox" checked /> Show evaluation</label>
+        <label id="eval-toggle" class="eval-toggle off"><input id="show-eval" type="checkbox" checked /> Show evaluation</label>
         <p id="status" class="status" role="status"></p>
       </section>
 
@@ -70,7 +70,7 @@
                 <span id="walls-p2" class="walls"></span>
               </div>
               <select id="player-p2" class="player"></select>
-              <div id="bot-p2" class="bot-settings" role="group" aria-label="Player 2 bot settings" hidden></div>
+              <div id="bot-p2" class="bot-settings idle" role="group" aria-label="Player 2 bot settings"></div>
               <p id="note-p2" class="seat-note"></p>
             </div>
           </div>
@@ -83,27 +83,31 @@
                 <span id="walls-p1" class="walls"></span>
               </div>
               <select id="player-p1" class="player"></select>
-              <div id="bot-p1" class="bot-settings" role="group" aria-label="Player 1 bot settings" hidden></div>
+              <div id="bot-p1" class="bot-settings idle" role="group" aria-label="Player 1 bot settings"></div>
               <p id="note-p1" class="seat-note"></p>
             </div>
           </div>
-          <div id="bot-controls" class="bot-controls" role="group" aria-label="Bot game controls">
-            <button id="toggle" class="primary run" type="button">Start</button>
-            <div class="row">
-              <button id="step" type="button">Step</button>
-              <label class="inline">Speed
-                <select id="speed">
-                  <option value="slow">Slow</option>
-                  <option value="normal" selected>Normal</option>
-                  <option value="fast">Fast</option>
-                  <option value="instant">Instant</option>
-                </select>
-              </label>
+          <div class="actions">
+            <div id="bot-controls" class="bot-controls" role="group" aria-label="Bot game controls">
+              <button id="toggle" class="primary run" type="button">Start</button>
+              <div class="row">
+                <button id="step" type="button">Step</button>
+                <label class="inline">Speed
+                  <select id="speed">
+                    <option value="slow">Slow</option>
+                    <option value="normal" selected>Normal</option>
+                    <option value="fast">Fast</option>
+                    <option value="instant">Instant</option>
+                  </select>
+                </label>
+              </div>
+            </div>
+            <div id="person-controls" class="person-controls">
+              <button id="undo" type="button">Undo</button>
             </div>
           </div>
-          <div class="row">
-            <button id="undo" type="button">Undo</button>
-            <button id="retry" type="button" hidden>Retry</button>
+          <div id="retry-row" class="row" hidden>
+            <button id="retry" type="button">Retry</button>
           </div>
           <details class="sources">
             <summary>Where the times come from</summary>
@@ -139,7 +143,7 @@
           </div>
         </section>
 
-        <details class="card">
+        <details id="how-to-move" class="card" hidden>
           <summary>How to move</summary>
           <p id="board-help" class="hint">
             Click a cell to move your pawn, or a groove between cells to place a wall; on a touch screen tap a groove

@@ -7,10 +7,11 @@ import { describeBoard, renderBoard, wallOwners } from "./board";
 import { closePopoverOnEscapeOrOutside, element, onPress, setEnabled } from "./dom";
 import { ModelManager, type ModelState } from "../model/manager";
 import type { ModelEnv } from "../model/store";
-import { GameController, HUMAN, isOfferedSize, type Players, samePlayer, type SearchPort, type Side, sideOf, type Speed } from "./controller";
+import { GameController, HUMAN, isOfferedSize, type Player, type Players, samePlayer, type SearchPort, type Side, sideOf, type Speed } from "./controller";
 import { evalBar } from "./evalBar";
 import { boardSpan, cellAt, PAD, wallAt } from "./geometry";
 import { WallPreview } from "./pointer";
+import { visibleControls } from "./visibility";
 import { SeatControls, type SeatContext } from "./seatControls";
 import { botsArePlaying, moveRows, playerName, statusIsMuted, statusText } from "./status";
 import { describeTarget, findAction, moveCursor, pawnTargets } from "./targets";
@@ -131,7 +132,8 @@ export function startPage(port: SearchPort, network: NetworkSource): GameControl
   /** False once the model index is read and publishes no network at any size; true while that is not known yet. */
   const networkPublished = (): boolean => models.publishesAny !== false;
   /** The evaluation is shown: a network is published, and either two bots play or the viewer left "Show evaluation" on. */
-  const evalVisible = (): boolean => networkPublished() && (!controller.hasHuman || showEval.checked);
+  const controlsNow = () => visibleControls(controller.players, { networkPublished: networkPublished(), showEvaluation: showEval.checked, gameOver: controller.result !== null });
+  const evalVisible = (): boolean => controlsNow().evalBar;
   const analysisOpen = (): boolean => networkPublished() && analysisToggle.checked;
   // Readings cost searches: they are made only for the eval bar or the Analysis list, when one of them is showing.
   const analysis = new Analysis(controller, port, () => modelState().status === "ready", render, () => evalVisible() || analysisOpen());
@@ -143,12 +145,18 @@ export function startPage(port: SearchPort, network: NetworkSource): GameControl
     const state = modelState();
     return { size: Number(sizeSelect.value), networkOff: state.status === "unavailable", model: state.status === "ready" ? state.model : null, moveTime: controller.moveTime(side) };
   };
-  const seatEdited = (announcement: string | null): void => {
+  /** A change to one seat's controls reaches the game at once; the board size alone waits for New game. */
+  const seatEdited = (side: Side) => (announcement: string | null): void => {
     seatsChosen = true;
+    const hadHuman = controller.hasHuman;
+    const seat = controls[side].player;
+    controller.setPlayers({ ...controller.players, [side]: fitted(seat) });
     render();
-    if (announcement !== null) announce(announcement);
+    if (hadHuman !== controller.hasHuman) announce(controller.hasHuman ? `${announcement ?? ""} Undo and How to move are shown; Start is hidden.`.trim() : "Both players are bots: press Start to watch.");
+    else if (announcement !== null) announce(announcement);
   };
-  const controls = { p1: new SeatControls("p1", seatContext("p1"), seatEdited), p2: new SeatControls("p2", seatContext("p2"), seatEdited) };
+  const controls = { p1: new SeatControls("p1", seatContext("p1"), seatEdited("p1")), p2: new SeatControls("p2", seatContext("p2"), seatEdited("p2")) };
+  const fitted = (seat: Player): Player => (seat === HUMAN ? seat : fitTo(seat, controller.size));
   const chosenPlayers = (): Players => ({ p1: controls.p1.player, p2: controls.p2.player });
   const showPlayers = (players: Players): void => {
     for (const side of SIDES) controls[side].set(players[side]);
@@ -283,25 +291,28 @@ export function startPage(port: SearchPort, network: NetworkSource): GameControl
   }
 
   function renderControls(): void {
-    const bots = !controller.hasHuman;
-    element("bot-controls", HTMLElement).hidden = !bots;
-    const published = networkPublished();
-    const evalToggle = element("eval-toggle", HTMLElement);
-    evalToggle.hidden = bots;
-    evalToggle.classList.toggle("off", !published); // keeps its row, so the status line below does not move
+    const shown = controlsNow();
+    for (const [id, on] of [["bot-controls", shown.botControls], ["person-controls", !shown.botControls]] as const) {
+      const group = element(id, HTMLElement);
+      group.classList.toggle("off", !on);
+      group.inert = !on;
+    }
+    element("how-to-move", HTMLElement).hidden = !shown.howToMove;
+    const published = shown.analysis;
+    // Hidden by visibility, not removed, so the status line below does not move.
+    element("eval-toggle", HTMLElement).classList.toggle("off", !shown.evaluationToggle);
     // Without a network there is nothing to analyse; the note takes the checkbox's place, so the card does not change size.
     element("analysis-label", HTMLElement).hidden = !published;
     element("analysis-off", HTMLElement).hidden = published;
-    // Choices of board size and players wait for New game; the button says so while they differ from the game on the board.
-    const pending = Number(sizeSelect.value) !== controller.size || SIDES.some((side) => !samePlayer(controls[side].player, controller.players[side]));
+    // The board size waits for New game; the button says so while it differs from the game on the board.
+    const pending = Number(sizeSelect.value) !== controller.size;
     newButton.classList.toggle("pending", pending);
-    newButton.title = pending ? "Your choices of board size and players start when you press New game" : "";
-    toggleButton.textContent = controller.running ? "Pause" : controller.moves.length > 0 && controller.result === null ? "Resume" : "Start";
-    setEnabled(toggleButton, controller.running || controller.result === null);
+    newButton.title = pending ? "The board size you chose starts when you press New game" : "";
+    toggleButton.textContent = shown.startBlocked ? "Game over: press New game" : controller.running ? "Pause" : controller.moves.length > 0 ? "Resume" : "Start";
+    setEnabled(toggleButton, !shown.startBlocked);
     setEnabled(stepButton, controller.canStep);
-    undoButton.hidden = bots;
     setEnabled(undoButton, controller.canUndo);
-    retryButton.hidden = controller.error === null;
+    element("retry-row", HTMLElement).hidden = controller.error === null;
   }
 
   function renderEval(): void {
@@ -594,8 +605,9 @@ export function startPage(port: SearchPort, network: NetworkSource): GameControl
     const { p1, p2 } = chosenPlayers();
     showPlayers({ p1: p2, p2: p1 });
     seatsChosen = true;
+    controller.setPlayers({ p1: fitted(p2), p2: fitted(p1) });
     render();
-    announce("Sides swapped. They apply when you press New game.");
+    announce("Sides swapped.");
   });
   showEval.addEventListener("change", () => {
     saveShowEval(showEval.checked);
