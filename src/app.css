@@ -312,3 +312,26 @@ button.icon svg { width: 16px; height: 16px; fill: currentColor; stroke: current
 @media (prefers-reduced-motion: reduce) {
   * { transition: none !important; animation: none !important; scroll-behavior: auto !important; }
 }
+
+/* Eval bar hover blurbs. Colours come from the theme's tokens, so the blurb follows whichever theme is active:
+   --card on --text is light on dark in the light theme and dark on light in the dark one, well above 4.5:1 in both.
+   The blurbs are fixed, out of the page's flow, so opening one moves nothing. */
+.tip {
+  --tip-bg: var(--text);
+  --tip-text: var(--card);
+  --tip-line: var(--card);
+  --tip-shadow: rgb(0 0 0 / .3);
+  position: fixed; left: 0; top: 0; z-index: 30;
+  width: max-content; max-width: min(19rem, calc(100vw - 16px));
+  padding: 8px 10px; border-radius: 8px; border: 1px solid var(--tip-line);
+  background: var(--tip-bg); color: var(--tip-text);
+  font-size: 13px; font-weight: 500; line-height: 1.4; box-shadow: 0 2px 8px var(--tip-shadow);
+}
+/* The markers keep their 16px look; a 24px box around each is the hit area. */
+.eval-main[data-tip], .eval-end[data-tip] { cursor: help; }
+.tick, .tick.p1, .tick.p2 { background: none; }
+.tick { width: 24px; height: 24px; right: -3px; padding: 0 7px 0 4px; clip-path: none; cursor: help; }
+.eval-ticks.right .tick { right: auto; left: -3px; padding: 0 4px 0 7px; clip-path: none; }
+.tick::before { content: ""; position: absolute; inset: 4px; z-index: -1; background: var(--p1); clip-path: polygon(0 0, 65% 0, 100% 50%, 65% 100%, 0 100%); }
+.tick.p2::before { background: var(--p2); }
+.eval-ticks.right .tick::before { clip-path: polygon(35% 0, 100% 0, 100% 100%, 35% 100%, 0 50%); }

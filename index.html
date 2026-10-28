@@ -30,17 +30,17 @@
     <main class="layout">
       <section class="stage" aria-label="Game">
         <div class="board-row">
-          <div id="eval" class="eval" role="meter" aria-label="Chance that player 1 wins, by the network" aria-valuemin="0" aria-valuemax="100">
-            <div class="eval-end" aria-hidden="true"><b id="eval-p2">–</b><span>P2</span></div>
-            <div class="eval-main">
-              <div class="eval-ticks"><b id="tick-p1" class="tick p1" hidden>1</b></div>
-              <div class="eval-track">
+          <div id="eval" class="eval">
+            <div class="eval-end" data-tip="tip-bar" aria-hidden="true"><b id="eval-p2">–</b><span>P2</span></div>
+            <div class="eval-main" data-tip="tip-bar">
+              <div class="eval-ticks"><b id="tick-p1" class="tick p1" data-tip="tip-p1" tabindex="0" role="img" aria-label="Player 1's own estimate" aria-describedby="tip-p1" hidden>1</b></div>
+              <div id="eval-meter" class="eval-track" data-tip="tip-bar" tabindex="0" role="meter" aria-label="Chance that player 1 wins, by the network" aria-valuemin="0" aria-valuemax="100" aria-describedby="tip-bar">
                 <span id="eval-fill" class="eval-fill"></span>
                 <span class="eval-even"></span>
               </div>
-              <div class="eval-ticks right"><b id="tick-p2" class="tick p2" hidden>2</b></div>
+              <div class="eval-ticks right"><b id="tick-p2" class="tick p2" data-tip="tip-p2" tabindex="0" role="img" aria-label="Player 2's own estimate" aria-describedby="tip-p2" hidden>2</b></div>
             </div>
-            <div class="eval-end" aria-hidden="true"><span>P1</span><b id="eval-p1">–</b></div>
+            <div class="eval-end" data-tip="tip-bar" aria-hidden="true"><span>P1</span><b id="eval-p1">–</b></div>
           </div>
           <svg id="board" class="board" tabindex="0" role="application" aria-describedby="board-help"></svg>
         </div>
@@ -152,6 +152,10 @@
         </details>
       </aside>
     </main>
+
+    <div id="tip-bar" class="tip" role="tooltip" hidden></div>
+    <div id="tip-p1" class="tip" role="tooltip" hidden></div>
+    <div id="tip-p2" class="tip" role="tooltip" hidden></div>
 
     <div id="live" class="sr-only" role="status" aria-live="polite"></div>
   </body>

@@ -1,7 +1,7 @@
 import type { GlobalAction } from "../engine/actions";
 import { Game } from "../engine/game";
 import type { GameState } from "../engine/state";
-import { Analysis, replay } from "./analysis";
+import { ANALYSIS_SIMULATIONS, Analysis, replay } from "./analysis";
 import { botLabel, botOf, capFor, TIME_SOURCES } from "./bots";
 import { describeBoard, renderBoard, wallOwners } from "./board";
 import { closePopoverOnEscapeOrOutside, element, onPress, setEnabled } from "./dom";
@@ -9,8 +9,10 @@ import { ModelManager, type ModelState } from "../model/manager";
 import type { ModelEnv } from "../model/store";
 import { GameController, HUMAN, isOfferedSize, type Players, samePlayer, type SearchPort, type Side, sideOf, type Speed } from "./controller";
 import { evalBar } from "./evalBar";
+import { barBlurb, markerBlurb } from "./evalTip";
 import { boardSpan, cellAt, PAD, wallAt } from "./geometry";
 import { WallPreview } from "./pointer";
+import { Tooltips } from "./tooltip";
 import { visibleControls } from "./visibility";
 import { SeatControls, type SeatContext } from "./seatControls";
 import { botsArePlaying, moveRows, playerName, statusIsMuted, statusText } from "./status";
@@ -94,6 +96,7 @@ export function startPage(port: SearchPort, network: NetworkSource): GameControl
   const newButton = element("new", HTMLButtonElement);
   showEval.checked = savedShowEval();
   closePopoverOnEscapeOrOutside(element("network", HTMLDetailsElement), document);
+  const tooltips = new Tooltips(document);
 
   const preview = new WallPreview();
   let cursor: GlobalAction | null = null; // shown only once the keyboard is in use on the board
@@ -324,32 +327,41 @@ export function startPage(port: SearchPort, network: NetworkSource): GameControl
     element("retry-row", HTMLElement).hidden = controller.error === null;
   }
 
+  /** Sets a blurb's text; one that is open updates in place, and nothing is announced. */
+  function setTip(id: string, text: string): void {
+    const tip = element(id, HTMLElement);
+    if (tip.textContent !== text) tip.textContent = text;
+  }
+
   function renderEval(): void {
-    const meter = element("eval", HTMLElement);
+    const container = element("eval", HTMLElement);
+    const meter = element("eval-meter", HTMLElement);
     // A person may hide the evaluation so as not to lean on it; two bots playing always show it.
     const visible = evalVisible();
     const ticks = visible && (!controller.hasHuman || analysisToggle.checked);
     const bar = evalBar(analysis.view, shownPercent, ticks ? controller.opinions(analysis.ply) : null);
-    meter.classList.toggle("off", !visible);
-    meter.setAttribute("aria-hidden", String(!visible));
+    container.classList.toggle("off", !visible);
+    container.setAttribute("aria-hidden", String(!visible));
     if (!bar.stale) shownPercent = bar.percent;
-    meter.classList.toggle("empty", bar.percent === null);
-    meter.classList.toggle("stale", bar.stale);
+    container.classList.toggle("empty", bar.percent === null);
+    container.classList.toggle("stale", bar.stale);
     if (bar.percent === null) meter.removeAttribute("aria-valuenow");
     else meter.setAttribute("aria-valuenow", String(bar.percent));
     meter.setAttribute("aria-valuetext", bar.label);
     element("eval-fill", HTMLElement).style.height = `${bar.percent ?? 0}%`;
     element("eval-p1", HTMLElement).textContent = bar.percent === null ? "–" : `${bar.percent}%`;
     element("eval-p2", HTMLElement).textContent = bar.percent === null ? "–" : `${100 - bar.percent}%`;
+    const moves = ticks ? controller.opinionMoves(analysis.ply) : null;
     for (const side of SIDES) {
       const tick = element(`tick-${side}`, HTMLElement);
       const value = bar.ticks[side];
       tick.hidden = value === null;
-      if (value !== null) {
-        tick.style.bottom = `${value}%`;
-        tick.title = `${playerName(controller.players, side)}'s own estimate: player 1 ${value}%`;
-      }
+      if (value !== null) tick.style.bottom = `${value}%`;
+      setTip(`tip-${side}`, markerBlurb({ side, seat: controller.players[side], p1Percent: value, move: moves?.[side] ?? null, viewingPast: analysis.viewingPast }));
     }
+    const status = analysis.view.status;
+    setTip("tip-bar", barBlurb({ percent: bar.percent, stale: bar.stale, unavailable: status === "unavailable", failed: status === "failed", ply: analysis.ply, moves: controller.moves.length, simulations: ANALYSIS_SIMULATIONS }));
+    tooltips.refresh();
   }
 
   /** Says which position is on the board: the latest, or an earlier one with the way back. Not read aloud with each change; the board's label carries it. */

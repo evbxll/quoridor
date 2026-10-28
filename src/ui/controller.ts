@@ -185,11 +185,21 @@ export class GameController {
 
   /** Each bot's reading at its latest move among the first `ply` moves (all of them by default). */
   opinions(ply = this.readings.length): Opinions {
-    const latest = (side: Side): number | null => {
-      for (let i = Math.min(ply, this.readings.length) - 1; i >= 0; i--) if (sideOf(i) === side && this.readings[i] !== null) return this.readings[i]!;
-      return null;
+    return { p1: this.latestReading("p1", ply)?.share ?? null, p2: this.latestReading("p2", ply)?.share ?? null };
+  }
+
+  /** The number (from 1) of the move each bot's reading in `opinions` was made for. */
+  opinionMoves(ply = this.readings.length): Readonly<Record<Side, number | null>> {
+    const move = (side: Side): number | null => {
+      const reading = this.latestReading(side, ply);
+      return reading === null ? null : reading.index + 1;
     };
-    return { p1: latest("p1"), p2: latest("p2") };
+    return { p1: move("p1"), p2: move("p2") };
+  }
+
+  private latestReading(side: Side, ply: number): { index: number; share: number } | null {
+    for (let i = Math.min(ply, this.readings.length) - 1; i >= 0; i--) if (sideOf(i) === side && this.readings[i] !== null) return { index: i, share: this.readings[i]! };
+    return null;
   }
 
   /** Starts a game; a bot that moves first starts at once if a person plays. Throws for a size the site does not offer. */

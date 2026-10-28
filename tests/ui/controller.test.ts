@@ -392,6 +392,19 @@ describe("GameController and the network", () => {
     expect(controller.opinions(0)).toEqual({ p1: null, p2: null });
   });
 
+  it("says which move each reading was made for, counting from 1", async () => {
+    const { engine, controller } = bots();
+    expect(controller.opinionMoves()).toEqual({ p1: null, p2: null });
+    controller.step();
+    engine.answer("c2", 0.5);
+    await settle();
+    controller.step();
+    engine.answer("c4", 0.5);
+    await settle();
+    expect(controller.opinionMoves()).toEqual({ p1: 1, p2: 2 });
+    expect(controller.opinionMoves(1)).toEqual({ p1: 1, p2: null });
+  });
+
   it("forgets the readings of moves taken back", async () => {
     const { engine, controller, play } = setup(5, { p1: HUMAN, p2: STRONG });
     play("c2");
