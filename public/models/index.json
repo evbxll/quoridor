@@ -1,0 +1,15 @@
+{
+  "models": [
+    {
+      "id": "s9-conv-paths-g105",
+      "path": "models/s9-conv-paths-g105/model.onnx",
+      "sha256": "bf8842f19958c49f741f25f39712044ae445ea5b7014d8c62d8e2b5bd86f98fb"
+    }
+  ],
+  "bots": {
+    "5": "s9-conv-paths-g105",
+    "7": "s9-conv-paths-g105",
+    "9": "s9-conv-paths-g105",
+    "11": "s9-conv-paths-g105"
+  }
+}
