@@ -15,9 +15,12 @@
   },
   "capReasons": {
     "network": {
-      "default": "about 4 s a move on a fast desktop; weaker devices are slower.",
+      "default": "the most simulations offered.",
       "bySize": {
-        "11": "200 already take about 0.8 s a move on a fast desktop; weaker devices are slower."
+        "5": "nothing above 800 is measured; the slowest moves take about 3 s at 800.",
+        "7": "times above 200 are unmeasured here; weaker devices are slower.",
+        "9": "about 4 s a move at 800 on a fast desktop; weaker devices are slower.",
+        "11": "200 already take about 0.8 s a move on a fast desktop; 400 would be much slower."
       }
     },
     "heuristic": {
@@ -29,8 +32,9 @@
     "engine": "heuristic",
     "simulations": 100,
     "size": 9,
-    "holds": "This is Normal, the Evan bot: about even with its author.",
-    "otherwise": "Normal's calibration to a human average holds only at 100 simulations on 9 × 9."
+    "holds": "Normal, the Evan bot: about even with its author.",
+    "otherwise": "Normal's calibration to a human average holds only at 100 simulations on 9 × 9.",
+    "network": "Strong and Max are this network at 32 and 200 simulations."
   },
   "times": {
     "device": "a fast desktop",
@@ -38,15 +42,15 @@
     "network": {
       "model": "s9-conv-paths-g105",
       "bySize": {
-        "5": [[32, 50], [200, 185], [400, 417], [800, 508]],
-        "7": [[32, 98], [200, 425]],
-        "9": [[32, 155], [200, 635], [400, 2377], [800, 3865]],
-        "11": [[32, 200], [200, 848]]
+        "5": [[32, 50, 74], [200, 185, 559], [400, 417, 2047], [800, 508, 2813]],
+        "7": [[32, 98, 156], [200, 425, 923]],
+        "9": [[32, 155, 213], [200, 635, 1234], [400, 2377, 3538], [800, 3865, 5795]],
+        "11": [[32, 200, 289], [200, 848, 1720]]
       }
     },
     "heuristic": {
-      "source": "Derived from PR #177's Normal (100 simulations) median ms per move, assuming time grows in proportion to simulations; not measured at other budgets",
-      "msAt100": { "5": 1, "7": 2, "9": 11, "11": 24 }
+      "source": "Derived from PR #177's Normal (100 simulations) median ms per move (9x9: 8, 14, 17 and 15 over four runs, taken as 14), assuming time grows in proportion to simulations; not measured at other budgets",
+      "msAt100": { "5": 1, "7": 2, "9": 14, "11": 24 }
     }
   }
 }

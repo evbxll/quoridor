@@ -2,7 +2,7 @@ import type { GlobalAction } from "../engine/actions";
 import { Game } from "../engine/game";
 import type { GameState } from "../engine/state";
 import { Analysis, replay } from "./analysis";
-import { botLabel, botOf, botSummary, TIME_SOURCES } from "./bots";
+import { botLabel, botOf, capFor, fitTo, TIME_SOURCES } from "./bots";
 import { describeBoard, renderBoard, wallOwners } from "./board";
 import { closePopoverOnEscapeOrOutside, element, onPress, setEnabled } from "./dom";
 import { ModelManager, type ModelState } from "../model/manager";
@@ -266,10 +266,10 @@ export function startPage(port: SearchPort, network: NetworkSource): GameControl
             ? "You play this side."
             : "A person plays this side."
           : toMove && controller.thinking
-            ? `Thinking… ${botSummary(seat)}.`
+            ? "Thinking…"
             : toMove && controller.waiting
               ? `Waiting for the network: ${describeNetwork(modelState(), controller.size).short}.`
-              : `${botLabel(seat)}: ${botSummary(seat)}.`;
+              : "";
       controls[side].draw();
       const noteElement = element(`note-${side}`, HTMLElement);
       if (noteElement.textContent !== note) noteElement.textContent = note;
@@ -560,7 +560,9 @@ export function startPage(port: SearchPort, network: NetworkSource): GameControl
       analysis.reset();
       shownPercent = null;
       controller.setNetworkReady(models.state(game.size).status === "ready");
-      controller.load(game, human === "p1" ? { p1: HUMAN, p2: bot } : { p1: bot, p2: HUMAN });
+      // The bot in the form was fitted to the board size chosen there, which may differ from the link's.
+      const fitted = bot === HUMAN ? bot : fitTo(bot, game.size);
+      controller.load(game, human === "p1" ? { p1: HUMAN, p2: fitted } : { p1: fitted, p2: HUMAN });
       sizeSelect.value = String(controller.size);
       showPlayers(controller.players);
       seatsChosen = true;
@@ -577,8 +579,16 @@ export function startPage(port: SearchPort, network: NetworkSource): GameControl
 
   newButton.addEventListener("click", newGame);
   sizeSelect.addEventListener("change", () => {
+    const before = chosenPlayers();
     render();
-    announce("Board size chosen. It applies when you press New game.");
+    const size = Number(sizeSelect.value);
+    const lowered = SIDES.flatMap((side) => {
+      const was = before[side];
+      const now = controls[side].player;
+      return was !== HUMAN && now !== HUMAN && now.simulations < was.simulations ? [`player ${side === "p1" ? 1 : 2} to ${now.simulations}`] : [];
+    });
+    const limit = lowered.length === 0 ? "" : ` Limit ${capFor("network", size)} on ${size} × ${size}: simulations lowered, ${lowered.join(" and ")}.`;
+    announce(`Board size chosen. It applies when you press New game.${limit}`);
   });
   element("swap", HTMLButtonElement).addEventListener("click", () => {
     const { p1, p2 } = chosenPlayers();

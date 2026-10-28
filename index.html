@@ -22,7 +22,8 @@
             <p id="isolation" class="hint"></p>
           </div>
         </details>
-        <button id="copy" class="quiet" type="button">Copy link</button>
+        <span id="copy-note" class="hint copy-note">Players are not in the link.</span>
+        <button id="copy" class="quiet" type="button" aria-describedby="copy-note">Copy link</button>
       </div>
     </header>
 
@@ -100,14 +101,14 @@
               </label>
             </div>
           </div>
-          <details class="sources">
-            <summary>Where the times come from</summary>
-            <p id="time-sources" class="hint"></p>
-          </details>
           <div class="row">
             <button id="undo" type="button">Undo</button>
             <button id="retry" type="button" hidden>Retry</button>
           </div>
+          <details class="sources">
+            <summary>Where the times come from</summary>
+            <p id="time-sources" class="hint"></p>
+          </details>
         </section>
 
         <section class="card review" aria-labelledby="moves-title">

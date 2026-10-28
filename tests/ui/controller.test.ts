@@ -573,6 +573,12 @@ describe("GameController with custom bots", () => {
     expect(engine.requests[0]).toMatchObject({ engine: "heuristic", simulations: 5, temperature: 0 });
   });
 
+  it("caps the budget at the board size's limit even if the seat holds more (a link to a larger board)", () => {
+    const { engine, controller } = setup(11, { p1: HUMAN, p2: custom(800, false) });
+    controller.playHuman(parseMove(controller.state, "f2"));
+    expect(engine.requests[0]).toMatchObject({ engine: "network", size: 11, simulations: 400 });
+  });
+
   it("gives each seat of a bot game its own budget", async () => {
     const { engine, controller } = bots("instant", { p1: custom(8, false), p2: custom(800, false) });
     controller.step();

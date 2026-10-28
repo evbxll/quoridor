@@ -18,7 +18,8 @@ export interface Preset extends Bot {
   readonly label: string;
 }
 
-type Points = readonly (readonly [number, number])[];
+/** Measured per move: simulations, median ms, 90th percentile ms. */
+type Points = readonly (readonly [number, number, number])[];
 type PerEngine<T> = Readonly<Record<EngineKind, T>>;
 
 interface BotsData {
@@ -26,7 +27,7 @@ interface BotsData {
   readonly steps: PerEngine<readonly number[]>;
   readonly caps: PerEngine<{ readonly default: number; readonly bySize: Readonly<Record<string, number>> }>;
   readonly capReasons: PerEngine<{ readonly default: string; readonly bySize: Readonly<Record<string, string>> }>;
-  readonly calibration: { readonly engine: EngineKind; readonly simulations: number; readonly size: number; readonly holds: string; readonly otherwise: string };
+  readonly calibration: { readonly engine: EngineKind; readonly simulations: number; readonly size: number; readonly holds: string; readonly otherwise: string; readonly network: string };
   readonly times: {
     readonly device: string;
     readonly deviceDetail: string;
@@ -95,25 +96,35 @@ export function fitTo(bot: Bot, size: number): Bot {
 /** How sure a time is: measured at exactly this budget, or interpolated or derived. */
 export type EstimateKind = "measured" | "estimate";
 
+/** A time on the measured desktop: the median, the 90th percentile where measured, and how sure it is. */
+export interface Estimate {
+  readonly ms: number;
+  readonly p90: number | null;
+  readonly kind: EstimateKind;
+}
+
 /**
- * Milliseconds a move takes on the measured desktop, or null if unmeasured.
+ * What a move takes on the measured desktop, or null if unmeasured.
  * The network is looked up in the measured table: exact at a measured budget, linear between measured
  * budgets and from zero below the first, none above the last. `model` is the network that would play, if
  * known; a different one than the table's is unmeasured. The heuristic's time is derived from Normal's, in
- * proportion to simulations, so it is always an estimate.
+ * proportion to simulations, so it is always an estimate and has no 90th percentile.
  */
-export function estimateMs(bot: Bot, size: number, model: string | null = null): { ms: number; kind: EstimateKind } | null {
+export function estimateMs(bot: Bot, size: number, model: string | null = null): Estimate | null {
   if (bot.engine === "heuristic") {
     const at100 = DATA.times.heuristic.msAt100[size];
-    return at100 === undefined ? null : { ms: (at100 * bot.simulations) / 100, kind: "estimate" };
+    return at100 === undefined ? null : { ms: (at100 * bot.simulations) / 100, p90: null, kind: "estimate" };
   }
   if (model !== null && model !== MEASURED_MODEL) return null;
   const points = DATA.times.network.bySize[size];
   if (points === undefined) return null;
-  let before: readonly [number, number] = [0, 0];
+  let before: readonly [number, number, number] = [0, 0, 0];
   for (const point of points) {
-    if (bot.simulations === point[0]) return { ms: point[1], kind: "measured" };
-    if (bot.simulations < point[0]) return { ms: before[1] + ((point[1] - before[1]) * (bot.simulations - before[0])) / (point[0] - before[0]), kind: "estimate" };
+    if (bot.simulations === point[0]) return { ms: point[1], p90: point[2], kind: "measured" };
+    if (bot.simulations < point[0]) {
+      const along = (bot.simulations - before[0]) / (point[0] - before[0]);
+      return { ms: before[1] + (point[1] - before[1]) * along, p90: before[2] + (point[2] - before[2]) * along, kind: "estimate" };
+    }
     before = point;
   }
   return null;
@@ -126,17 +137,21 @@ export function formatMs(ms: number): string {
   return seconds < 10 ? `${seconds.toFixed(1)} s` : `${Math.round(seconds)} s`;
 }
 
+/** How much slower than its median the slowest tenth of moves must be for the estimate to say so. */
+const SLOW_TAIL = 2;
+
 /** The live estimate beside the simulations control: "About 0.6 s a move on a fast desktop (estimate)." */
 export function describeEstimate(bot: Bot, size: number, model: string | null = null): string {
   const found = estimateMs(bot, size, model);
   if (found === null) return `Time a move: unmeasured on ${size} × ${size}.`;
-  return `About ${formatMs(found.ms)} a move on ${MEASURED_ON} (${found.kind}).`;
+  const tail = found.p90 !== null && found.p90 > SLOW_TAIL * found.ms ? ` 1 move in 10 takes over ${formatMs(found.p90)}.` : "";
+  return `About ${formatMs(found.ms)} a move on ${MEASURED_ON} (${found.kind}).${tail}`;
 }
 
-/** What to say about Normal's calibration to a human average, for a heuristic bot on a board size; empty for a network. */
+/** What to say about Normal's calibration to a human average for a heuristic bot on a board size; for a network, which presets use it. */
 export function calibrationNote(bot: Bot, size: number): string {
   const { engine, simulations, size: calibrated, holds, otherwise } = DATA.calibration;
-  if (bot.engine !== engine) return "";
+  if (bot.engine !== engine) return DATA.calibration.network;
   return bot.simulations === simulations && size === calibrated ? holds : otherwise;
 }
 
