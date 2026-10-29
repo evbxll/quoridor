@@ -5,6 +5,10 @@ import { ANALYSIS_SIMULATIONS, Analysis, replay } from "./analysis";
 import { botLabel, botOf, capFor, modelName, setModelLabel, TIME_SOURCES } from "./bots";
 import { describeBoard, renderBoard, wallOwners } from "./board";
 import { closePopoverOnEscapeOrOutside, element, onPress, setEnabled } from "./dom";
+import { AutoControls } from "./autoControls";
+import { type AutoHost, AutoPlay } from "./autoplay";
+import { GamesCard } from "./gamesCard";
+import { GameHistory, type StorageLike } from "./history";
 import { ModelManager, type ModelState, type StartInfo } from "../model/manager";
 import type { ModelEnv } from "../model/store";
 import { GameController, HUMAN, isOfferedSize, type Players, samePlayer, type SearchPort, type Side, sideOf, type Speed } from "./controller";
@@ -52,6 +56,15 @@ function saveShowEval(on: boolean): void {
     localStorage.setItem(SHOW_EVAL_KEY, on ? "on" : "off");
   } catch {
     // The choice then lasts for this visit only.
+  }
+}
+
+/** The browser's storage, or null where it is blocked. */
+function savedStorage(): StorageLike | null {
+  try {
+    return localStorage;
+  } catch {
+    return null;
   }
 }
 
@@ -117,6 +130,8 @@ export function startPage(port: SearchPort, network: NetworkSource): GameControl
   let shownPercent: number | null = null;
   /** Whether the viewer has picked a seat, or opened a link that did: until then the seats are the site's default, which follows the network. */
   let seatsChosen = false;
+  /** The game whose end was last put in the history, so a finished game is listed once, and not one that was only opened. */
+  let recordedHash = "";
   /** The game whose end was last announced, so a finished game of two bots is announced once. */
   let announcedEnd = "";
   /** The status line is not read aloud for a moment after a seat change, which announces itself; it is polite again after. */
@@ -207,6 +222,42 @@ export function startPage(port: SearchPort, network: NetworkSource): GameControl
   const analysisOpen = (): boolean => networkPublished() && analysisToggle.checked;
   // Readings cost searches: they are made only for the eval bar or the Analysis list, when one of them is showing.
   const analysis = new Analysis(controller, port, () => modelState().status === "ready", render, () => evalVisible() || analysisOpen());
+
+  const gameLog = new GameHistory(savedStorage());
+  const games = new GamesCard(gameLog, announce, () => statusLine.focus());
+  const autoHost: AutoHost = {
+    get size() {
+      return controller.size;
+    },
+    get players() {
+      return controller.players;
+    },
+    get hasHuman() {
+      return controller.hasHuman;
+    },
+    get running() {
+      return controller.running;
+    },
+    get result() {
+      return controller.result;
+    },
+    get moves() {
+      return controller.moves;
+    },
+    load(game, players) {
+      preview.clear();
+      analysis.reset();
+      shownPercent = null;
+      showPlayers(players);
+      controller.setNetworkReady(models.state(game.size).status === "ready");
+      controller.load(game, players);
+      networkChanged();
+      void models.select(controller.size);
+    },
+    start: () => controller.start(),
+  };
+  const autoplay = new AutoPlay(autoHost, Math.random, () => render());
+  const autoControls = new AutoControls(autoplay, () => toggleButton.focus());
 
   /** A person may move: it is a person's turn, and the position on the board is the latest. */
   const canPlay = (): boolean => controller.humanToMove && !analysis.viewingPast;
@@ -345,12 +396,28 @@ export function startPage(port: SearchPort, network: NetworkSource): GameControl
     if (statusLine.textContent !== text) statusLine.textContent = text;
     // Two bots playing on change the line with every move; keep it quiet, also after the end, and say the end of the game once through #live.
     statusLine.setAttribute("aria-live", statusIsMuted(controller) || quietStatus ? "off" : "polite");
-    if (!controller.hasHuman && controller.result !== null && announcedEnd !== controller.hash) {
-      announcedEnd = controller.hash;
-      announce(text);
+    const result = controller.result;
+    if (result === null) {
+      recordedHash = "";
+      announcedEnd = "";
+    } else if (recordedHash !== controller.hash) {
+      recordedHash = controller.hash;
+      gameLog.add({ size: controller.size, p1: controller.players.p1, p2: controller.players.p2, winner: result.winner, reason: result.reason, moves: controller.moves });
     }
+    autoplay.update();
+    // The end of a game and the countdown that follows it are one sentence, read once.
+    const sentences: string[] = [];
+    if (!controller.hasHuman && result !== null && announcedEnd !== controller.hash) {
+      announcedEnd = controller.hash;
+      sentences.push(text);
+    }
+    const countdown = autoplay.takeAnnouncement();
+    if (countdown !== null) sentences.push(countdown);
+    if (sentences.length > 0) announce(sentences.join(" "));
     renderSeats(state);
     renderControls();
+    games.draw();
+    autoControls.draw();
     renderMoves();
     renderEval();
     renderAnalysis();
@@ -404,7 +471,7 @@ export function startPage(port: SearchPort, network: NetworkSource): GameControl
     newButton.classList.toggle("pending", pending);
     newButton.title = pending ? "The board size you chose starts when you press New game" : "";
     toggleButton.classList.toggle("blocked", shown.startBlocked);
-    toggleButton.textContent = shown.startBlocked ? "Game over: press New game" : controller.running ? "Pause" : controller.moves.length > 0 ? "Resume" : "Start";
+    toggleButton.textContent = shown.startBlocked ? (autoplay.countdown !== null ? "Game over: next game starting" : "Game over: press New game") : controller.running ? "Pause" : controller.moves.length > 0 ? "Resume" : "Start";
     setEnabled(toggleButton, !shown.startBlocked);
     setEnabled(stepButton, controller.canStep);
     setEnabled(undoButton, controller.canUndo);
@@ -653,6 +720,7 @@ export function startPage(port: SearchPort, network: NetworkSource): GameControl
 
   /** Starts a game on the chosen board size with the chosen players. */
   function newGame(): void {
+    autoplay.interrupt();
     preview.clear();
     analysis.reset();
     shownPercent = null;
@@ -680,6 +748,9 @@ export function startPage(port: SearchPort, network: NetworkSource): GameControl
       const bot = chosen.p1 !== HUMAN ? chosen.p1 : chosen.p2 !== HUMAN ? chosen.p2 : DEFAULT_PLAYERS.p2;
       // The person plays the side to move, or player 1 if the game is over.
       const human: Side = game.result === null && !game.state.p1Turn ? "p2" : "p1";
+      autoplay.interrupt();
+      // A game that is already over is shown, not played, so it is not listed again.
+      if (game.result !== null) recordedHash = game.toHash();
       preview.clear();
       analysis.reset();
       shownPercent = null;
@@ -725,7 +796,13 @@ export function startPage(port: SearchPort, network: NetworkSource): GameControl
     saveShowEval(showEval.checked);
     analysis.update();
   });
-  onPress(toggleButton, () => (controller.running ? controller.pause() : controller.start()));
+  onPress(toggleButton, () => {
+    if (!controller.running) autoplay.start();
+    else {
+      autoplay.pause();
+      controller.pause();
+    }
+  });
   onPress(stepButton, () => controller.step());
   speedSelect.addEventListener("change", () => controller.setSpeed(speedSelect.value as Speed));
   onPress(undoButton, () => controller.undo());

@@ -113,6 +113,18 @@
                 </select>
               </label>
             </div>
+            <div id="auto" class="auto" role="group" aria-label="Automatic games">
+              <label class="check"><input id="auto-on" type="checkbox" /> Play the next game automatically</label>
+              <div class="auto-options">
+                <label class="check"><input id="auto-swap" type="checkbox" checked /> Swap sides each game</label>
+                <label class="check"><input id="auto-opening" type="checkbox" checked /> Varied openings</label>
+              </div>
+              <p class="hint">Up to 100 games. Player 1 moves first, which is an edge, so compare bots only with sides swapped. Varied openings play 4 random pawn moves; only 35 openings exist, so they repeat. Vary moves in a bot's settings adds more variety.</p>
+              <div class="auto-status">
+                <span id="auto-line" class="auto-line"></span>
+                <button id="auto-cancel" class="off" type="button">Cancel</button>
+              </div>
+            </div>
           </div>
           <div id="person-controls" class="person-controls">
             <button id="undo" type="button">Undo</button>
@@ -151,6 +163,27 @@
             <ol id="analysis-lines" class="lines" aria-label="Best moves"></ol>
             <p id="analysis-note" class="hint"></p>
             <p class="hint">The bar beside the board is the network's reading at 32 searches. The numbered markers are each bot's own estimate from its latest move.</p>
+          </div>
+        </section>
+
+        <section id="games" class="card games" aria-labelledby="games-title" hidden>
+          <h2 id="games-title">Games</h2>
+          <div class="games-tally-box">
+            <ul id="games-tally" class="tally" aria-label="Record per player"></ul>
+            <p class="hint">Score = wins + half the draws. Small samples: differences under about 20 games are noise. Only the last 200 games are kept and counted.</p>
+          </div>
+          <div id="games-scroll" class="games-scroll" tabindex="0" role="region" aria-labelledby="games-title">
+            <table class="games-table">
+              <caption class="sr-only">Games finished, oldest first. Open replaces the game on the board.</caption>
+              <thead>
+                <tr><th scope="col">#</th><th scope="col">Player 1</th><th scope="col">Player 2</th><th scope="col">Result</th><th scope="col">Moves</th><th scope="col"><span class="sr-only">Link</span></th></tr>
+              </thead>
+              <tbody id="games-rows"></tbody>
+            </table>
+          </div>
+          <div class="row games-foot">
+            <span class="hint">Open replaces the game on the board.</span>
+            <button id="games-clear" class="quiet" type="button">Clear history</button>
           </div>
         </section>
 
