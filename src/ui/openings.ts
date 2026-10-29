@@ -11,7 +11,8 @@ const pools = new Map<number, readonly (readonly string[])[]>();
 
 /**
  * Every way to play `OPENING_PLIES` pawn moves from the start of a `size` board that ends in a position
- * no other way reaches and never returns to an earlier position, one sequence per position, in a fixed order.
+ * no other way reaches, never returns to an earlier position and never steps away from the mover's goal
+ * (no move lengthens the mover's shortest path), one sequence per position, in a fixed order.
  */
 export function openingPool(size: number): readonly (readonly string[])[] {
   const known = pools.get(size);
@@ -26,7 +27,9 @@ export function openingPool(size: number): readonly (readonly string[])[] {
     for (const action of state.legalActions()) {
       if (action >= NUM_PAWN_MOVES) continue;
       const next = state.clone();
+      const mover = state.pathDists()[state.p1Turn ? 0 : 1]!;
       next.play(action);
+      if (next.pathDists()[state.p1Turn ? 0 : 1]! > mover) continue;
       const key = next.positionKey();
       if (next.isEnd() || seen.has(key)) continue;
       walk(next, [...moves, formatAction(state, action)], new Set([...seen, key]));
