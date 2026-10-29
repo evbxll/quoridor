@@ -170,7 +170,7 @@
           <h2 id="games-title">Games</h2>
           <div class="games-tally-box">
             <ul id="games-tally" class="tally" aria-label="Record per player"></ul>
-            <p class="hint">Score = wins + half the draws. Small samples: differences under about 20 games are noise. Only the last 200 games are kept and counted.</p>
+            <p class="hint">Score = wins + half the draws. Small samples: differences under about 20 games are noise. Mirror matches (the same player on both sides) are listed but not counted. Only the last 200 games are kept and counted.</p>
           </div>
           <div id="games-scroll" class="games-scroll" tabindex="0" role="region" aria-labelledby="games-title">
             <table class="games-table">
@@ -181,8 +181,13 @@
               <tbody id="games-rows"></tbody>
             </table>
           </div>
+          <div id="games-ask" class="games-ask off" role="group" aria-label="Replace the current game?">
+            <span id="games-ask-text"></span>
+            <button id="games-yes" type="button">Yes, open</button>
+            <button id="games-no" type="button">Cancel</button>
+          </div>
           <div class="row games-foot">
-            <span class="hint">Open replaces the game on the board.</span>
+            <span class="hint">Open replaces the game on the board; if one is being played you are asked first.</span>
             <button id="games-clear" class="quiet" type="button">Clear history</button>
           </div>
         </section>

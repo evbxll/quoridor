@@ -24,7 +24,7 @@ export interface AutoHost {
 /** Calls `fn` after `ms` milliseconds; the returned function cancels it. */
 export type Schedule = (fn: () => void, ms: number) => () => void;
 
-const timeout: Schedule = (fn, ms) => {
+export const timeout: Schedule = (fn, ms) => {
   const id = setTimeout(fn, ms);
   return () => clearTimeout(id);
 };

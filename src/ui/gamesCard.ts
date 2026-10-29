@@ -1,5 +1,6 @@
 import { element } from "./dom";
-import { type GameHistory, resultText, seatNames } from "./history";
+import { OpenConfirm } from "./confirmOpen";
+import { type GameHistory, isMirror, resultText, seatNames } from "./history";
 
 /** How long "Clear history" waits for its second press, in milliseconds. */
 const ARMED_MS = 5000;
@@ -23,13 +24,37 @@ export class GamesCard {
   private drawn = "";
   private armed = false;
   private disarm: ReturnType<typeof setTimeout> | null = null;
+  private readonly ask = element("games-ask", HTMLElement);
+  private readonly askText = element("games-ask-text", HTMLElement);
+  private readonly yes = element("games-yes", HTMLButtonElement);
+  private readonly no = element("games-no", HTMLButtonElement);
+  private readonly confirm: OpenConfirm;
 
-  /** `cleared` is called after the history was cleared, so the page can put the keyboard somewhere that still exists. */
+  /** `cleared` puts the keyboard somewhere that still exists, after the history was cleared or a game was opened. `inProgress` says whether opening a game would replace one being played. */
   constructor(
     private readonly history: GameHistory,
     private readonly announce: (text: string) => void,
     private readonly cleared: () => void,
+    inProgress: () => boolean,
   ) {
+    this.confirm = new OpenConfirm(inProgress, (id) => this.open(id), () => this.drawAsk());
+    this.card.addEventListener("click", (event) => {
+      const link = event.target instanceof Element ? event.target.closest<HTMLAnchorElement>("a[data-game]") : null;
+      if (link === null || event.button !== 0 || event.ctrlKey || event.metaKey || event.shiftKey || event.altKey) return;
+      event.preventDefault();
+      if (this.confirm.request(Number(link.dataset["game"])) === "asking") {
+        this.announce(`Replace the current game with game ${link.dataset["game"]}? Choose Yes, open, or Cancel.`);
+        this.yes.focus();
+      }
+    });
+    this.yes.addEventListener("click", () => this.confirm.confirm());
+    this.no.addEventListener("click", () => this.dismiss());
+    this.ask.addEventListener("keydown", (event) => {
+      if (event.key === "Escape") this.dismiss();
+    });
+    this.ask.addEventListener("focusout", (event) => {
+      if (!(event.relatedTarget instanceof Node && this.ask.contains(event.relatedTarget))) this.confirm.cancel();
+    });
     this.clearButton.addEventListener("click", () => this.press());
     this.clearButton.addEventListener("blur", () => this.setArmed(false));
   }
@@ -55,16 +80,39 @@ export class GamesCard {
         const row = document.createElement("tr");
         const link = document.createElement("a");
         link.href = `#n=${game.size}&m=${game.moves}`;
+        link.dataset["game"] = String(game.id);
         link.textContent = "Open";
         link.setAttribute("aria-label", `Open game ${game.id}, on a ${game.size} by ${game.size} board`);
         const open = document.createElement("td");
         open.append(link);
-        row.append(cell("th", String(game.id), "row"), cell("td", names.p1), cell("td", names.p2), cell("td", resultText(game.winner, game.reason)), cell("td", String(game.moves.split(".").length)), open);
+        row.append(cell("th", String(game.id), "row"), cell("td", names.p1), cell("td", names.p2), cell("td", isMirror(game) ? `${resultText(game.winner, game.reason)} (mirror match)` : resultText(game.winner, game.reason)), cell("td", String(game.moves.split(".").length)), open);
         return row;
       }),
     );
     // The newest game is in view.
     this.scroller.scrollTop = this.scroller.scrollHeight;
+  }
+
+  /** Puts the game on the board the way a link does, and lets the keyboard go to the page. */
+  private open(id: number): void {
+    const game = this.history.games.find((candidate) => candidate.id === id);
+    if (game === undefined) return;
+    this.cleared();
+    location.hash = `#n=${game.size}&m=${game.moves}`;
+  }
+
+  /** Cancel or Escape: the question goes and the keyboard returns to the Open link it came from. */
+  private dismiss(): void {
+    const state = this.confirm.state;
+    this.confirm.cancel();
+    if (state.phase === "confirming") this.card.querySelector<HTMLAnchorElement>(`a[data-game="${state.id}"]`)?.focus();
+  }
+
+  private drawAsk(): void {
+    const state = this.confirm.state;
+    // The line keeps its room when no question is up, so nothing around it moves.
+    this.ask.classList.toggle("off", state.phase !== "confirming");
+    this.askText.textContent = state.phase === "confirming" ? `Replace the current game with game ${state.id}?` : "";
   }
 
   private press(): void {

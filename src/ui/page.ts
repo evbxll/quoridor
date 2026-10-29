@@ -224,7 +224,7 @@ export function startPage(port: SearchPort, network: NetworkSource): GameControl
   const analysis = new Analysis(controller, port, () => modelState().status === "ready", render, () => evalVisible() || analysisOpen());
 
   const gameLog = new GameHistory(savedStorage());
-  const games = new GamesCard(gameLog, announce, () => statusLine.focus());
+  const games = new GamesCard(gameLog, announce, () => statusLine.focus(), () => (controller.moves.length > 0 && controller.result === null) || autoplay.active);
   const autoHost: AutoHost = {
     get size() {
       return controller.size;

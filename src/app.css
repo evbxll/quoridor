@@ -291,6 +291,9 @@ select {
 .games-table th, .games-table td { padding: 3px 6px; text-align: left; vertical-align: top; border-bottom: 1px solid var(--line); }
 .games-table thead th { position: sticky; top: 0; background: var(--card); color: var(--muted); font-weight: 650; }
 .games-table a { display: inline-block; min-height: 24px; min-width: 24px; line-height: 24px; color: var(--text); font-weight: 600; text-decoration: underline; text-underline-offset: 3px; }
+.games-ask { flex: none; display: flex; flex-wrap: wrap; align-items: center; gap: 6px 8px; min-height: 64px; font-size: 13px; font-weight: 600; }
+.games-ask.off { visibility: hidden; }
+.games-ask button { min-height: 28px; }
 .games-foot { flex: none; justify-content: space-between; flex-wrap: nowrap; }
 .games-foot button { min-height: 28px; white-space: nowrap; }
 .games-foot button.armed { color: var(--text); border: 2px solid var(--text); font-weight: 650; }

@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { botOf } from "../../src/ui/bots";
 import { HUMAN } from "../../src/ui/controller";
-import { type FinishedGame, GameHistory, HISTORY_KEY, MAX_GAMES, MAX_SAVED_CHARS, resultText, seatKey, seatNames, type StorageLike } from "../../src/ui/history";
+import { type FinishedGame, GameHistory, HISTORY_KEY, isMirror, MAX_GAMES, MAX_SAVED_CHARS, resultText, seatKey, seatNames, type StorageLike } from "../../src/ui/history";
 
 const [BEGINNER, STRONG, NORMAL] = [botOf("beginner"), botOf("strong"), botOf("normal")];
 
@@ -76,11 +76,16 @@ describe("GameHistory", () => {
     expect(strong).toMatchObject({ wins: 2, losses: 1, draws: 1, score: 2.5 / 4 });
   });
 
-  it("counts a bot against its own settings as a win and a loss, and leaves two people out", () => {
+  it("lists mirror matches but leaves them out of the tally", () => {
     const history = new GameHistory();
-    history.add(game({ p1: NORMAL, p2: NORMAL }));
+    history.add(game({ p1: NORMAL, p2: { ...NORMAL } }));
     history.add(game({ p1: HUMAN, p2: HUMAN }));
-    expect(history.tallies()).toEqual([expect.objectContaining({ wins: 1, losses: 1, draws: 0, score: 0.5 })]);
+    history.add(game({ p1: NORMAL, p2: STRONG }));
+    expect(history.games.map(isMirror)).toEqual([true, true, false]);
+    expect(history.tallies().map((t) => [t.name, t.wins, t.losses])).toEqual([
+      ["Normal (heuristic, 100)", 1, 0],
+      ["Strong (network, 32)", 0, 1],
+    ]);
   });
 
   it("lists a person against a bot as You", () => {

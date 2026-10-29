@@ -64,6 +64,9 @@ export function resultText(winner: Winner, reason: Reason): string {
   return reason === "repetition" ? "Draw: repetition" : "Draw: move limit";
 }
 
+/** Whether both seats hold the same player (a bot with the same settings, or two people): such a game says nothing about either. */
+export const isMirror = (record: Pick<GameRecord, "p1" | "p2">): boolean => seatKey(record.p1) === seatKey(record.p2);
+
 /** One identity's record over the kept games. */
 export interface Tally {
   readonly key: string;
@@ -139,8 +142,8 @@ export class GameHistory {
   }
 
   /**
-   * Each identity's wins, losses and draws over the kept games, the most games first. Games between two
-   * people are left out; a bot against one with the same settings counts for both seats, a win and a loss.
+   * Each identity's wins, losses and draws over the kept games, the most games first. Mirror matches
+   * (the same player in both seats) are left out: a win and a loss for one player says nothing.
    */
   tallies(): Tally[] {
     const totals = new Map<string, { name: string; wins: number; losses: number; draws: number }>();
@@ -151,7 +154,7 @@ export class GameHistory {
       totals.set(key, entry);
     };
     for (const game of this.list) {
-      if (game.p1.kind === "human" && game.p2.kind === "human") continue;
+      if (isMirror(game)) continue;
       count(game.p1, game.winner === "draw" ? "draws" : game.winner === "p1" ? "wins" : "losses");
       count(game.p2, game.winner === "draw" ? "draws" : game.winner === "p2" ? "wins" : "losses");
     }
