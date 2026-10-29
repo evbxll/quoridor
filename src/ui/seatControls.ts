@@ -2,6 +2,7 @@ import type { ModelCard } from "../model/card";
 import type { ModelState } from "../model/manager";
 import { type Bot, botLabel, botOf, botSummary, calibrationNote, capFor, capReason, describeEstimate, type EngineKind, estimateMs, fitTo, formatMs, PRESETS, presetOf, sameBot, stepsFor, timeModelOf, withModel } from "./bots";
 import { HUMAN, type MoveTime, type Player, type Side } from "./controller";
+import { playableModel } from "./seatModels";
 import { describeModelStatus, FIRST_USE_NOTE, MAIN_MODEL, type ModelOption, modelTitle, offSizeNote, strengthDetail, strengthLine } from "./modelInfo";
 
 const CUSTOM = "custom";
@@ -78,7 +79,6 @@ export class SeatControls {
   private readonly modelStatus: HTMLElement;
   private readonly modelProgress: HTMLProgressElement;
   private readonly modelRetry: HTMLButtonElement;
-  private readonly modelFirst: HTMLElement;
   private readonly modelOffSize: HTMLElement;
   private readonly modelStrength: HTMLElement;
   private readonly modelDetail: HTMLElement;
@@ -110,19 +110,19 @@ export class SeatControls {
     this.modelBox.hidden = true;
     const modelField = make("label", this.modelBox, { className: "field", textContent: "Model" });
     this.modelSelect = make("select", modelField, { id: id("model") });
-    this.modelFirst = make("p", this.modelBox, { id: id("model-first"), className: "seat-hint model-first", textContent: FIRST_USE_NOTE });
     const statusRow = make("div", this.modelBox, { className: "model-status-row" });
     this.modelStatus = make("p", statusRow, { id: id("model-status"), className: "seat-hint model-status" });
-    this.modelProgress = make("progress", statusRow, { className: "model-progress" });
+    const actions = make("div", statusRow, { className: "model-actions" });
+    this.modelProgress = make("progress", actions, { className: "model-progress" });
     this.modelProgress.setAttribute("aria-label", `Player ${side === "p1" ? 1 : 2} model download`);
-    this.modelRetry = make("button", statusRow, { className: "model-retry", textContent: "Retry download" });
+    this.modelRetry = make("button", actions, { className: "model-retry", textContent: "Retry download" });
     this.modelRetry.type = "button";
     this.modelOffSize = make("p", this.modelBox, { id: id("model-offsize"), className: "seat-hint model-offsize" });
     this.modelStrength = make("p", this.modelBox, { id: id("model-strength"), className: "seat-hint model-strength" });
     this.modelDetailBox = make("details", this.modelBox, { className: "model-detail" });
     make("summary", this.modelDetailBox, { textContent: "How this was measured" });
     this.modelDetail = make("p", this.modelDetailBox, { className: "seat-hint" });
-    this.modelSelect.setAttribute("aria-describedby", `${this.modelFirst.id} ${this.modelStatus.id} ${this.modelOffSize.id} ${this.modelStrength.id}`);
+    this.modelSelect.setAttribute("aria-describedby", `${this.modelStatus.id} ${this.modelOffSize.id} ${this.modelStrength.id}`);
 
     this.more = make("details", this.settings, { className: "seat-more" });
     this.summary = make("summary", this.more);
@@ -203,8 +203,7 @@ export class SeatControls {
   playerFor(size: number): Player {
     if (this.human) return HUMAN;
     const wanted = this.wanted[this.bot.engine];
-    const model = this.model !== undefined && this.context().models.offered(this.model, size) ? this.model : undefined;
-    return withModel(fitTo(wanted > 0 ? { ...this.bot, simulations: wanted } : this.bot, size), model);
+    return withModel(fitTo(wanted > 0 ? { ...this.bot, simulations: wanted } : this.bot, size), playableModel(this.model, this.context().models.offered, size));
   }
 
   /** Shows `player`; a person keeps the bot last chosen for when Bot is picked again. */
@@ -226,7 +225,6 @@ export class SeatControls {
   /** Brings every control in line with the settings and the page: caps for the board size, choices that need the network, the estimate. */
   draw(): void {
     const { size, networkOff, model: mainModel, moveTime, models } = this.context();
-    if (this.model !== undefined && !models.offered(this.model, size)) this.model = undefined;
     // The bot a person's seat keeps for later cannot be one that needs a network none is offered for.
     if (this.human && networkOff && this.bot.engine === "network") this.bot = botOf("normal");
     const wanted = this.wanted[this.bot.engine];
@@ -289,18 +287,17 @@ export class SeatControls {
 
     const state = this.model === undefined ? null : models.state(this.model);
     const status = this.model === undefined || state === null ? null : describeModelStatus(modelTitle(this.model, card), state);
-    setText(this.modelStatus, status?.text ?? "");
-    this.modelStatus.hidden = status === null;
-    // Once a model is picked, the status line takes the note's place.
-    this.modelFirst.hidden = this.model !== undefined;
-    this.modelProgress.hidden = !(status?.downloading ?? false);
+    // One line for both the download note and the model's state, so the row is the same height whichever it says; the progress bar and Retry keep their room when not shown.
+    setText(this.modelStatus, status?.text ?? FIRST_USE_NOTE);
+    this.modelProgress.style.visibility = status?.downloading ? "visible" : "hidden";
     if (status?.percent != null) {
       this.modelProgress.max = 100;
       this.modelProgress.value = status.percent;
     } else this.modelProgress.removeAttribute("value");
     const failed = state?.status === "failed";
     if (!failed && document.activeElement === this.modelRetry) this.modelSelect.focus();
-    this.modelRetry.hidden = !failed;
+    this.modelRetry.style.visibility = failed ? "visible" : "hidden";
+    this.modelRetry.disabled = !failed;
 
     setText(this.modelOffSize, id !== null && card !== null ? (offSizeNote(id, card, size) ?? "") : "");
     this.modelOffSize.hidden = this.modelOffSize.textContent === "";

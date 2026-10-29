@@ -77,7 +77,7 @@ export class ModelManager {
 
   /** The id of the model that plays `size` as the bot, or null if none is published for it (or the index is not read). */
   mainIdFor(size: number): string | null {
-    return networkWithheld(this.index ?? null, size) ? null : (botFor(this.index ?? null, size)?.id ?? null);
+    return botFor(this.index ?? null, size)?.id ?? null;
   }
 
   /** The state of the model `id`, whichever sizes it plays. */

@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 import type { ModelState } from "../../src/model/manager";
-import { SeatModels } from "../../src/ui/seatModels";
+import { botOf, withModel } from "../../src/ui/bots";
+import { HUMAN, type Players } from "../../src/ui/controller";
+import { dropUnplayable, droppedSentence, playableModel, SeatModels, setSeatPlayers } from "../../src/ui/seatModels";
 
 const READY: ModelState = { status: "ready", model: "m", fromCache: false, saved: true };
 const FAILED: ModelState = { status: "failed", message: "Offline.", kind: "network" };
@@ -38,19 +40,17 @@ describe("SeatModels", () => {
   });
 
   it("holds one session for two seats that use the same model", () => {
-    const { calls, sync, models } = setup();
+    const { calls, sync } = setup();
     sync(["a", "a"]);
     sync(["a"]);
     expect(calls).toEqual(["ensure a"]);
-    expect([...models.ids]).toEqual(["a"]);
   });
 
   it("holds at most the models of the two seats", () => {
-    const { models, sync } = setup();
+    const { calls, sync } = setup();
     sync(["a", "b"]);
     sync(["c", "b"]);
-    expect(models.ids.size).toBe(2);
-    expect([...models.ids].sort()).toEqual(["b", "c"]);
+    expect(calls).toEqual(["ensure a", "ensure b", "release a", "ensure c"]);
   });
 
   it("says once when a model becomes ready or fails, and not for loading", () => {
@@ -88,5 +88,42 @@ describe("SeatModels", () => {
     sync([]);
     sync(["a"]);
     expect(said).toEqual(["a ready", "a ready"]);
+  });
+});
+
+describe("a model the board does not offer", () => {
+  const offered = (id: string, size: number): boolean => id !== "fc" || size === 9;
+  const strong = botOf("strong");
+  const players = (p1: string | undefined, p2: string | undefined): Players => ({ p1: withModel(strong, p1), p2: withModel(strong, p2) });
+
+  it("is not kept by a seat: only a model offered at the size stays", () => {
+    expect(playableModel("fc", offered, 7)).toBeUndefined();
+    expect(playableModel("fc", offered, 9)).toBe("fc");
+    expect(playableModel("conv", offered, 7)).toBe("conv");
+    expect(playableModel(undefined, offered, 7)).toBeUndefined();
+  });
+
+  it("is taken from the seats that hold it, leaving the others as they are", () => {
+    const { players: next, dropped } = dropUnplayable(players("fc", "conv"), offered, 7);
+    expect(next).toEqual(players(undefined, "conv"));
+    expect(dropped).toEqual([{ side: "p1", model: "fc" }]);
+    expect(dropUnplayable(players("fc", "conv"), offered, 9).dropped).toEqual([]);
+    expect(dropUnplayable({ p1: HUMAN, p2: strong }, offered, 7).dropped).toEqual([]);
+  });
+
+  it("is said in one sentence for both seats", () => {
+    const { dropped } = dropUnplayable(players("fc", "fc"), offered, 7);
+    expect(droppedSentence(dropped, 7, (id) => `Model ${id}`)).toBe(
+      "Model fc does not play 7 × 7, so player 1 plays the main bot; Model fc does not play 7 × 7, so player 2 plays the main bot.",
+    );
+    expect(droppedSentence([], 7, (id) => id)).toBeNull();
+  });
+});
+
+describe("setSeatPlayers", () => {
+  it("gives the players to the game and then loads the models they hold", () => {
+    const order: string[] = [];
+    setSeatPlayers({ setPlayers: () => void order.push("players") }, { p1: HUMAN, p2: HUMAN }, () => order.push("sync"));
+    expect(order).toEqual(["players", "sync"]);
   });
 });

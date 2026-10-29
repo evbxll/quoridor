@@ -240,8 +240,10 @@ select {
 .seat-hint.calibration { min-height: 4.05em; }
 /* The Model select appears only when more than one model is published; its notes take the room they need, and the Players card grows to hold them. */
 .model-box { display: flex; flex-direction: column; gap: 4px; }
-.model-status-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
-.model-status-row .seat-hint { flex: 1 1 12em; min-width: 0; }
+/* The text keeps the height of its longest wording (four lines of the narrow card) and the progress bar and Retry keep their line when hidden, so nothing below moves while a model loads. */
+.model-status-row { display: flex; flex-direction: column; gap: 4px; }
+.model-status-row .seat-hint { min-height: 5.4em; }
+.model-actions { display: flex; align-items: center; gap: 8px; min-height: 30px; }
 .model-progress { width: 64px; accent-color: var(--accent); }
 .model-retry { padding: 2px 10px; font-size: 13px; }
 .model-detail > summary { cursor: pointer; padding: 2px; font-size: 13px; color: var(--muted); }

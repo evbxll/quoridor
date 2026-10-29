@@ -15,7 +15,8 @@ const CARDS: Record<string, ModelCard> = {
   "s9-fpu-basic-g112": fc,
 };
 const GALLERY = ["s9-conv-paths-g010", "s9-conv-paths-g050", "s9-fpu-basic-g112", "s9-conv-paths-g105"];
-const options = (size: number, gallery = GALLERY, cards = CARDS) => buildModelOptions({ mainId: "s9-conv-paths-g105", gallery, card: (id) => cards[id] ?? null, size });
+const options = (size: number, gallery = GALLERY, cards = CARDS, failed: string[] = []) =>
+  buildModelOptions({ mainId: "s9-conv-paths-g105", gallery, card: (id) => cards[id] ?? null, size, cardFailed: (id) => failed.includes(id) });
 
 describe("the Model select's options", () => {
   it("is empty (the select hidden) when only the main model is published, whether or not the gallery lists it", () => {
@@ -44,15 +45,25 @@ describe("the Model select's options", () => {
     const narrow = parseCard(cardJson("s9-conv-paths-g050", { sizes: [9], source: { run: "s9-conv-paths", generation: 50 } }));
     expect(disabledReason(narrow, 11)).toBe("not offered at 11x11");
     expect(disabledReason(narrow, 9)).toBeNull();
-    expect(disabledReason(null, 11)).toBeNull();
+    expect(disabledReason(null, 11)).toBe("loading");
   });
 
-  it("falls back to the id before a card is read, and drops the rating when the card has none", () => {
-    const some = { "s9-conv-paths-g050": CARDS["s9-conv-paths-g050"]!, "s9-conv-paths-g010": conv("s9-conv-paths-g010", 10, null) };
-    const built = options(9, GALLERY, some);
-    expect(built[0]!.label).toBe("Main bot");
-    expect(built.find((o) => o.value === "s9-conv-paths-g010")!.label).toBe("Conv, gen 10");
-    expect(built.find((o) => o.value === "s9-fpu-basic-g112")!.label).toBe("s9-fpu-basic-g112");
+  it("drops the rating when the card has none", () => {
+    const some = { ...CARDS, "s9-conv-paths-g010": conv("s9-conv-paths-g010", 10, null) };
+    expect(options(9, GALLERY, some).find((o) => o.value === "s9-conv-paths-g010")!.label).toBe("Conv, gen 10");
+  });
+
+  it("does not let a gallery model be picked before its card is read, whatever the size", () => {
+    const some = { "s9-conv-paths-g050": CARDS["s9-conv-paths-g050"]! };
+    const built = options(7, GALLERY, some);
+    expect(built[0]).toEqual({ value: MAIN_MODEL, label: "Main bot", disabled: false });
+    expect(built.find((o) => o.value === "s9-conv-paths-g050")!.disabled).toBe(false);
+    expect(built.find((o) => o.value === "s9-fpu-basic-g112")).toEqual({ value: "s9-fpu-basic-g112", label: "s9-fpu-basic-g112 (loading)", disabled: true });
+  });
+
+  it("says a card that could not be read is not coming", () => {
+    const built = options(9, GALLERY, {}, ["s9-fpu-basic-g112"]);
+    expect(built.find((o) => o.value === "s9-fpu-basic-g112")).toMatchObject({ label: "s9-fpu-basic-g112 (card could not be read)", disabled: true });
   });
 
   it("takes the generation from the id when the card has none", () => {

@@ -16,7 +16,7 @@ import { WallPreview } from "./pointer";
 import { Tooltips } from "./tooltip";
 import { visibleControls } from "./visibility";
 import { SeatControls, type SeatContext, type ModelsView } from "./seatControls";
-import { SeatModels } from "./seatModels";
+import { dropUnplayable, droppedSentence, SeatModels, setSeatPlayers } from "./seatModels";
 import { supportsSize } from "../model/card";
 import { botsArePlaying, moveRows, playerName, statusIsMuted, statusText } from "./status";
 import { describeTarget, findAction, moveCursor, pawnTargets } from "./targets";
@@ -164,6 +164,7 @@ export function startPage(port: SearchPort, network: NetworkSource): GameControl
   const seatModels = new SeatModels(models, modelStatusSaid);
   /** Cards are read once, only when there is a model to choose beyond the main bot; their labels name the models in summaries and blurbs. */
   const cardsAsked = new Set<string>();
+  const cardsFailed = new Set<string>();
   const askForCards = (): void => {
     const main = models.mainIdFor(controller.size);
     const extras = extraModels(main, models.gallery);
@@ -174,9 +175,13 @@ export function startPage(port: SearchPort, network: NetworkSource): GameControl
       models.card(id).then(
         (card) => {
           setModelLabel(id, modelTitle(id, card));
+          reconcileModels();
           render();
         },
-        () => render(),
+        () => {
+          cardsFailed.add(id);
+          render();
+        },
       );
     }
   };
@@ -184,7 +189,7 @@ export function startPage(port: SearchPort, network: NetworkSource): GameControl
     const mainId = models.mainIdFor(controller.size);
     return {
       mainId,
-      options: buildModelOptions({ mainId, gallery: models.gallery, card: (id) => models.cardIfLoaded(id), size: controller.size }),
+      options: buildModelOptions({ mainId, gallery: models.gallery, card: (id) => models.cardIfLoaded(id), size: controller.size, cardFailed: (id) => cardsFailed.has(id) }),
       card: (id) => models.cardIfLoaded(id),
       state: (id) => models.stateFor(id, controller.size),
       offered: (id, size) => {
@@ -216,8 +221,7 @@ export function startPage(port: SearchPort, network: NetworkSource): GameControl
     const hadHuman = controller.hasHuman;
     // The sentence below says it; the status line stays quiet for this change, so a toggle is read once.
     quietForSeatChange();
-    controller.setPlayers({ ...controller.players, [side]: controls[side].player });
-    syncSeatModels();
+    setSeatPlayers(controller, { ...controller.players, [side]: controls[side].player }, syncSeatModels);
     render();
     if (hadHuman !== controller.hasHuman) announce(controller.hasHuman ? `${announcement ?? ""} Undo and How to move are shown; Start is hidden.`.trim() : "Both players are bots: press Start to watch.");
     else if (announcement !== null) announce(announcement);
@@ -263,8 +267,19 @@ export function startPage(port: SearchPort, network: NetworkSource): GameControl
     }
     controller.setNetworkReady(state.status === "ready");
     askForCards();
+    reconcileModels();
     syncSeatModels();
     analysis.update();
+  }
+
+  /** A seat whose model the board does not offer (its card was read after it was picked, or the board changed) plays the main bot, said aloud. */
+  function reconcileModels(): void {
+    const { players, dropped } = dropUnplayable(controller.players, modelsView().offered, controller.size);
+    const sentence = droppedSentence(dropped, controller.size, modelName);
+    if (sentence === null) return;
+    for (const { side } of dropped) controls[side].set(players[side]);
+    setSeatPlayers(controller, players, syncSeatModels);
+    announce(sentence);
   }
 
   /** Loads the gallery models the seats hold and frees those no seat holds; tells the controller which are ready. */
@@ -645,14 +660,11 @@ export function startPage(port: SearchPort, network: NetworkSource): GameControl
     // Before the game starts, so a bot that moves first does not search with another size's network.
     controller.setNetworkReady(models.state(size).status === "ready");
     const chosen: Players = { p1: controls.p1.playerFor(size), p2: controls.p2.playerFor(size) };
-    for (const side of SIDES) {
-      const before = controls[side].player;
-      const after = chosen[side];
-      // A model that does not play the new board (an fc model off its size) gives way to the main bot, said aloud.
-      if (before !== HUMAN && before.model !== undefined && after !== HUMAN && after.model === undefined) {
-        announce(`${modelName(before.model)} does not play ${size} × ${size}, so player ${side === "p1" ? 1 : 2} plays the main bot.`);
-      }
-    }
+    // A model that does not play the new board (an fc model off its size) gives way to the main bot, said once for both seats.
+    const { dropped } = dropUnplayable(chosenPlayers(), modelsView().offered, size);
+    const sentence = droppedSentence(dropped, size, modelName);
+    if (sentence !== null) announce(sentence);
+    for (const { side } of dropped) controls[side].set(chosen[side]);
     controller.newGame(size, chosen);
     networkChanged();
     void models.select(controller.size);
@@ -705,8 +717,7 @@ export function startPage(port: SearchPort, network: NetworkSource): GameControl
     showPlayers({ p1: p2, p2: p1 });
     seatsChosen = true;
     quietForSeatChange();
-    controller.setPlayers({ p1: p2, p2: p1 });
-    syncSeatModels();
+    setSeatPlayers(controller, { p1: p2, p2: p1 }, syncSeatModels);
     render();
     announce("Sides swapped.");
   });
@@ -741,7 +752,7 @@ export function startPage(port: SearchPort, network: NetworkSource): GameControl
     if (location.hash !== controller.hash) openHash();
   });
 
-  element("time-sources", HTMLElement).textContent = `Times for the network: ${TIME_SOURCES.network}. Times for the heuristic: ${TIME_SOURCES.heuristic}. "On this device" is the page's own clock for the bot's latest move.`;
+  element("time-sources", HTMLElement).textContent = `Times for the main network and models made like it: ${TIME_SOURCES.network}. ${TIME_SOURCES.others.map((source) => `${source}. `).join("")}Times for the heuristic: ${TIME_SOURCES.heuristic}. "On this device" is the page's own clock for the bot's latest move.`;
   showPlayers(DEFAULT_PLAYERS);
   if (location.hash.length <= 1 || !openHash()) newGame();
   return controller;

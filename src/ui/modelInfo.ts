@@ -26,6 +26,8 @@ export interface OptionInput {
   readonly card: (id: string) => ModelCard | null;
   /** The board size of the game. */
   readonly size: number;
+  /** Whether reading the model's card failed, so it is not worth waiting for. */
+  readonly cardFailed: (id: string) => boolean;
 }
 
 /** The gallery models a seat can choose besides the main bot, in the published order. */
@@ -50,16 +52,17 @@ export function modelTitle(id: string, card: ModelCard | null): string {
 /** The 9x9 ladder rating in the card, if it has one. */
 const ladder = (card: ModelCard, size: number) => card.strength.find((entry) => entry.size === size) ?? null;
 
-/** Why the model cannot play this size, or null if it can (or its card is not read yet, which cannot say). */
+/** Why the model cannot be picked for this size, or null if it can. A model whose card is not read yet cannot be told to play the size, so it waits ("loading"). */
 export function disabledReason(card: ModelCard | null, size: number): string | null {
-  if (card === null || supportsSize(card, size)) return null;
+  if (card === null) return "loading";
+  if (supportsSize(card, size)) return null;
   return card.network.head === "fc" ? `${card.trainedSize}x${card.trainedSize} only` : `not offered at ${size}x${size}`;
 }
 
 /**
  * The entries of a seat's Model select: the main bot first, then every gallery model but the main one in the published
  * order. A model that cannot play the board is disabled with the reason in its label. Fewer than two entries mean there is
- * nothing to choose, so the select is not shown: the list is then empty.
+ * nothing to choose, so the select is not shown: the list is then empty. A gallery model is not selectable until its card is read.
  */
 export function buildModelOptions(input: OptionInput): ModelOption[] {
   const extras = extraModels(input.mainId, input.gallery);
@@ -78,7 +81,7 @@ export function buildModelOptions(input: OptionInput): ModelOption[] {
   });
   for (const id of extras) {
     const card = input.card(id);
-    const reason = disabledReason(card, input.size);
+    const reason = card === null && input.cardFailed(id) ? "card could not be read" : disabledReason(card, input.size);
     const rating = rated(card);
     const detail = reason !== null ? reason : rating;
     options.push({ value: id, label: detail === "" ? modelTitle(id, card) : `${modelTitle(id, card)} (${detail})`, disabled: reason !== null });

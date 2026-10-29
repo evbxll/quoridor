@@ -248,4 +248,13 @@ describe("ModelManager keyed by model id", () => {
     await manager.ensure("m2");
     expect([...caches.stored.keys()].some((url) => url.endsWith("models/m2/card.json"))).toBe(true);
   });
+
+  it("names the main model of a size, and none where the index withholds the network or publishes none", async () => {
+    const { manager } = build({}, { models, bots: { 9: "m1", 7: "heuristic" }, gallery: [] });
+    expect(manager.mainIdFor(9)).toBeNull();
+    await manager.select(9);
+    expect(manager.mainIdFor(9)).toBe("m1");
+    expect(manager.mainIdFor(7)).toBeNull();
+    expect(manager.mainIdFor(11)).toBeNull();
+  });
 });

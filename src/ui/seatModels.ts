@@ -1,4 +1,46 @@
 import type { ModelState } from "../model/manager";
+import type { Players, Side } from "./controller";
+import { HUMAN } from "./controller";
+import { withModel } from "./bots";
+
+/** Whether the gallery offers a model at a board size. */
+export type Offered = (id: string, size: number) => boolean;
+
+/** The model a seat may keep on a board: the one it has if the gallery offers it there, else none (the main model). */
+export const playableModel = (model: string | undefined, offered: Offered, size: number): string | undefined =>
+  model !== undefined && offered(model, size) ? model : undefined;
+
+/** A seat that lost its model because the board does not offer it. */
+export interface Dropped {
+  readonly side: Side;
+  readonly model: string;
+}
+
+/** The seats with a model the board does not offer, and the players with that model taken away (the main bot plays instead). */
+export function dropUnplayable(players: Players, offered: Offered, size: number): { readonly players: Players; readonly dropped: readonly Dropped[] } {
+  const dropped: Dropped[] = [];
+  const next = { ...players };
+  for (const side of ["p1", "p2"] as const) {
+    const seat = players[side];
+    if (seat === HUMAN || seat.model === undefined || playableModel(seat.model, offered, size) !== undefined) continue;
+    dropped.push({ side, model: seat.model });
+    next[side] = withModel(seat, undefined);
+  }
+  return { players: next, dropped };
+}
+
+/** One sentence for every seat that lost its model, or null if none did. */
+export function droppedSentence(dropped: readonly Dropped[], size: number, nameOf: (id: string) => string): string | null {
+  if (dropped.length === 0) return null;
+  const parts = dropped.map(({ side, model }) => `${nameOf(model)} does not play ${size} × ${size}, so player ${side === "p1" ? 1 : 2} plays the main bot`);
+  return `${parts.join("; ")}.`;
+}
+
+/** Changes who plays in the game on the board, then brings the loaded models in line with the seats. */
+export function setSeatPlayers(controller: { setPlayers(players: Players): void }, players: Players, sync: () => void): void {
+  controller.setPlayers(players);
+  sync();
+}
 
 /** The part of the model manager the seats use. */
 export interface ModelPort {
@@ -21,11 +63,6 @@ export class SeatModels {
     private readonly port: ModelPort,
     private readonly say: (id: string, state: ModelState) => void,
   ) {}
-
-  /** The ids being held. */
-  get ids(): ReadonlySet<string> {
-    return this.held;
-  }
 
   sync(used: Iterable<string>, stateOf: (id: string) => ModelState): void {
     const wanted = new Set(used);
