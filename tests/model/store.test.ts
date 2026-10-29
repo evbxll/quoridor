@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { botFor, networkWithheld, parseIndex } from "../../src/model/index";
+import { botFor, galleryEntries, networkWithheld, parseIndex } from "../../src/model/index";
 import { loadIndex, loadModel, ModelError, type Progress, sha256Hex } from "../../src/model/store";
 import { BASE, envOf, fakeFetch, FakeCaches, sha256, streamed } from "../helpers/fakeBrowser";
 
@@ -40,6 +40,28 @@ describe("parseIndex and botFor", () => {
     expect(networkWithheld(index, 5)).toBe(true);
     expect(networkWithheld(index, 9)).toBe(false);
     expect(networkWithheld(index, 7)).toBe(false);
+  });
+
+  it("reads the optional gallery: ordered, only listed models, once each, never the reserved id", () => {
+    const second = { ...entry, id: "m2", sha256: "b".repeat(64) };
+    const index = parseIndex({
+      models: [entry, second],
+      bots: { 9: "m1" },
+      gallery: ["m2", "nope", "m1", "m2", "heuristic", 7, null, { id: "m1" }],
+      extra: "ignored",
+    });
+    expect(index.gallery).toEqual(["m2", "m1"]);
+    expect(galleryEntries(index)).toEqual([second, entry]);
+    expect(index.bots).toEqual({ 9: "m1" });
+  });
+
+  it("has an empty gallery when there is none or it is not a list, as before", () => {
+    for (const gallery of [undefined, "m1", { 0: "m1" }, 3]) {
+      const index = parseIndex({ models: [entry], bots: { 9: "m1" }, gallery });
+      expect(index).toEqual({ models: [entry], bots: { 9: "m1" }, gallery: [] });
+      expect(galleryEntries(index)).toEqual([]);
+    }
+    expect(galleryEntries(null)).toEqual([]);
   });
 
   it("rejects what is not an index", () => {

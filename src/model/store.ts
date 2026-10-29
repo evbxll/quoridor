@@ -1,3 +1,4 @@
+import { type ModelCard, parseCard } from "./card";
 import { type ModelEntry, type ModelIndex, parseIndex } from "./index";
 
 /** What the model code needs from the browser, so tests can stand in for it. */
@@ -11,7 +12,7 @@ export interface ModelEnv {
   readonly stallMs?: number;
 }
 
-export type FailureKind = "network" | "http" | "hash" | "address" | "stalled" | "cancelled" | "start";
+export type FailureKind = "network" | "http" | "hash" | "address" | "stalled" | "cancelled" | "start" | "card";
 
 /** A model that could not be loaded; `message` is fit to show to a person and `kind` says why. */
 export class ModelError extends Error {
@@ -98,6 +99,40 @@ export async function loadIndex(env: ModelEnv): Promise<ModelIndex | null> {
   }
   await cache?.put(url, new Response(text)).catch(() => undefined);
   return index;
+}
+
+/**
+ * The model's card, read from `card.json` beside its `model.onnx` (this site only). A copy that was read before is
+ * used when the server cannot be reached. Throws a `ModelError`: kind "card" when the file is missing, is not a card,
+ * or is not this model's (another id or checksum), else "network" or "http" so that a retry makes sense.
+ */
+export async function loadCard(env: ModelEnv, entry: ModelEntry): Promise<ModelCard> {
+  const url = siteUrl(env, entry.path.replace(/[^/]*$/, "card.json"));
+  const cache = await openCache(env);
+  let text: string | undefined;
+  try {
+    const response = await env.fetch(url, { credentials: "omit", mode: "same-origin", cache: "no-cache" });
+    if (response.status === 404) throw new ModelError("card", `The card of ${entry.id} is not published.`);
+    if (!response.ok) throw new ModelError("http", `The model card could not be downloaded (the server answered ${response.status}).`);
+    text = await response.text();
+  } catch (error) {
+    if (error instanceof ModelError && error.kind === "card") throw error;
+    try {
+      text = await (await cache?.match(url))?.text();
+    } catch {
+      // A remembered copy that cannot be read is as good as none.
+    }
+    if (text === undefined) throw error instanceof ModelError ? error : new ModelError("network", "The model card could not be downloaded. Check the connection and retry.");
+  }
+  let card: ModelCard;
+  try {
+    card = parseCard(JSON.parse(text));
+  } catch (error) {
+    throw new ModelError("card", `The card of ${entry.id} cannot be used (${error instanceof Error ? error.message : "unreadable"}).`);
+  }
+  if (card.id !== entry.id || card.sha256 !== entry.sha256) throw new ModelError("card", `The card of ${entry.id} describes another model.`);
+  await cache?.put(url, new Response(text)).catch(() => undefined);
+  return card;
 }
 
 /** Reads a response body, reporting progress; a connection that drops part-way throws. */

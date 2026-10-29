@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { ModelManager, type ModelState } from "../../src/model/manager";
+import { cardJson } from "../helpers/cards";
 import { envOf, fakeFetch, FakeCaches, sha256, streamed } from "../helpers/fakeBrowser";
 
 const model = new Uint8Array(400).map((_, i) => (i * 11) % 253);
@@ -12,6 +13,7 @@ function setup(options: { files?: Record<string, (signal?: AbortSignal) => Respo
   const { fetch, requested } = fakeFetch({
     "models/index.json": () => new Response(index({ 5: "m1", 9: "m1" })),
     "models/m1/model.onnx": () => streamed(model, 4),
+    "models/m1/card.json": () => new Response(JSON.stringify(cardJson("m1", {}, entry.sha256))),
     ...options.files,
   });
   const started: ArrayBuffer[] = [];
@@ -186,6 +188,8 @@ describe("ModelManager with two models", () => {
   const files = {
     "models/index.json": () => new Response(index({ 5: "m1", 9: "m2" }, [entry, second])),
     "models/m2/model.onnx": () => streamed(other, 3),
+    "models/m1/card.json": () => new Response(JSON.stringify(cardJson("m1", {}, entry.sha256))),
+    "models/m2/card.json": () => new Response(JSON.stringify(cardJson("m2", {}, second.sha256))),
   };
 
   it("keeps the model of the size selected last active, even when the other finishes starting later", async () => {

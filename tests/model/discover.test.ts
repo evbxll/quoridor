@@ -2,6 +2,7 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
+import { cardJson, fcCardJson } from "../helpers/cards";
 import { discoverModels } from "../helpers/models";
 
 const sha = "a".repeat(64);
@@ -15,7 +16,9 @@ function site(): string {
 
 function publish(id: string, files: string[]): void {
   mkdirSync(join(root, "public", "models", id), { recursive: true });
-  for (const file of files) writeFileSync(join(root, "public", "models", id, file), "stand-in, not a model");
+  for (const file of files) {
+    writeFileSync(join(root, "public", "models", id, file), file === "card.json" ? JSON.stringify(id === "fc" ? fcCardJson(id) : cardJson(id)) : "stand-in, not a model");
+  }
 }
 
 function index(models: string[]): void {
@@ -42,6 +45,19 @@ describe("discoverModels", () => {
     expect(discoverModels(root, undefined).map((m) => m.id)).toEqual(["a", "b"]);
   });
 
+  it("takes each model's plane count and fixed size from its card, 10 and free without one", () => {
+    site();
+    publish("a", ["model.onnx", "golden.json", "card.json"]);
+    publish("fc", ["model.onnx", "golden.json", "card.json"]);
+    publish("b", ["model.onnx", "golden.json"]);
+    index(["a", "fc", "b"]);
+    expect(discoverModels(root, undefined).map((m) => [m.id, m.planes, m.fixedSize])).toEqual([
+      ["a", 10, null],
+      ["fc", 6, 9],
+      ["b", 10, null],
+    ]);
+  });
+
   it("prefers the folder the setting names, and does not fall back to the published models when it is empty", () => {
     site();
     publish("a", ["model.onnx", "golden.json"]);
@@ -51,7 +67,7 @@ describe("discoverModels", () => {
     expect(discoverModels(root, own)).toEqual([]);
     writeFileSync(join(own, "model.onnx"), "x");
     writeFileSync(join(own, "golden.json"), "{}");
-    expect(discoverModels(root, own)).toEqual([{ id: "from QUORIDOR_TEST_MODEL_DIR", dir: own }]);
+    expect(discoverModels(root, own)).toEqual([{ id: "from QUORIDOR_TEST_MODEL_DIR", dir: own, planes: 10, fixedSize: null }]);
   });
 
   it("uses test-data/model next, and survives an unreadable index", () => {

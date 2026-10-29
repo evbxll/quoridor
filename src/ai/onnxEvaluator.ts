@@ -6,9 +6,11 @@ import { LruCache } from "./lru";
 /** Positions the evaluation cache keeps (design doc section 4.3; about 17 MB of policies on 11x11). */
 export const CACHE_POSITIONS = 20_000;
 
-/** A network that evaluates one encoded position: `planes` is `[10, size, size]` float32. */
+/** A network that evaluates one encoded position: the input is `[planes, size, size]` float32, where `planes` is the model's own plane count. */
 export interface Network {
-  infer(planes: Float32Array, size: number): Promise<Evaluation>;
+  /** Planes the model takes (6 or 10); the evaluator encodes that many. */
+  readonly planes: number;
+  infer(input: Float32Array, size: number): Promise<Evaluation>;
   /** Frees the model's memory; the network is not used afterwards. */
   release?(): Promise<void>;
 }
@@ -53,8 +55,8 @@ export class OnnxEvaluator implements Evaluator {
       return cached;
     }
     this.missCount++;
-    const planes = encodeState(state);
-    const evaluation = await this.network.infer(planes, state.size);
+    const input = encodeState(state, this.network.planes);
+    const evaluation = await this.network.infer(input, state.size);
     this.cache.set(key, evaluation);
     return evaluation;
   }

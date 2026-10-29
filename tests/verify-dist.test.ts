@@ -3,7 +3,9 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { verifyDist } from "../scripts/verify-dist.mjs";
+import { SUPPORTED_PLANES as SCRIPT_PLANES, verifyDist } from "../scripts/verify-dist.mjs";
+import { SUPPORTED_PLANES } from "../src/ai/encoding";
+import { cardJson, fcCardJson } from "./helpers/cards";
 
 let root: string;
 let dist: string;
@@ -62,7 +64,7 @@ describe("verifyDist", () => {
   it("checks model hashes against the index and the card", () => {
     const sha = createHash("sha256").update("onnx").digest("hex");
     write("models/m1/model.onnx", "onnx");
-    write("models/m1/card.json", JSON.stringify({ sha256: sha }));
+    write("models/m1/card.json", JSON.stringify(cardJson("m1", {}, sha)));
     write("models/index.json", JSON.stringify({ models: [{ id: "m1", path: "models/m1/model.onnx", sha256: sha }], bots: {} }));
     expect(verifyDist(dist, root)).toEqual([]);
 
@@ -80,7 +82,7 @@ describe("verifyDist", () => {
     const good = { id: "m1", path: "models/m1/model.onnx", sha256: sha };
     const check = (index: unknown): string[] => {
       write("models/m1/model.onnx", "onnx");
-      write("models/m1/card.json", JSON.stringify({ sha256: sha }));
+      write("models/m1/card.json", JSON.stringify(cardJson("m1", {}, sha)));
       write("models/index.json", typeof index === "string" ? index : JSON.stringify(index));
       return verifyDist(dist, root);
     };
@@ -109,6 +111,78 @@ describe("verifyDist", () => {
       expect(check({ models: [{ ...good, sha256: sha.toUpperCase() }], bots: {} })[0]).toContain("64 lowercase");
       expect(check({ models: [good, good], bots: {} })).toEqual(["model m1: listed twice"]);
       expect(check({ models: [good], bots: { five: "m1" } })[0]).toContain("not a number");
+    });
+  });
+
+  describe("the gallery and the cards", () => {
+    const sha = createHash("sha256").update("onnx").digest("hex");
+    const other = createHash("sha256").update("two").digest("hex");
+    const entry = (id: string, sum: string) => ({ id, path: `models/${id}/model.onnx`, sha256: sum });
+    const publish = (id: string, bytes: string, card: unknown): void => {
+      write(`models/${id}/model.onnx`, bytes);
+      write(`models/${id}/card.json`, typeof card === "string" ? card : JSON.stringify(card));
+    };
+    const index = (extra: object = {}) => write("models/index.json", JSON.stringify({ models: [entry("m1", sha), entry("m2", other)], bots: { 9: "m1" }, ...extra }));
+
+    it("keeps the page's list of encodable plane counts", () => {
+      expect([...SCRIPT_PLANES]).toEqual([...SUPPORTED_PLANES]);
+    });
+
+    it("accepts a gallery with a conv and a 6-plane fc model", () => {
+      publish("m1", "onnx", cardJson("m1", {}, sha));
+      publish("m2", "two", fcCardJson("m2", other));
+      index({ gallery: ["m2", "m1"] });
+      expect(verifyDist(dist, root)).toEqual([]);
+    });
+
+    it("refuses a gallery that the page would partly ignore", () => {
+      publish("m1", "onnx", cardJson("m1", {}, sha));
+      publish("m2", "two", cardJson("m2", {}, other));
+      index({ gallery: ["m2", "ghost", "m2", "heuristic"] });
+      expect(verifyDist(dist, root)).toEqual([
+        'gallery entry 1 names "ghost", which is not in the index',
+        "gallery lists m2 twice",
+        'gallery entry 3 names "heuristic", which is not in the index',
+      ]);
+      index({ gallery: "m2" });
+      expect(verifyDist(dist, root)).toEqual(["gallery must be a list of model ids"]);
+    });
+
+    it("refuses a card for another model, with another checksum, or without a usable network", () => {
+      publish("m1", "onnx", cardJson("m1", {}, sha));
+      publish("m2", "two", cardJson("m1", {}, other));
+      index({ gallery: ["m2"] });
+      expect(verifyDist(dist, root)).toEqual(['model m2: its card is for "m1"']);
+      publish("m2", "two", cardJson("m2", {}, sha));
+      expect(verifyDist(dist, root)).toEqual(["model m2: sha256 differs from the one its card states"]);
+      publish("m2", "two", cardJson("m2", { network: { head: "rnn" } }, other));
+      expect(verifyDist(dist, root)).toEqual(["model m2: its card has no network with a head of fc or conv"]);
+      publish("m2", "two", "{ nope");
+      expect(verifyDist(dist, root)).toEqual(["model m2: card.json is not valid JSON"]);
+    });
+
+    it("refuses a gallery model whose card has a plane count the page cannot slice", () => {
+      publish("m1", "onnx", cardJson("m1", {}, sha));
+      for (const planes of [4, 8, 12]) {
+        publish("m2", "two", cardJson("m2", { network: { head: "conv", input_planes: planes }, plane_names: new Array(planes).fill("p") }, other));
+        index({ gallery: ["m2"] });
+        expect(verifyDist(dist, root)).toEqual([`model m2: its card says ${planes} input planes; the page can build 6 or 10`]);
+      }
+      publish("m2", "two", cardJson("m2", { plane_names: ["a"] }, other));
+      expect(verifyDist(dist, root)).toEqual(["model m2: its card's plane_names does not match input_planes"]);
+    });
+
+    it("refuses an fc card that lists several sizes, and a bot at a size its model does not play", () => {
+      publish("m1", "onnx", cardJson("m1", {}, sha));
+      publish("m2", "two", { ...fcCardJson("m2", other), sizes: [7, 9] });
+      index();
+      expect(verifyDist(dist, root)).toEqual(["model m2: an fc model plays its trained size only, so its card must list that size alone"]);
+      publish("m2", "two", fcCardJson("m2", other));
+      index({ bots: { 9: "m2", 7: "m2", 5: "m1" } });
+      expect(verifyDist(dist, root)).toEqual(["bot for 7x7 names m2, whose card says it does not play that size"]);
+      publish("m1", "onnx", cardJson("m1", { sizes: [5, 7] }, sha));
+      index({ bots: { 9: "m1" } });
+      expect(verifyDist(dist, root)).toEqual(["bot for 9x9 names m1, whose card says it does not play that size"]);
     });
   });
 

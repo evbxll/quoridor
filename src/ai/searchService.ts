@@ -3,7 +3,7 @@ import { formatAction, parseMove } from "../engine/notation";
 import { GameState } from "../engine/state";
 import type { Evaluator } from "./evaluator";
 import { C_PUCT, FPU_REDUCTION, Mcts, selectAction } from "./mcts";
-import type { EngineKind, EngineSpec, Request, Response } from "./protocol";
+import { type EngineSpec, type Request, type Response, slotOf } from "./protocol";
 import { seededRandom } from "./random";
 
 /** Milliseconds of uninterrupted search before the worker lets its message queue run. */
@@ -24,7 +24,8 @@ interface Tree {
 /** A search that is queued or running. */
 interface Run {
   readonly id: number;
-  readonly engine: EngineKind;
+  /** The evaluator's slot (`slotOf`), known once the run starts: the default network is the one configured by then. */
+  slot: string | null;
   /** Whether the run uses the game's kept tree. */
   readonly reuse: boolean;
   cancelled: boolean;
@@ -42,8 +43,10 @@ function nextTask(): Promise<void> {
  * the searches queued or running. The tree is kept between searches of the same game.
  */
 export function createSearchService(post: (response: Response) => void, makeEvaluator: EvaluatorFactory): (request: Request) => void {
-  const evaluators = new Map<EngineKind, Evaluator>();
-  const trees = new Map<EngineKind, Tree>();
+  const evaluators = new Map<string, Evaluator>();
+  const trees = new Map<string, Tree>();
+  /** The model that searches naming none use. */
+  let defaultModel: string | undefined;
   const runs = new Set<Run>();
   let queue: Promise<void> = Promise.resolve();
 
@@ -52,7 +55,7 @@ export function createSearchService(post: (response: Response) => void, makeEval
   };
 
   /** The tree for this game: advanced when `moves` extends the last search's and the settings match, rebuilt otherwise. */
-  const treeFor = async (request: Extract<Request, { type: "search" }>, current: Evaluator): Promise<Tree> => {
+  const treeFor = async (request: Extract<Request, { type: "search" }>, slot: string, current: Evaluator): Promise<Tree> => {
     const { size, moves } = request;
     const cPuct = request.cPuct ?? C_PUCT;
     const fpuReduction = request.fpuReduction ?? FPU_REDUCTION;
@@ -61,7 +64,7 @@ export function createSearchService(post: (response: Response) => void, makeEval
       for (const move of moves) state.play(parseMove(state, move));
       return { mcts: await Mcts.create(current, state, cPuct, fpuReduction), size, moves, evaluator: current, settings: "" };
     }
-    const tree = trees.get(request.engine);
+    const tree = trees.get(slot);
     const settings = [request.simulations, request.temperature, cPuct, fpuReduction].join("|");
     if (tree && tree.evaluator === current && tree.size === size && tree.settings === settings && tree.moves.length <= moves.length && tree.moves.every((m, i) => m === moves[i])) {
       let kept: Tree = tree;
@@ -69,28 +72,30 @@ export function createSearchService(post: (response: Response) => void, makeEval
         await kept.mcts.advance(parseMove(kept.mcts.rootState, move));
         // Recorded move by move, so a later illegal move leaves the tree and its moves in step.
         kept = { ...kept, moves: [...kept.moves, move] };
-        trees.set(request.engine, kept);
+        trees.set(slot, kept);
       }
       return kept;
     }
-    trees.delete(request.engine);
+    trees.delete(slot);
     const state = GameState.initial(size);
     for (const move of moves) state.play(parseMove(state, move));
     const fresh: Tree = { mcts: await Mcts.create(current, state, cPuct, fpuReduction), size, moves, evaluator: current, settings };
-    trees.set(request.engine, fresh);
+    trees.set(slot, fresh);
     return fresh;
   };
 
   /** A cancelled search leaves a partly searched tree, which a later search of the same position must not inherit. */
   const abandon = (run: Run): void => {
-    if (run.reuse) trees.delete(run.engine);
+    if (run.reuse && run.slot !== null) trees.delete(run.slot);
     post({ type: "cancelled", id: run.id });
   };
 
   const search = async (request: Extract<Request, { type: "search" }>, mine: Run): Promise<void> => {
-    const evaluator = evaluators.get(request.engine);
-    if (!evaluator) throw new Error(`The ${request.engine} engine is not configured`);
-    const { mcts } = await treeFor(request, evaluator);
+    const slot = slotOf(request.engine, request.model ?? defaultModel);
+    mine.slot = slot;
+    const evaluator = evaluators.get(slot);
+    if (!evaluator) throw new Error(request.model === undefined ? `The ${request.engine} engine is not configured` : `The model ${request.model} is not configured`);
+    const { mcts } = await treeFor(request, slot, evaluator);
     if (mcts.rootState.isEnd()) throw new Error("The game is over");
     let sliceStart = performance.now();
     for (let done = 0; done < request.simulations; done++) {
@@ -131,18 +136,33 @@ export function createSearchService(post: (response: Response) => void, makeEval
     const id = request.id;
     // Configuring waits its turn: a search in flight (the bot's move, say) finishes with the evaluator it started with.
     if (request.type === "configure") {
+      const spec = request.engine;
       enqueue(id, async () => {
-        const replaced = evaluators.get(request.engine.kind);
-        evaluators.set(request.engine.kind, await makeEvaluator(request.engine));
-        trees.delete(request.engine.kind);
+        const slot = slotOf(spec.kind, spec.kind === "network" ? spec.modelId : undefined);
+        const replaced = evaluators.get(slot);
+        evaluators.set(slot, await makeEvaluator(spec));
+        if (spec.kind === "network" && spec.asDefault) defaultModel = spec.modelId;
+        trees.delete(slot);
         await replaced?.dispose?.();
         post({ type: "configured", id });
       });
       return;
     }
+    if (request.type === "release") {
+      const slot = slotOf("network", request.model);
+      enqueue(id, async () => {
+        const released = evaluators.get(slot);
+        evaluators.delete(slot);
+        trees.delete(slot);
+        if (defaultModel === request.model) defaultModel = undefined;
+        await released?.dispose?.();
+        post({ type: "released", id });
+      });
+      return;
+    }
     for (const run of runs) run.cancelled = true;
     const reuse = request.reuseTree !== false;
-    const mine: Run = { id, engine: request.engine, reuse, cancelled: false };
+    const mine: Run = { id, slot: null, reuse, cancelled: false };
     runs.add(mine);
     enqueue(id, async () => {
       try {

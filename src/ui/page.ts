@@ -5,7 +5,7 @@ import { ANALYSIS_SIMULATIONS, Analysis, replay } from "./analysis";
 import { botLabel, botOf, capFor, TIME_SOURCES } from "./bots";
 import { describeBoard, renderBoard, wallOwners } from "./board";
 import { closePopoverOnEscapeOrOutside, element, onPress, setEnabled } from "./dom";
-import { ModelManager, type ModelState } from "../model/manager";
+import { ModelManager, type ModelState, type StartInfo } from "../model/manager";
 import type { ModelEnv } from "../model/store";
 import { GameController, HUMAN, isOfferedSize, type Players, samePlayer, type SearchPort, type Side, sideOf, type Speed } from "./controller";
 import { evalBar } from "./evalBar";
@@ -21,7 +21,9 @@ import { describeTarget, findAction, moveCursor, pawnTargets } from "./targets";
 /** How the page gets the network: where to fetch it from, and how to give it to the search worker. */
 export interface NetworkSource {
   readonly env: ModelEnv;
-  readonly start: (model: ArrayBuffer) => Promise<void>;
+  readonly start: (model: ArrayBuffer, info: StartInfo) => Promise<void>;
+  /** Frees the worker's session for a model that is no longer used. */
+  readonly stop?: (id: string) => Promise<void>;
 }
 
 const SIDES = ["p1", "p2"] as const;
@@ -57,7 +59,12 @@ function describeNetwork(state: ModelState, size: number): { line: string; short
   switch (state.status) {
     case "checking":
       return { line: "Network: looking for it…", short: "looking for it", chip: "checking", tone: "busy" };
+    case "idle":
+      return { line: "Network: not loaded.", short: "not loaded", chip: "not loaded", tone: "off" };
     case "unavailable":
+      if (state.reason === "bad-card" || state.reason === "unknown-model" || state.reason === "unsupported-size") {
+        return { line: `Network: not usable. ${state.message ?? ""}`.trim(), short: "not usable", chip: "not usable", tone: "bad" };
+      }
       return state.reason === "not-offered"
         ? { line: `Network: not offered at ${size} × ${size}. Strong and Max are off; Beginner and Normal play.`, short: "not offered at this size", chip: "not offered here", tone: "off" }
         : { line: "Network: none is published yet. Strong and Max are off; Beginner and Normal play.", short: "none published", chip: "not published", tone: "off" };
@@ -139,7 +146,7 @@ export function startPage(port: SearchPort, network: NetworkSource): GameControl
       return;
     }
     networkChanged();
-  });
+  }, network.stop);
   const modelState = (): ModelState => models.state(controller.size);
   /** False once the model index is read and publishes no network at any size; true while that is not known yet. */
   const networkPublished = (): boolean => models.publishesAny !== false;

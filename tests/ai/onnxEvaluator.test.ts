@@ -17,6 +17,8 @@ import { discoverModels } from "../helpers/models";
 class CountingNetwork implements Network {
   readonly inputs: Float32Array[] = [];
 
+  constructor(readonly planes = INPUT_PLANES) {}
+
   async infer(planes: Float32Array, size: number): Promise<Evaluation> {
     this.inputs.push(planes);
     return { policy: new Float32Array(actionCount(size)).fill(1 / actionCount(size)), value: 0.25 };
@@ -102,6 +104,7 @@ describe("OnnxEvaluator with a stand-in network", () => {
 
 /** A stand-in for onnxruntime-web whose session answers with the given policy length and value. */
 const released = { count: 0 };
+const TEN = { planes: INPUT_PLANES, fixedSize: null };
 
 function stubRuntime(policyLength: (size: number) => number, value: number, inputShape: InputShape = ["batch", INPUT_PLANES, "h", "w"]): OrtRuntime {
   let size = 0;
@@ -124,39 +127,39 @@ function stubRuntime(policyLength: (size: number) => number, value: number, inpu
 
 describe("checkInputShape", () => {
   it("accepts the site's plane count, fixed or free, at any board size", () => {
-    expect(() => checkInputShape(["batch", INPUT_PLANES, "h", "w"])).not.toThrow();
-    expect(() => checkInputShape([1, INPUT_PLANES, 9, 9])).not.toThrow();
-    expect(() => checkInputShape([-1, "planes", 7, 7])).not.toThrow();
+    expect(() => checkInputShape(["batch", INPUT_PLANES, "h", "w"], TEN)).not.toThrow();
+    expect(() => checkInputShape([1, INPUT_PLANES, 9, 9], TEN)).not.toThrow();
+    expect(() => checkInputShape([-1, "planes", 7, 7], TEN)).not.toThrow();
   });
 
   it("refuses another plane count or rank", () => {
-    expect(() => checkInputShape(["batch", INPUT_PLANES - 1, "h", "w"])).toThrow(`needs ${INPUT_PLANES - 1} planes`);
-    expect(() => checkInputShape([INPUT_PLANES, 9, 9])).toThrow("shaped [10, 9, 9]");
-    expect(() => checkInputShape([])).toThrow("shaped []");
+    expect(() => checkInputShape(["batch", INPUT_PLANES - 1, "h", "w"], TEN)).toThrow(`needs ${INPUT_PLANES - 1} planes`);
+    expect(() => checkInputShape([INPUT_PLANES, 9, 9], TEN)).toThrow("shaped [10, 9, 9]");
+    expect(() => checkInputShape([], TEN)).toThrow("shaped []");
   });
 });
 
 describe("createOrtNetwork", () => {
   it("rejects an answer of the wrong length or a value that is not a number", async () => {
-    const short = await createOrtNetwork(stubRuntime((size) => actionCount(size) - 1, 0), new Uint8Array(), { threads: 1 });
+    const short = await createOrtNetwork(stubRuntime((size) => actionCount(size) - 1, 0), new Uint8Array(), { threads: 1 }, TEN);
     await expect(short.infer(new Float32Array(250), 5)).rejects.toThrow("expected 44");
-    const nan = await createOrtNetwork(stubRuntime(actionCount, Number.NaN), new Uint8Array(), { threads: 1 });
+    const nan = await createOrtNetwork(stubRuntime(actionCount, Number.NaN), new Uint8Array(), { threads: 1 }, TEN);
     await expect(nan.infer(new Float32Array(250), 5)).rejects.toThrow("a number");
-    const fine = await createOrtNetwork(stubRuntime(actionCount, 0.5), new Uint8Array(), { threads: 1 });
+    const fine = await createOrtNetwork(stubRuntime(actionCount, 0.5), new Uint8Array(), { threads: 1 }, TEN);
     expect((await fine.infer(new Float32Array(250), 5)).value).toBe(0.5);
   });
 
   it("fails at start, naming both plane counts, for a model that needs another encoding", async () => {
     const before = released.count;
-    await expect(createOrtNetwork(stubRuntime(actionCount, 0, ["batch", 12, "h", "w"]), new Uint8Array(), { threads: 1 })).rejects.toThrow(
-      `needs 12 planes; this site encodes ${INPUT_PLANES}`,
+    await expect(createOrtNetwork(stubRuntime(actionCount, 0, ["batch", 12, "h", "w"]), new Uint8Array(), { threads: 1 }, TEN)).rejects.toThrow(
+      `needs 12 planes; its card says ${INPUT_PLANES}`,
     );
     expect(released.count).toBe(before + 1);
-    await expect(createOrtNetwork(stubRuntime(actionCount, 0, [1, 10, 9, 9, 1]), new Uint8Array(), { threads: 1 })).rejects.toThrow("[1, 10, 9, 9, 1]");
+    await expect(createOrtNetwork(stubRuntime(actionCount, 0, [1, 10, 9, 9, 1]), new Uint8Array(), { threads: 1 }, TEN)).rejects.toThrow("[1, 10, 9, 9, 1]");
   });
 
   it("lets the session go on release", async () => {
-    const network = await createOrtNetwork(stubRuntime(actionCount, 0), new Uint8Array(), { threads: 1 });
+    const network = await createOrtNetwork(stubRuntime(actionCount, 0), new Uint8Array(), { threads: 1 }, TEN);
     const before = released.count;
     await network.release!();
     expect(released.count).toBe(before + 1);
@@ -164,9 +167,82 @@ describe("createOrtNetwork", () => {
 
   it("refuses to change the thread count after the runtime has started", async () => {
     const runtime = stubRuntime(actionCount, 0);
-    await createOrtNetwork(runtime, new Uint8Array(), { threads: 2 });
-    await createOrtNetwork(runtime, new Uint8Array(), { threads: 2 });
-    await expect(createOrtNetwork(runtime, new Uint8Array(), { threads: 4 })).rejects.toThrow("cannot change");
+    await createOrtNetwork(runtime, new Uint8Array(), { threads: 2 }, TEN);
+    await createOrtNetwork(runtime, new Uint8Array(), { threads: 2 }, TEN);
+    await expect(createOrtNetwork(runtime, new Uint8Array(), { threads: 4 }, TEN)).rejects.toThrow("cannot change");
+  });
+});
+
+describe("createOrtNetwork against a card", () => {
+  /** A runtime whose session reports `inputShape` and records what it is run with. */
+  function recording(inputShape: InputShape, outputs: readonly string[] = ["policy", "value", "stream_0"]) {
+    const runs: { dims: number[]; fetches: unknown }[] = [];
+    let dims: number[] = [];
+    const runtime = {
+      env: { wasm: {} },
+      Tensor: class {
+        constructor(_type: string, _data: Float32Array, shape: number[]) {
+          dims = shape;
+        }
+      },
+      InferenceSession: {
+        create: async () => ({
+          release: async () => undefined,
+          inputMetadata: [{ name: "input", isTensor: true, type: "float32", shape: inputShape }],
+          run: async (_feeds: unknown, fetches: readonly string[]) => {
+            runs.push({ dims, fetches });
+            const all: Record<string, { data: Float32Array }> = {
+              policy: { data: new Float32Array(actionCount(9)) },
+              value: { data: Float32Array.of(0.5) },
+              stream_0: { data: new Float32Array(10) },
+            };
+            return Object.fromEntries(outputs.filter((name) => fetches.includes(name)).map((name) => [name, all[name]!]));
+          },
+        }),
+      },
+    } as unknown as OrtRuntime;
+    return { runtime, runs };
+  }
+
+  it("asks for the policy and the value only, so extra outputs are never copied", async () => {
+    const { runtime, runs } = recording(["batch", 10, "h", "w"]);
+    const network = await createOrtNetwork(runtime, new Uint8Array(), { threads: 1 }, TEN);
+    expect((await network.infer(new Float32Array(810), 9)).value).toBe(0.5);
+    expect(runs.map((run) => run.fetches)).toEqual([["policy", "value"]]);
+  });
+
+  it("builds the tensor with the card's plane count", async () => {
+    const { runtime, runs } = recording([1, 6, 9, 9]);
+    const network = await createOrtNetwork(runtime, new Uint8Array(), { threads: 1 }, { planes: 6, fixedSize: 9 });
+    expect(network.planes).toBe(6);
+    await network.infer(new Float32Array(486), 9);
+    expect(runs[0]!.dims).toEqual([1, 6, 9, 9]);
+  });
+
+  it("fails at start when the session's planes differ from the card's, either way round", async () => {
+    await expect(createOrtNetwork(recording([1, 10, 9, 9]).runtime, new Uint8Array(), { threads: 1 }, { planes: 6, fixedSize: 9 })).rejects.toThrow(
+      "needs 10 planes; its card says 6",
+    );
+    await expect(createOrtNetwork(recording(["batch", 6, "h", "w"]).runtime, new Uint8Array(), { threads: 1 }, TEN)).rejects.toThrow("needs 6 planes; its card says 10");
+  });
+
+  it("checks a fixed board size against the card, and refuses another size when playing", async () => {
+    await expect(createOrtNetwork(recording([1, 6, 7, 7]).runtime, new Uint8Array(), { threads: 1 }, { planes: 6, fixedSize: 9 })).rejects.toThrow(
+      "fixed to 7x7 boards; its card says 9x9",
+    );
+    expect(() => checkInputShape([1, 6, 9, 9], { planes: 6, fixedSize: 9 })).not.toThrow();
+    expect(() => checkInputShape([1, 6, "h", "w"], { planes: 6, fixedSize: 9 })).not.toThrow();
+    expect(() => checkInputShape([1, 6, 9, 9], { planes: 6, fixedSize: null })).not.toThrow();
+    const network = await createOrtNetwork(recording([1, 6, 9, 9]).runtime, new Uint8Array(), { threads: 1 }, { planes: 6, fixedSize: 9 });
+    await expect(network.infer(new Float32Array(300), 7)).rejects.toThrow("plays 9x9 only, not 7x7");
+  });
+
+  it("evaluates with the network's own plane count", async () => {
+    const network = new CountingNetwork(6);
+    const state = play(9, ["e2"]);
+    await new OnnxEvaluator(network).evaluate(state);
+    expect(network.inputs[0]).toEqual(encodeState(state, 6));
+    expect(network.inputs[0]).toHaveLength(6 * 81);
   });
 });
 
@@ -206,14 +282,14 @@ function positionOf(planes: readonly number[], size: number): GameState {
 
 if (models.length === 0) it.skip("model tests: no model was found (see the warning above)", () => {});
 
-describe.each(models)("model $id", ({ dir }) => {
+describe.each(models)("model $id", ({ dir, planes, fixedSize }) => {
   const golden = JSON.parse(readFileSync(join(dir, "golden.json"), "utf8")) as Golden;
 
   it("has golden inputs that encodeState reproduces bit for bit from the position they describe", () => {
     let checked = 0;
     for (const [size, cases] of Object.entries(golden.positions)) {
       for (const [i, expected] of cases.entries()) {
-        const encoded = encodeState(positionOf(expected.planes, Number(size)));
+        const encoded = encodeState(positionOf(expected.planes, Number(size)), planes);
         expect(Array.from(encoded), `${size}x${size} position ${i}`).toEqual(Array.from(Float32Array.from(expected.planes)));
         checked++;
       }
@@ -225,7 +301,7 @@ describe.each(models)("model $id", ({ dir }) => {
     it(`matches golden.json within its own tolerance on ${size}x${size}`, async () => {
       const cases = golden.positions[String(size)];
       if (!cases) return;
-      const network = await createOrtNetwork(ort, readFileSync(join(dir, "model.onnx")), { threads: 1 });
+      const network = await createOrtNetwork(ort, readFileSync(join(dir, "model.onnx")), { threads: 1 }, { planes, fixedSize });
       expect(golden.tolerance).toBe(1e-5);
       for (const [i, expected] of cases.entries()) {
         const { policy, value } = await network.infer(Float32Array.from(expected.planes), size);
@@ -246,7 +322,7 @@ describe.each(models)("model $id", ({ dir }) => {
   }
 
   it("searches a 9x9 position and returns a legal move", async () => {
-    const network = await createOrtNetwork(ort, readFileSync(join(dir, "model.onnx")), { threads: 1 });
+    const network = await createOrtNetwork(ort, readFileSync(join(dir, "model.onnx")), { threads: 1 }, { planes, fixedSize });
     const state = GameState.initial(9);
     const mcts = await Mcts.create(new OnnxEvaluator(network), state);
     const result = await mcts.search(16);

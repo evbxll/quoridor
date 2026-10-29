@@ -21,8 +21,17 @@ startTheme(element("theme", HTMLButtonElement), document, window);
 
 startPage(client, {
   env: { fetch: globalThis.fetch.bind(globalThis), caches: cacheStorage(), base: new URL(import.meta.env.BASE_URL, location.href).href },
-  start: (model) =>
-    client.configure({ kind: "network", model, threads: searchThreads(globalThis.crossOriginIsolated, navigator.hardwareConcurrency) }),
+  start: (model, info) =>
+    client.configure({
+      kind: "network",
+      model,
+      threads: searchThreads(globalThis.crossOriginIsolated, navigator.hardwareConcurrency),
+      modelId: info.id,
+      planes: info.planes,
+      fixedSize: info.fixedSize,
+      asDefault: info.asDefault,
+    }),
+  stop: (id) => client.release(id),
 });
 
 const isolated = globalThis.crossOriginIsolated;

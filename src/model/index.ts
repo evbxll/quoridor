@@ -17,6 +17,8 @@ export interface ModelIndex {
   readonly models: readonly ModelEntry[];
   /** Model id per size, or `NO_NETWORK`. */
   readonly bots: Readonly<Record<number, string>>;
+  /** Ids of the models offered for choosing beyond the bots, in the order the publisher listed them; empty when the index has no `gallery`. */
+  readonly gallery: readonly string[];
 }
 
 const ID = /^[A-Za-z0-9._-]+$/;
@@ -26,12 +28,13 @@ const SHA256 = /^[0-9a-f]{64}$/;
  * Reads an index, keeping only what is well formed: a model needs a safe id
  * (not `NO_NETWORK`, and the first of a repeated id wins), a path and a
  * lowercase sha256, and a bot must name a model in the list or be `NO_NETWORK`.
+ * The optional `gallery` is an ordered list of ids: only ids of listed models are kept, once each.
  * `scripts/verify-dist.mjs` refuses a dist where any of this would be dropped.
  * Throws if `json` is not an index at all.
  */
 export function parseIndex(json: unknown): ModelIndex {
   if (typeof json !== "object" || json === null) throw new Error("The model index is not an object");
-  const { models, bots } = json as { models?: unknown; bots?: unknown };
+  const { models, bots, gallery } = json as { models?: unknown; bots?: unknown; gallery?: unknown };
   if (!Array.isArray(models) || typeof bots !== "object" || bots === null) throw new Error("The model index has no models and bots");
   const entries: ModelEntry[] = [];
   for (const model of models as (Record<string, unknown> | null)[]) {
@@ -52,7 +55,16 @@ export function parseIndex(json: unknown): ModelIndex {
   for (const [size, id] of Object.entries(bots)) {
     if (Number.isInteger(Number(size)) && (id === NO_NETWORK || entries.some((entry) => entry.id === id))) chosen[Number(size)] = id as string;
   }
-  return { models: entries, bots: chosen };
+  const listed: string[] = [];
+  for (const id of Array.isArray(gallery) ? (gallery as unknown[]) : []) {
+    if (typeof id === "string" && entries.some((entry) => entry.id === id) && !listed.includes(id)) listed.push(id);
+  }
+  return { models: entries, bots: chosen, gallery: listed };
+}
+
+/** The gallery's models, in the published order. */
+export function galleryEntries(index: ModelIndex | null): ModelEntry[] {
+  return (index?.gallery ?? []).flatMap((id) => index?.models.filter((entry) => entry.id === id) ?? []);
 }
 
 /** The model that plays `size` with the network, or null if none is published for it or the size is set to `NO_NETWORK`. */

@@ -1,4 +1,4 @@
-import type { EngineKind, EngineSpec, Request, Response, SearchResponse } from "./protocol";
+import { type EngineSpec, type Request, type Response, type SearchResponse, slotOf } from "./protocol";
 
 /** The part of `Worker` the client uses, so tests can stand in for it. */
 export interface WorkerLike {
@@ -32,15 +32,23 @@ export class SearchClient {
   private readonly pending = new Map<number, Pending>();
   private currentSearch: number | null = null;
   /** What each engine was last configured with, to configure a replacement worker the same way. */
-  private readonly engines = new Map<EngineKind, EngineSpec>();
+  private readonly engines = new Map<string, EngineSpec>();
 
   constructor(private readonly createWorker: () => WorkerLike) {}
 
   /** Chooses the evaluator the worker searches with; any search in flight is cancelled. */
   async configure(engine: EngineSpec): Promise<void> {
     this.start();
-    this.engines.set(engine.kind, engine);
+    this.engines.set(slotOf(engine.kind, engine.kind === "network" ? engine.modelId : undefined), engine);
     const response = await this.request({ type: "configure", id: this.nextId++, engine });
+    if (response.type === "error") throw new Error(response.message);
+  }
+
+  /** Frees the worker's session for a network and forgets it, so a replacement worker does not load it again. */
+  async release(model: string): Promise<void> {
+    this.engines.delete(slotOf("network", model));
+    if (!this.worker) return;
+    const response = await this.request({ type: "release", id: this.nextId++, model });
     if (response.type === "error") throw new Error(response.message);
   }
 

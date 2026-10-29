@@ -8,7 +8,7 @@
 import { readFileSync } from "node:fs";
 import * as ort from "onnxruntime-web";
 import { HeuristicEvaluator } from "../src/ai/heuristic";
-import { encodeState } from "../src/ai/encoding";
+import { encodeState, INPUT_PLANES } from "../src/ai/encoding";
 import type { Evaluator } from "../src/ai/evaluator";
 import { Mcts } from "../src/ai/mcts";
 import { OnnxEvaluator } from "../src/ai/onnxEvaluator";
@@ -60,10 +60,10 @@ async function main(): Promise<void> {
     for (const size of SIZES) console.log(`${size}x${size} heuristic: ${await timeSearches(size, () => new HeuristicEvaluator())}`);
     return;
   }
-  const network = await createOrtNetwork(ort, readFileSync(modelPath), { threads });
+  const network = await createOrtNetwork(ort, readFileSync(modelPath), { threads }, { planes: INPUT_PLANES, fixedSize: null });
   console.log(`onnxruntime-web WASM, ${threads} thread(s), node ${process.version}`);
   for (const size of SIZES) {
-    const planes = randomPositions(size, INFERENCES + WARMUP).map(encodeState);
+    const planes = randomPositions(size, INFERENCES + WARMUP).map((state) => encodeState(state));
     for (const input of planes.slice(0, WARMUP)) await network.infer(input, size);
     const milliseconds: number[] = [];
     for (const input of planes.slice(WARMUP)) {

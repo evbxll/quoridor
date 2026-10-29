@@ -212,7 +212,7 @@ describe("search service", () => {
 });
 
 describe("search service with two engines", () => {
-  const network: EngineSpec = { kind: "network", model: new ArrayBuffer(8), threads: 1 };
+  const network: EngineSpec = { kind: "network", model: new ArrayBuffer(8), threads: 1, modelId: "m1", planes: 10, fixedSize: null, asDefault: true };
 
   function twoEngines() {
     const evaluators = { heuristic: new FakeEvaluator(), network: new FakeEvaluator() };
@@ -366,7 +366,7 @@ describe("search client", () => {
 
   it("configures a replacement worker with every engine it had", async () => {
     const { client, workers } = loopback();
-    const network: EngineSpec = { kind: "network", model: new ArrayBuffer(8), threads: 1 };
+    const network: EngineSpec = { kind: "network", model: new ArrayBuffer(8), threads: 1, modelId: "m1", planes: 10, fixedSize: null, asDefault: true };
     await client.configure(engine);
     await client.configure(network);
     workers[0]!.fail("boom");
@@ -396,5 +396,82 @@ describe("search client", () => {
     workers[0]!.fail("late");
     expect((await client.search(params))!.moves.length).toBeGreaterThan(0);
     expect(workers).toHaveLength(2);
+  });
+});
+
+describe("search service with several networks", () => {
+  const spec = (modelId: string, asDefault: boolean): EngineSpec => ({ kind: "network", model: new ArrayBuffer(8), threads: 1, modelId, planes: 10, fixedSize: null, asDefault });
+
+  function networks() {
+    const made = new Map<string, FakeEvaluator>();
+    const outbox: Response[] = [];
+    const handle = createSearchService(
+      (response) => outbox.push(response),
+      async (engine) => {
+        const evaluator = new FakeEvaluator();
+        made.set(engine.kind === "network" ? engine.modelId : "heuristic", evaluator);
+        return evaluator;
+      },
+    );
+    const reply = async (id: number): Promise<Response> => {
+      for (let i = 0; i < 3000; i++) {
+        const found = outbox.find((r) => r.id === id);
+        if (found) return found;
+        await new Promise((resolve) => setTimeout(resolve, 1));
+      }
+      throw new Error(`no response to ${id}`);
+    };
+    return { made, handle, reply };
+  }
+
+  it("holds one session per model id and searches with the one the request names", async () => {
+    const { made, handle, reply } = networks();
+    handle({ type: "configure", id: 1, engine: spec("m1", true) });
+    handle({ type: "configure", id: 2, engine: spec("m2", false) });
+    await reply(2);
+    handle(search(3, [], { engine: "network", model: "m2" }));
+    expect((await reply(3)).type).toBe("result");
+    expect(made.get("m2")!.calls).toBeGreaterThan(0);
+    expect(made.get("m1")!.calls).toBe(0);
+    expect(made.get("m1")!.disposed).toBe(0);
+  });
+
+  it("searches without a model with the default network, which a later non-default configure does not change", async () => {
+    const { made, handle, reply } = networks();
+    handle({ type: "configure", id: 1, engine: spec("m1", true) });
+    handle({ type: "configure", id: 2, engine: spec("m2", false) });
+    handle(search(3, [], { engine: "network" }));
+    expect((await reply(3)).type).toBe("result");
+    expect(made.get("m1")!.calls).toBeGreaterThan(0);
+    expect(made.get("m2")!.calls).toBe(0);
+  });
+
+  it("keeps a tree per model: alternating models does not rebuild either", async () => {
+    const { made, handle, reply } = networks();
+    handle({ type: "configure", id: 1, engine: spec("m1", true) });
+    handle({ type: "configure", id: 2, engine: spec("m2", false) });
+    handle(search(3, ["c2"], { engine: "network", model: "m1", simulations: 10 }));
+    await reply(3);
+    handle(search(4, ["c2"], { engine: "network", model: "m2", simulations: 10 }));
+    await reply(4);
+    const before = made.get("m1")!.calls;
+    handle(search(5, ["c2"], { engine: "network", model: "m1", simulations: 10 }));
+    await reply(5);
+    // The m1 tree already holds 10 simulations; asking for 10 more adds 10 evaluations at most, none for the root.
+    expect(made.get("m1")!.calls - before).toBeLessThanOrEqual(10);
+  });
+
+  it("frees one session on release, refuses to search it, and leaves the others", async () => {
+    const { made, handle, reply } = networks();
+    handle({ type: "configure", id: 1, engine: spec("m1", true) });
+    handle({ type: "configure", id: 2, engine: spec("m2", false) });
+    handle({ type: "release", id: 3, model: "m2" });
+    expect(await reply(3)).toEqual({ type: "released", id: 3 });
+    expect(made.get("m2")!.disposed).toBe(1);
+    expect(made.get("m1")!.disposed).toBe(0);
+    handle(search(4, [], { engine: "network", model: "m2" }));
+    expect(await reply(4)).toMatchObject({ type: "error", message: "The model m2 is not configured" });
+    handle(search(5, [], { engine: "network", model: "m1" }));
+    expect((await reply(5)).type).toBe("result");
   });
 });

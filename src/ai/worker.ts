@@ -14,10 +14,12 @@ async function networkEvaluator(engine: Extract<EngineSpec, { kind: "network" }>
     import("./onnxEvaluator"),
     import("./ort"),
   ]);
-  const network = await createOrtNetwork(ort, new Uint8Array(engine.model), {
-    threads: engine.threads,
-    wasmPaths: { mjs: loader.default, wasm: binary.default },
-  });
+  const network = await createOrtNetwork(
+    ort,
+    new Uint8Array(engine.model),
+    { threads: engine.threads, wasmPaths: { mjs: loader.default, wasm: binary.default } },
+    { planes: engine.planes, fixedSize: engine.fixedSize },
+  );
   return new OnnxEvaluator(network);
 }
 
