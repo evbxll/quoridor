@@ -30,6 +30,20 @@ describe("openings", () => {
     expect(openingPool(5)).toHaveLength(35);
   });
 
+  for (const size of [5, 7, 9, 11]) {
+    it(`never steps a pawn away from its goal in any opening on ${size}x${size}`, () => {
+      for (const moves of openingPool(size)) {
+        const state = GameState.initial(size);
+        for (const move of moves) {
+          const player = state.p1Turn ? 0 : 1;
+          const before = state.pathDists()[player]!;
+          state.play(parseMove(state, move));
+          expect(state.pathDists()[player]!, `${moves.join(" ")} at ${move}`).toBeLessThanOrEqual(before);
+        }
+      }
+    });
+  }
+
   it("is the same for the same seed and differs between games until the pool is used up", () => {
     const size = 9;
     const pool = openingPool(size).length;
