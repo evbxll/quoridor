@@ -1,6 +1,6 @@
 import { element } from "./dom";
 import { OpenConfirm } from "./confirmOpen";
-import { type GameHistory, isMirror, resultText, seatNames } from "./history";
+import { type GameHistory, type GameRecord, isMirror, resultText, seatNames } from "./history";
 
 /** How long "Clear history" waits for its second press, in milliseconds. */
 const ARMED_MS = 5000;
@@ -36,6 +36,7 @@ export class GamesCard {
     private readonly announce: (text: string) => void,
     private readonly cleared: () => void,
     inProgress: () => boolean,
+    private readonly opener: (game: GameRecord) => void,
   ) {
     this.confirm = new OpenConfirm(inProgress, (id) => this.open(id), () => this.drawAsk());
     this.card.addEventListener("click", (event) => {
@@ -93,12 +94,12 @@ export class GamesCard {
     this.scroller.scrollTop = this.scroller.scrollHeight;
   }
 
-  /** Puts the game on the board the way a link does, and lets the keyboard go to the page. */
+  /** Hands the game to the page to put on the board, and lets the keyboard go to the page. */
   private open(id: number): void {
     const game = this.history.games.find((candidate) => candidate.id === id);
     if (game === undefined) return;
     this.cleared();
-    location.hash = `#n=${game.size}&m=${game.moves}`;
+    this.opener(game);
   }
 
   /** Cancel or Escape: the question goes and the keyboard returns to the Open link it came from. */

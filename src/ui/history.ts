@@ -1,5 +1,5 @@
 import type { Reason, Winner } from "../engine/game";
-import { type Bot, botLabel, type EngineKind } from "./bots";
+import { type Bot, botLabel, type EngineKind, modelName } from "./bots";
 import { HUMAN, type Player } from "./controller";
 
 /** Most games kept; the oldest is dropped first, and the tallies count the kept games only. */
@@ -42,13 +42,22 @@ export interface FinishedGame {
   readonly moves: readonly string[];
 }
 
-export const seatOf = (player: Player): Seat => (player === HUMAN ? { kind: "human" } : { kind: "bot", engine: player.engine, simulations: player.simulations, vary: player.vary });
+export const seatOf = (player: Player): Seat =>
+  player === HUMAN
+    ? { kind: "human" }
+    : { kind: "bot", engine: player.engine, simulations: player.simulations, vary: player.vary, ...(player.model === undefined ? {} : { model: player.model }) };
+
+/** The bot a seat held (a person's seat holds none). */
+export const botOfSeat = (seat: Seat & { kind: "bot" }): Bot => {
+  const { kind: _kind, ...bot } = seat;
+  return bot;
+};
 
 /** A seat's identity: two seats with the same key are the same player for the tally. */
-export const seatKey = (seat: Seat): string => (seat.kind === "human" ? "human" : `${seat.engine}:${seat.simulations}:${seat.vary ? "varied" : "fixed"}`);
+export const seatKey = (seat: Seat): string => (seat.kind === "human" ? "human" : `${seat.engine}:${seat.simulations}:${seat.vary ? "varied" : "fixed"}:${seat.model ?? "main"}`);
 
-/** A bot in words: "Strong (network, 32)", or "Beginner (heuristic, 5, varied)". */
-export const botName = (bot: Bot): string => `${botLabel(bot)} (${bot.engine}, ${bot.simulations}${bot.vary ? ", varied" : ""})`;
+/** A bot in words: "Strong (network, 32)", "Beginner (heuristic, 5, varied)"; a gallery model is named too, the main model is not. */
+export const botName = (bot: Bot): string => `${botLabel(bot)} (${bot.engine}, ${bot.simulations}${bot.vary ? ", varied" : ""}${bot.model === undefined ? "" : `, ${modelName(bot.model)}`})`;
 
 /** The names of a game's two seats: a person is "You" against a bot, "Person" against another person. */
 export function seatNames(record: Pick<GameRecord, "p1" | "p2">): { p1: string; p2: string } {
@@ -89,7 +98,11 @@ function readSeat(value: unknown): Seat | null {
   const { engine, simulations, vary } = seat;
   if (seat["kind"] !== "bot" || !ENGINES.includes(engine as EngineKind) || typeof vary !== "boolean") return null;
   if (typeof simulations !== "number" || !Number.isInteger(simulations) || simulations < 1 || simulations > 100_000) return null;
-  return { kind: "bot", engine: engine as EngineKind, simulations, vary };
+  // A row from before models were chosen has none: it was the main model. A model id is plain text of a sane length, and only a network has one.
+  const model = seat["model"];
+  if (model === undefined) return { kind: "bot", engine: engine as EngineKind, simulations, vary };
+  if (engine !== "network" || typeof model !== "string" || !/^[A-Za-z0-9][A-Za-z0-9._-]{0,79}$/.test(model)) return null;
+  return { kind: "bot", engine: "network", simulations, vary, model };
 }
 
 /** A saved game if every field is as the page writes it, else null. */

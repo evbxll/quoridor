@@ -2,13 +2,13 @@ import type { GlobalAction } from "../engine/actions";
 import { Game } from "../engine/game";
 import type { GameState } from "../engine/state";
 import { ANALYSIS_SIMULATIONS, Analysis, replay } from "./analysis";
-import { botLabel, botOf, capFor, modelName, setModelLabel, TIME_SOURCES } from "./bots";
+import { type Bot, botLabel, botOf, capFor, modelName, setModelLabel, TIME_SOURCES, withModel } from "./bots";
 import { describeBoard, renderBoard, wallOwners } from "./board";
 import { closePopoverOnEscapeOrOutside, element, onPress, setEnabled } from "./dom";
 import { AutoControls } from "./autoControls";
 import { type AutoHost, AutoPlay } from "./autoplay";
 import { GamesCard } from "./gamesCard";
-import { GameHistory, type StorageLike } from "./history";
+import { botOfSeat, type GameRecord, GameHistory, type StorageLike } from "./history";
 import { ModelManager, type ModelState, type StartInfo } from "../model/manager";
 import type { ModelEnv } from "../model/store";
 import { GameController, HUMAN, isOfferedSize, type Players, samePlayer, type SearchPort, type Side, sideOf, type Speed } from "./controller";
@@ -224,7 +224,7 @@ export function startPage(port: SearchPort, network: NetworkSource): GameControl
   const analysis = new Analysis(controller, port, () => modelState().status === "ready", render, () => evalVisible() || analysisOpen());
 
   const gameLog = new GameHistory(savedStorage());
-  const games = new GamesCard(gameLog, announce, () => statusLine.focus(), () => (controller.moves.length > 0 && controller.result === null) || autoplay.active);
+  const games = new GamesCard(gameLog, announce, () => statusLine.focus(), () => (controller.moves.length > 0 && controller.result === null) || autoplay.active, openRecord);
   const autoHost: AutoHost = {
     get size() {
       return controller.size;
@@ -258,6 +258,22 @@ export function startPage(port: SearchPort, network: NetworkSource): GameControl
   };
   const autoplay = new AutoPlay(autoHost, Math.random, () => render());
   const autoControls = new AutoControls(autoplay, () => toggleButton.focus());
+
+  /** The bot a game opened from the history was played by, kept until the address change opens it. */
+  let carriedBot: Bot | null = null;
+  /** The bot fitted to the board it will play: simulations within the board's cap, and its model only if that model plays there. */
+  const fitCarried = (bot: Bot, size: number): Bot => {
+    const model = bot.model !== undefined && modelsView().offered(bot.model, size) ? bot.model : undefined;
+    return withModel({ ...bot, simulations: Math.min(bot.simulations, capFor(bot.engine, size)) }, model);
+  };
+  /** Opens a game from the Games card as a link would, with the bot that played it (the person takes the other side). */
+  function openRecord(record: GameRecord): void {
+    const hash = `#n=${record.size}&m=${record.moves}`;
+    if (location.hash === hash) return;
+    const seat = record.p2.kind === "bot" ? record.p2 : record.p1.kind === "bot" ? record.p1 : null;
+    carriedBot = seat === null ? null : botOfSeat(seat);
+    location.hash = hash;
+  }
 
   /** A person may move: it is a person's turn, and the position on the board is the latest. */
   const canPlay = (): boolean => controller.humanToMove && !analysis.viewingPast;
@@ -745,7 +761,10 @@ export function startPage(port: SearchPort, network: NetworkSource): GameControl
       // Before anything changes: a link may name a size the engine reads and the site does not offer.
       if (!isOfferedSize(game.size)) throw new RangeError(`The site has no ${game.size}x${game.size} board`);
       const chosen: Players = { p1: controls.p1.playerFor(game.size), p2: controls.p2.playerFor(game.size) };
-      const bot = chosen.p1 !== HUMAN ? chosen.p1 : chosen.p2 !== HUMAN ? chosen.p2 : DEFAULT_PLAYERS.p2;
+      const carried = carriedBot;
+      carriedBot = null;
+      // A game opened from the history keeps the bot that played it, model included.
+      const bot = carried !== null ? fitCarried(carried, game.size) : chosen.p1 !== HUMAN ? chosen.p1 : chosen.p2 !== HUMAN ? chosen.p2 : DEFAULT_PLAYERS.p2;
       // The person plays the side to move, or player 1 if the game is over.
       const human: Side = game.result === null && !game.state.p1Turn ? "p2" : "p1";
       autoplay.interrupt();
@@ -827,6 +846,7 @@ export function startPage(port: SearchPort, network: NetworkSource): GameControl
   });
   window.addEventListener("hashchange", () => {
     if (location.hash !== controller.hash) openHash();
+    else carriedBot = null;
   });
 
   element("time-sources", HTMLElement).textContent = `Times for the main network and models made like it: ${TIME_SOURCES.network}. ${TIME_SOURCES.others.map((source) => `${source}. `).join("")}Times for the heuristic: ${TIME_SOURCES.heuristic}. "On this device" is the page's own clock for the bot's latest move.`;

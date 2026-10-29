@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { botOf } from "../../src/ui/bots";
+import { botOf, withModel } from "../../src/ui/bots";
 import { HUMAN } from "../../src/ui/controller";
 import { type FinishedGame, GameHistory, HISTORY_KEY, isMirror, MAX_GAMES, MAX_SAVED_CHARS, resultText, seatKey, seatNames, type StorageLike } from "../../src/ui/history";
 
@@ -190,5 +190,42 @@ describe("GameHistory saved in storage", () => {
     blocked.add(game());
     blocked.clear();
     expect(blocked.games).toEqual([]);
+  });
+});
+
+describe("models in the history", () => {
+  const MODEL = withModel(STRONG, "fc-9x9-a");
+
+  it("treats the same preset with another model as another bot, in keys, names, tally and mirror matches", () => {
+    expect(seatKey({ kind: "bot", ...MODEL })).not.toBe(seatKey({ kind: "bot", ...STRONG }));
+    const history = new GameHistory();
+    history.add(game({ p1: STRONG, p2: MODEL }));
+    history.add(game({ p1: STRONG, p2: botOf("strong") }));
+    expect(history.games.map(isMirror)).toEqual([false, true]);
+    expect(seatNames(history.games[0]!)).toEqual({ p1: "Strong (network, 32)", p2: "Strong (network, 32, fc-9x9-a)" });
+    expect(history.tallies().map((t) => [t.name, t.wins, t.losses])).toEqual([
+      ["Strong (network, 32, fc-9x9-a)", 0, 1],
+      ["Strong (network, 32)", 1, 0],
+    ]);
+  });
+
+  it("keeps the model through a reload, and reads a row saved before models as the main model", () => {
+    const storage = new MemoryStorage();
+    const first = new GameHistory(storage);
+    first.add(game({ p1: MODEL, p2: STRONG }));
+    expect(new GameHistory(storage).games).toEqual(first.games);
+    const old = { id: 1, size: 7, p1: { kind: "bot", engine: "network", simulations: 32, vary: false }, p2: { kind: "human" }, winner: "p1", reason: "goal", moves: "d2" };
+    storage.items.set(HISTORY_KEY, JSON.stringify({ v: 1, games: [old] }));
+    const read = new GameHistory(storage).games[0]!;
+    expect(seatKey(read.p1)).toBe(seatKey({ kind: "bot", ...STRONG }));
+    expect(seatNames(read).p1).toBe("Strong (network, 32)");
+  });
+
+  it("drops saved rows with a model that is not plain text, or on a heuristic bot", () => {
+    const row = (p1: object) => ({ id: 1, size: 7, p1, p2: { kind: "human" }, winner: "p1", reason: "goal", moves: "d2" });
+    const net = { kind: "bot", engine: "network", simulations: 32, vary: false };
+    const storage = new MemoryStorage();
+    storage.items.set(HISTORY_KEY, JSON.stringify({ v: 1, games: [row({ ...net, model: "<img>" }), row({ ...net, model: 5 }), row({ ...net, model: "" }), row({ ...net, engine: "heuristic", model: "fc-9x9-a" }), row({ ...net, model: "x".repeat(200) })] }));
+    expect(new GameHistory(storage).games).toEqual([]);
   });
 });
