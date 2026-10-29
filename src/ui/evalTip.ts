@@ -1,13 +1,14 @@
-import { type Bot, botLabel, sameBot } from "./bots";
+import { type Bot, botLabel, modelName, sameBot } from "./bots";
 import { type OpinionSource, type Player, type Side, HUMAN } from "./controller";
 
 const NUMBER: Readonly<Record<Side, number>> = { p1: 1, p2: 2 };
 
 const plural = (count: number, noun: string): string => `${count} ${noun}${count === 1 ? "" : "s"}`;
 
-/** A bot in words for a blurb: "Strong, network, 32 simulations". */
+/** A bot in words for a blurb: "Strong, network, 32 simulations"; a gallery model is named: "Strong, network (Conv, gen 50), 32 simulations". */
 export function botKind(bot: Bot): string {
-  return `${botLabel(bot)}, ${bot.engine === "network" ? "network" : "heuristic"}, ${plural(bot.simulations, "simulation")}`;
+  const kind = bot.engine === "network" ? (bot.model === undefined ? "network" : `network (${modelName(bot.model)})`) : "heuristic";
+  return `${botLabel(bot)}, ${kind}, ${plural(bot.simulations, "simulation")}`;
 }
 
 /** A player 1 share in whole percent as both players' numbers: "41% for Player 2 (59% for Player 1)", the named side first. */

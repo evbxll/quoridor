@@ -1,0 +1,148 @@
+import { type ModelCard, supportsSize } from "../model/card";
+import type { ModelState } from "../model/manager";
+import { offSizeMeasure } from "./bots";
+
+/** The value of the Model select's first option: the main model, whichever the index names for the board. */
+export const MAIN_MODEL = "";
+
+/** What the seat says before a model is picked: the download is large. */
+export const FIRST_USE_NOTE = "A model other than the main bot downloads about 10 MB the first time you pick it.";
+
+/** One entry of a seat's Model select. */
+export interface ModelOption {
+  /** `MAIN_MODEL` for the main bot, else the model id. */
+  readonly value: string;
+  readonly label: string;
+  readonly disabled: boolean;
+}
+
+/** What the options are made from. */
+export interface OptionInput {
+  /** The model that plays the board size (the index's `bots`), or null before it is known. */
+  readonly mainId: string | null;
+  /** The published gallery, in order. */
+  readonly gallery: readonly string[];
+  /** The card of a model if it has been read. */
+  readonly card: (id: string) => ModelCard | null;
+  /** The board size of the game. */
+  readonly size: number;
+}
+
+/** The gallery models a seat can choose besides the main bot, in the published order. */
+export const extraModels = (mainId: string | null, gallery: readonly string[]): string[] => gallery.filter((id) => id !== mainId);
+
+const eloText = (elo: number): string => `${elo < 0 ? "-" : "+"}${Math.abs(Math.round(elo))}`;
+
+/** The generation in a model's id (`...-g050`), for a card that does not say. */
+const idGeneration = (id: string): number | null => {
+  const found = /-g(\d+)$/.exec(id);
+  return found === null ? null : Number(found[1]);
+};
+
+/** A model in words from its card: "Conv, gen 50". Without a card, its id. */
+export function modelTitle(id: string, card: ModelCard | null): string {
+  if (card === null) return id;
+  const head = card.network.head === "fc" ? "FC" : "Conv";
+  const generation = card.source.generation ?? idGeneration(id);
+  return generation === null ? `${head}, ${card.displayName}` : `${head}, gen ${generation}`;
+}
+
+/** The 9x9 ladder rating in the card, if it has one. */
+const ladder = (card: ModelCard, size: number) => card.strength.find((entry) => entry.size === size) ?? null;
+
+/** Why the model cannot play this size, or null if it can (or its card is not read yet, which cannot say). */
+export function disabledReason(card: ModelCard | null, size: number): string | null {
+  if (card === null || supportsSize(card, size)) return null;
+  return card.network.head === "fc" ? `${card.trainedSize}x${card.trainedSize} only` : `not offered at ${size}x${size}`;
+}
+
+/**
+ * The entries of a seat's Model select: the main bot first, then every gallery model but the main one in the published
+ * order. A model that cannot play the board is disabled with the reason in its label. Fewer than two entries mean there is
+ * nothing to choose, so the select is not shown: the list is then empty.
+ */
+export function buildModelOptions(input: OptionInput): ModelOption[] {
+  const extras = extraModels(input.mainId, input.gallery);
+  if (extras.length === 0) return [];
+  const rated = (card: ModelCard | null): string => {
+    const found = card === null ? null : ladder(card, 9);
+    return found === null ? "" : `${eloText(found.elo)} Elo`;
+  };
+  const options: ModelOption[] = [];
+  const mainCard = input.mainId === null ? null : input.card(input.mainId);
+  const mainRating = rated(mainCard);
+  options.push({
+    value: MAIN_MODEL,
+    label: mainCard === null || input.mainId === null ? "Main bot" : `${modelTitle(input.mainId, mainCard)} (${mainRating === "" ? "main" : `main, ${mainRating}`})`,
+    disabled: false,
+  });
+  for (const id of extras) {
+    const card = input.card(id);
+    const reason = disabledReason(card, input.size);
+    const rating = rated(card);
+    const detail = reason !== null ? reason : rating;
+    options.push({ value: id, label: detail === "" ? modelTitle(id, card) : `${modelTitle(id, card)} (${detail})`, disabled: reason !== null });
+  }
+  return options;
+}
+
+/** The note for a conv model on a size other than the one it trained on, or null when there is none to give. */
+export function offSizeNote(id: string, card: ModelCard, size: number): string | null {
+  if (card.network.head !== "conv" || size === card.trainedSize) return null;
+  const trained = `Trained on ${card.trainedSize}x${card.trainedSize}. Its convolutional architecture can play other sizes, but it was never trained on this one`;
+  const measured = offSizeMeasure(id, size);
+  return measured === null
+    ? `${trained}, so its strength here is unmeasured.`
+    : `${trained}. Measured here: score ${measured} against the Evan bot (fresh tree, 95% interval over start positions).`;
+}
+
+/** One line of strength from the card, at the board size if the card rates it there, else where it does. */
+export function strengthLine(card: ModelCard, size: number): string {
+  const here = ladder(card, size);
+  const entry = here ?? card.strength[0] ?? null;
+  if (entry === null) return `No strength is measured for this model.`;
+  const level = Math.round(entry.intervalLevel * 100);
+  const rating = `${entry.size}x${entry.size} ladder Elo ${eloText(entry.elo)} [${eloText(entry.interval[0])}, ${eloText(entry.interval[1])}] vs the Evan bot at ${entry.simulations} simulations (${level}%). Ladder Elo, not a win rate.`;
+  return here === null ? `Not rated on ${size}x${size}. ${rating}` : rating;
+}
+
+/** The conditions of the rating, from the card's own fields, for the disclosure under the strength line. */
+export function strengthDetail(card: ModelCard, size: number): string | null {
+  const entry = ladder(card, size) ?? card.strength[0] ?? null;
+  if (entry === null) return null;
+  return `Rated against: ${entry.anchor}. Openings: ${entry.openings}. Settings: ${entry.settings}. Interval: ${entry.intervalMethod}. ${entry.ladderGames} ladder games.`;
+}
+
+/** Where a seat's model stands, in words, and how far a download is (null when unknown or not downloading). */
+export interface ModelStatus {
+  readonly text: string;
+  readonly percent: number | null;
+  readonly downloading: boolean;
+  readonly failed: boolean;
+}
+
+const megabytes = (bytes: number): string => (bytes / 1e6).toFixed(1);
+
+/** The state of a gallery model in words: "Conv, gen 50: downloading 40% (4.0 of 9.9 MB)". */
+export function describeModelStatus(title: string, state: ModelState): ModelStatus {
+  const plain = (text: string, failed = false): ModelStatus => ({ text, percent: null, downloading: false, failed });
+  switch (state.status) {
+    case "checking":
+      return plain(`${title}: looking for it…`);
+    case "idle":
+      return plain(`${title}: not loaded.`);
+    case "downloading": {
+      const percent = state.total === null ? null : Math.floor((state.loaded / state.total) * 100);
+      const done = state.total === null ? `${megabytes(state.loaded)} MB` : `${megabytes(state.loaded)} of ${megabytes(state.total)} MB`;
+      return { text: `${title}: downloading ${percent === null ? done : `${percent}% (${done})`}`, percent, downloading: true, failed: false };
+    }
+    case "ready":
+      return plain(`${title}: ready${state.fromCache ? ", loaded from this device" : ""}.`);
+    case "failed":
+      return plain(`${title}: the download failed. ${state.message}`, true);
+    case "unavailable":
+      return state.reason === "unsupported-size"
+        ? plain(`${title}: does not play this board size.`, true)
+        : plain(`${title}: not usable. ${state.message ?? ""}`.trim(), true);
+  }
+}

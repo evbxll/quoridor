@@ -99,6 +99,8 @@ export class GameController {
   private failure: string | null = null;
   private playing = false;
   private network = false;
+  /** Gallery models that are ready, for bots that name one. */
+  private ready: ReadonlySet<string> = new Set();
   private delayMs: number = SPEEDS.normal;
   private timer: ReturnType<typeof setTimeout> | null = null;
   /** Counts searches, games, takebacks and pauses, so a reply to a position that no longer exists is dropped. */
@@ -166,7 +168,13 @@ export class GameController {
   /** A bot is due to move but its engine needs the network, which is not ready. */
   get waiting(): boolean {
     const seat = this.seats[this.mover];
-    return seat !== HUMAN && seat.engine === "network" && !this.network && this.due();
+    return seat !== HUMAN && !this.canSearch(seat) && this.due();
+  }
+
+  /** The gallery model the bot to move waits for; null if it waits for none (the main model, or no wait). */
+  get waitingModel(): string | null {
+    const seat = this.seats[this.mover];
+    return this.waiting && seat !== HUMAN && seat.model !== undefined ? seat.model : null;
   }
 
   /** Where the last move landed, or null before any move. */
@@ -192,7 +200,7 @@ export class GameController {
   /** Whether `step` would play a move: two bots, paused, and the game is not over. */
   get canStep(): boolean {
     const seat = this.seats[this.mover];
-    return !this.hasHuman && !this.playing && !this.searching && this.game.result === null && seat !== HUMAN && (seat.engine !== "network" || this.network);
+    return !this.hasHuman && !this.playing && !this.searching && this.game.result === null && seat !== HUMAN && this.canSearch(seat);
   }
 
   /** Each bot's reading at its latest move among the first `ply` moves (all of them by default). */
@@ -249,6 +257,15 @@ export class GameController {
   setNetworkReady(ready: boolean): void {
     if (ready === this.network) return;
     this.network = ready;
+    if (this.searching) this.onChange();
+    else this.advance();
+  }
+
+  /** Tells the controller which gallery models are ready; a bot that waited for one moves now. */
+  setReadyModels(ready: ReadonlySet<string>): void {
+    const same = ready.size === this.ready.size && [...ready].every((id) => this.ready.has(id));
+    if (same) return;
+    this.ready = new Set(ready);
     if (this.searching) this.onChange();
     else this.advance();
   }
@@ -366,8 +383,14 @@ export class GameController {
   private advance(stepping = false): void {
     const seat = this.seats[this.mover];
     const due = this.due() || (stepping && this.game.result === null && seat !== HUMAN);
-    if (due && seat !== HUMAN && (seat.engine !== "network" || this.network)) void this.botMove(seat);
+    if (due && seat !== HUMAN && this.canSearch(seat)) void this.botMove(seat);
     else this.onChange();
+  }
+
+  /** Whether the bot's evaluator is ready: the heuristic always, the main model after `setNetworkReady`, a gallery model when `setReadyModels` lists it. */
+  private canSearch(bot: Bot): boolean {
+    if (bot.engine !== "network") return true;
+    return bot.model === undefined ? this.network : this.ready.has(bot.model);
   }
 
   private wait(): void {
@@ -389,6 +412,7 @@ export class GameController {
       for (let attempt = 0; attempt <= RETRIES_AFTER_CANCEL && reply === null; attempt++) {
         reply = await this.port.search({
           engine: bot.engine,
+          ...(bot.model !== undefined ? { model: bot.model } : {}),
           size: this.game.size,
           moves: this.game.moves,
           // The seat form fits a bot to its board size, but a link or a seat set elsewhere may not have: the cap holds here.

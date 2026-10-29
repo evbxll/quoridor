@@ -1,3 +1,4 @@
+import type { ModelCard } from "../model/card";
 import data from "./bots.json";
 
 /** The evaluators a bot can search with. */
@@ -9,6 +10,11 @@ export interface Bot {
   readonly simulations: number;
   /** False plays the most visited move; true samples among the searched moves by visits (temperature 1). */
   readonly vary: boolean;
+  /**
+   * The gallery model a network bot searches with. Absent means the main model (the index's `bots` for the board),
+   * and the search request then names no model. A heuristic bot has none.
+   */
+  readonly model?: string;
 }
 
 export type PresetId = "beginner" | "normal" | "strong" | "max";
@@ -28,10 +34,19 @@ interface BotsData {
   readonly caps: PerEngine<{ readonly default: number; readonly bySize: Readonly<Record<string, number>> }>;
   readonly capReasons: PerEngine<{ readonly default: string; readonly bySize: Readonly<Record<string, string>> }>;
   readonly calibration: { readonly engine: EngineKind; readonly simulations: number; readonly size: number; readonly holds: string; readonly otherwise: string; readonly network: string };
+  /** Scores of a model off its trained size, against the fresh-tree Evan bot, by model id and board size. */
+  readonly offSize: Readonly<Record<string, Readonly<Record<string, { readonly simulations: number; readonly score: number; readonly interval: readonly [number, number]; readonly games: number | null }>>>>;
   readonly times: {
     readonly device: string;
     readonly deviceDetail: string;
-    readonly network: { readonly model: string; readonly bySize: Readonly<Record<string, Points>> };
+    readonly network: {
+      readonly model: string;
+      /** What the measured model is made of; a model with the same make is as fast. */
+      readonly architecture: { readonly head: string; readonly inputPlanes: number; readonly channels: number; readonly blocks: number };
+      readonly bySize: Readonly<Record<string, Points>>;
+      /** Models of another make, each with its own measured table. */
+      readonly others: Readonly<Record<string, { readonly source: string; readonly bySize: Readonly<Record<string, Points>> }>>;
+    };
     readonly heuristic: { readonly source: string; readonly msAt100: Readonly<Record<string, number>> };
   };
 }
@@ -51,19 +66,40 @@ export function preset(id: PresetId): Preset {
   return PRESETS.find((candidate) => candidate.id === id)!;
 }
 
-export const sameBot = (a: Bot, b: Bot): boolean => a.engine === b.engine && a.simulations === b.simulations && a.vary === b.vary;
+/** Whether two bots have the same engine, budget and move choice, whichever model they use. */
+const sameSettings = (a: Bot, b: Bot): boolean => a.engine === b.engine && a.simulations === b.simulations && a.vary === b.vary;
 
-/** The preset whose settings the bot has, or null: the bot is then Custom. */
+/** Whether two bots are the same bot: the same settings and the same model (absent: the main model). */
+export const sameBot = (a: Bot, b: Bot): boolean => sameSettings(a, b) && (a.model ?? null) === (b.model ?? null);
+
+/** The preset whose settings the bot has, or null: the bot is then Custom. The model is a separate setting, so a preset keeps its name with any model. */
 export function presetOf(bot: Bot): Preset | null {
-  return PRESETS.find((candidate) => sameBot(candidate, bot)) ?? null;
+  return PRESETS.find((candidate) => sameSettings(candidate, bot)) ?? null;
 }
 
 /** The bot's name: its preset's, or "Custom". */
 export const botLabel = (bot: Bot): string => presetOf(bot)?.label ?? "Custom";
 
-/** The bot's settings in words: "Neural network, 32 searches a move, varied". */
+const modelLabels = new Map<string, string>();
+
+/** Remembers how a model is called in words (from its card), for the summaries and blurbs that name it. */
+export function setModelLabel(id: string, label: string): void {
+  modelLabels.set(id, label);
+}
+
+/** A model's name in words: its label if the page has one, else its id. */
+export const modelName = (id: string): string => modelLabels.get(id) ?? id;
+
+/** The bot's settings in words: "Neural network, 32 searches a move, varied"; a gallery model is named, the main model is not. */
 export function botSummary(bot: Bot): string {
-  return `${bot.engine === "network" ? "Neural network" : "Heuristic"}, ${bot.simulations} searches a move${bot.vary ? ", varied" : ""}`;
+  const model = bot.engine === "network" && bot.model !== undefined ? `, ${modelName(bot.model)}` : "";
+  return `${bot.engine === "network" ? "Neural network" : "Heuristic"}, ${bot.simulations} searches a move${bot.vary ? ", varied" : ""}${model}`;
+}
+
+/** The bot with `model` set (absent for the main model); a heuristic bot takes none. */
+export function withModel(bot: Bot, model: string | undefined): Bot {
+  const { model: _old, ...rest } = bot;
+  return bot.engine === "network" && model !== undefined ? { ...rest, model } : rest;
 }
 
 /** The settings a preset sets. */
@@ -115,8 +151,8 @@ export function estimateMs(bot: Bot, size: number, model: string | null = null):
     const at100 = DATA.times.heuristic.msAt100[size];
     return at100 === undefined ? null : { ms: (at100 * bot.simulations) / 100, p90: null, kind: "estimate" };
   }
-  if (model !== null && model !== MEASURED_MODEL) return null;
-  const points = DATA.times.network.bySize[size];
+  const table = model === null || model === MEASURED_MODEL ? DATA.times.network.bySize : DATA.times.network.others[model]?.bySize;
+  const points = table?.[size];
   if (points === undefined) return null;
   let before: readonly [number, number, number] = [0, 0, 0];
   for (const point of points) {
@@ -155,5 +191,23 @@ export function calibrationNote(bot: Bot, size: number): string {
   return bot.simulations === simulations && size === calibrated ? holds : otherwise;
 }
 
+/**
+ * The model whose measured times apply to a model with this card: the measured one when it is made the same way
+ * (head, input planes, width, depth), else the model itself. Unknown makes have no table and read "unmeasured".
+ */
+export function timeModelOf(card: ModelCard): string {
+  const made = DATA.times.network.architecture;
+  const { head, inputPlanes, channels, blocks } = card.network;
+  return head === made.head && inputPlanes === made.inputPlanes && channels === made.channels && blocks === made.blocks ? MEASURED_MODEL : card.id;
+}
+
+/** The measurement of a model off its trained size, if the repo has one: "0.927 [0.833, 1.000] at 32 simulations". */
+export function offSizeMeasure(id: string, size: number): string | null {
+  const found = DATA.offSize[id]?.[size];
+  if (found === undefined) return null;
+  const games = found.games === null ? "" : `, ${found.games} games`;
+  return `${found.score.toFixed(3)} [${found.interval[0].toFixed(3)}, ${found.interval[1].toFixed(3)}] at ${found.simulations} simulations${games}`;
+}
+
 /** Where the measured and derived times come from, for the estimate's text alternative. */
-export const TIME_SOURCES = { network: DATA.times.deviceDetail, heuristic: DATA.times.heuristic.source } as const;
+export const TIME_SOURCES = { network: DATA.times.deviceDetail, heuristic: DATA.times.heuristic.source, others: Object.values(DATA.times.network.others).map((other) => other.source) } as const;

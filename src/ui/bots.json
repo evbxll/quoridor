@@ -36,16 +36,30 @@
     "otherwise": "Normal's calibration to a human average holds only at 100 simulations on 9 × 9.",
     "network": "Strong and Max are this network at 32 and 200 simulations."
   },
+  "offSize": {
+    "s9-conv-paths-g105": {
+      "7": { "simulations": 32, "score": 0.948, "interval": [0.895, 0.989], "games": null },
+      "11": { "simulations": 32, "score": 0.927, "interval": [0.833, 1.0], "games": null },
+      "13": { "simulations": 32, "score": 0.958, "interval": [0.891, 1.0], "games": null }
+    }
+  },
   "times": {
     "device": "a fast desktop",
     "deviceDetail": "Ryzen 7 7700X, Edge, 4 threads; PR #177 of the private research repo, median ms per move with tree reuse",
     "network": {
       "model": "s9-conv-paths-g105",
+      "architecture": { "head": "conv", "inputPlanes": 10, "channels": 128, "blocks": 8 },
       "bySize": {
         "5": [[32, 50, 74], [200, 185, 559], [400, 417, 2047], [800, 508, 2813]],
         "7": [[32, 98, 156], [200, 425, 923]],
         "9": [[32, 155, 213], [200, 635, 1234], [400, 2377, 3538], [800, 3865, 5795]],
         "11": [[32, 200, 289], [200, 848, 1720]]
+      },
+      "others": {
+        "s9-fpu-basic-g112": {
+          "source": "s9-fpu-basic-g112 (fc heads) was timed for this page in headless Edge on 9x9 with 4 threads, the median and 90th percentile over 18 to 19 of its moves against Normal with tree reuse, at 32 and 200 simulations; the machine is a 16-thread desktop, not the one above",
+          "bySize": { "9": [[32, 128, 170], [200, 806, 1148]] }
+        }
       }
     },
     "heuristic": {

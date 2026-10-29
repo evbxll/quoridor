@@ -13,9 +13,10 @@ export function playerName(players: Players, side: Side): string {
 /**
  * The status line under the board, also read out by screen readers: the last
  * move, then whose turn it is or how the game ended and why. `network` says
- * where the network stands ("downloading, 40%") for a bot that waits for it.
+ * where the network stands ("downloading, 40%") for a bot that waits for it;
+ * `subject` names what the bot waits for ("the network", or a gallery model).
  */
-export function statusText(controller: GameController, network: string): string {
+export function statusText(controller: GameController, network: string, subject = "the network"): string {
   const players = controller.players;
   const name = (side: Side): string => playerName(players, side);
   const moves = controller.moves;
@@ -32,7 +33,7 @@ export function statusText(controller: GameController, network: string): string 
   if (controller.error !== null) return `${played}${name(mover)} could not move (${controller.error}). Choose Retry.`;
   if (seat === HUMAN) return `${played}${name(mover) === "You" ? "Your move." : `${name(mover)} to move.`}`;
   if (controller.thinking) return `${played}${name(mover)} is thinking (${seat.engine === "network" ? "neural network" : "heuristic search"}).`;
-  if (controller.waiting) return `${played}${name(mover)} is waiting for the network (${network}).`;
+  if (controller.waiting) return `${played}${name(mover)} is waiting for ${subject} (${network}).`;
   if (!controller.hasHuman && !controller.running) return moves.length === 0 ? "Choose Start to watch the bots play." : `${played}Paused.`;
   return `${played}${name(mover)} moves next.`;
 }

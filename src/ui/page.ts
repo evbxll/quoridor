@@ -2,19 +2,22 @@ import type { GlobalAction } from "../engine/actions";
 import { Game } from "../engine/game";
 import type { GameState } from "../engine/state";
 import { ANALYSIS_SIMULATIONS, Analysis, replay } from "./analysis";
-import { botLabel, botOf, capFor, TIME_SOURCES } from "./bots";
+import { botLabel, botOf, capFor, modelName, setModelLabel, TIME_SOURCES } from "./bots";
 import { describeBoard, renderBoard, wallOwners } from "./board";
 import { closePopoverOnEscapeOrOutside, element, onPress, setEnabled } from "./dom";
 import { ModelManager, type ModelState, type StartInfo } from "../model/manager";
 import type { ModelEnv } from "../model/store";
 import { GameController, HUMAN, isOfferedSize, type Players, samePlayer, type SearchPort, type Side, sideOf, type Speed } from "./controller";
 import { evalBar } from "./evalBar";
+import { buildModelOptions, extraModels, modelTitle } from "./modelInfo";
 import { barBlurb, markerBlurb } from "./evalTip";
 import { boardSpan, cellAt, PAD, wallAt } from "./geometry";
 import { WallPreview } from "./pointer";
 import { Tooltips } from "./tooltip";
 import { visibleControls } from "./visibility";
-import { SeatControls, type SeatContext } from "./seatControls";
+import { SeatControls, type SeatContext, type ModelsView } from "./seatControls";
+import { SeatModels } from "./seatModels";
+import { supportsSize } from "../model/card";
 import { botsArePlaying, moveRows, playerName, statusIsMuted, statusText } from "./status";
 import { describeTarget, findAction, moveCursor, pawnTargets } from "./targets";
 
@@ -148,6 +151,49 @@ export function startPage(port: SearchPort, network: NetworkSource): GameControl
     networkChanged();
   }, network.stop);
   const modelState = (): ModelState => models.state(controller.size);
+  /** Gallery models the seats of the game on the board search with. */
+  const seatModelIds = (): string[] => SIDES.flatMap((side) => {
+    const seat = controller.players[side];
+    return seat !== HUMAN && seat.model !== undefined ? [seat.model] : [];
+  });
+  const modelStatusSaid = (id: string, state: ModelState): void => {
+    const title = modelName(id);
+    const why = state.status === "failed" || state.status === "unavailable" ? (state.message ?? "") : "";
+    announce(state.status === "ready" ? `${title} is ready.` : `${title} could not be loaded. ${why}`.trim());
+  };
+  const seatModels = new SeatModels(models, modelStatusSaid);
+  /** Cards are read once, only when there is a model to choose beyond the main bot; their labels name the models in summaries and blurbs. */
+  const cardsAsked = new Set<string>();
+  const askForCards = (): void => {
+    const main = models.mainIdFor(controller.size);
+    const extras = extraModels(main, models.gallery);
+    if (extras.length === 0) return;
+    for (const id of main === null ? extras : [main, ...extras]) {
+      if (cardsAsked.has(id)) continue;
+      cardsAsked.add(id);
+      models.card(id).then(
+        (card) => {
+          setModelLabel(id, modelTitle(id, card));
+          render();
+        },
+        () => render(),
+      );
+    }
+  };
+  const modelsView = (): ModelsView => {
+    const mainId = models.mainIdFor(controller.size);
+    return {
+      mainId,
+      options: buildModelOptions({ mainId, gallery: models.gallery, card: (id) => models.cardIfLoaded(id), size: controller.size }),
+      card: (id) => models.cardIfLoaded(id),
+      state: (id) => models.stateFor(id, controller.size),
+      offered: (id, size) => {
+        if (models.publishesAny === null) return true;
+        const card = models.cardIfLoaded(id);
+        return models.gallery.includes(id) && id !== models.mainIdFor(size) && (card === null || supportsSize(card, size));
+      },
+    };
+  };
   /** False once the model index is read and publishes no network at any size; true while that is not known yet. */
   const networkPublished = (): boolean => models.publishesAny !== false;
   /** The evaluation is shown: a network is published, and either two bots play or the viewer left "Show evaluation" on. */
@@ -162,7 +208,7 @@ export function startPage(port: SearchPort, network: NetworkSource): GameControl
 
   const seatContext = (side: Side) => (): SeatContext => {
     const state = modelState();
-    return { size: controller.size, networkOff: state.status === "unavailable", model: state.status === "ready" ? state.model : null, moveTime: controller.moveTime(side) };
+    return { size: controller.size, networkOff: state.status === "unavailable", model: state.status === "ready" ? state.model : null, moveTime: controller.moveTime(side), models: modelsView() };
   };
   /** A change to one seat's controls reaches the game at once; the board size alone waits for New game. */
   const seatEdited = (side: Side) => (announcement: string | null): void => {
@@ -171,11 +217,15 @@ export function startPage(port: SearchPort, network: NetworkSource): GameControl
     // The sentence below says it; the status line stays quiet for this change, so a toggle is read once.
     quietForSeatChange();
     controller.setPlayers({ ...controller.players, [side]: controls[side].player });
+    syncSeatModels();
     render();
     if (hadHuman !== controller.hasHuman) announce(controller.hasHuman ? `${announcement ?? ""} Undo and How to move are shown; Start is hidden.`.trim() : "Both players are bots: press Start to watch.");
     else if (announcement !== null) announce(announcement);
   };
-  const controls = { p1: new SeatControls("p1", seatContext("p1"), seatEdited("p1")), p2: new SeatControls("p2", seatContext("p2"), seatEdited("p2")) };
+  const retryModel = (id: string): void => {
+    seatModels.retry(id);
+  };
+  const controls = { p1: new SeatControls("p1", seatContext("p1"), seatEdited("p1"), retryModel), p2: new SeatControls("p2", seatContext("p2"), seatEdited("p2"), retryModel) };
   const chosenPlayers = (): Players => ({ p1: controls.p1.player, p2: controls.p2.player });
   const showPlayers = (players: Players): void => {
     for (const side of SIDES) controls[side].set(players[side]);
@@ -212,7 +262,15 @@ export function startPage(port: SearchPort, network: NetworkSource): GameControl
       else if (state.status === "ready" || state.status === "failed") announce(describeNetwork(state, controller.size).line);
     }
     controller.setNetworkReady(state.status === "ready");
+    askForCards();
+    syncSeatModels();
     analysis.update();
+  }
+
+  /** Loads the gallery models the seats hold and frees those no seat holds; tells the controller which are ready. */
+  function syncSeatModels(): void {
+    seatModels.sync(seatModelIds(), (id) => models.stateFor(id, controller.size));
+    controller.setReadyModels(new Set(seatModelIds().filter((id) => models.stateFor(id, controller.size).status === "ready")));
   }
 
   function renderNetwork(): void {
@@ -264,7 +322,11 @@ export function startPage(port: SearchPort, network: NetworkSource): GameControl
     board.setAttribute("aria-label", `Quoridor. ${describeBoard(state)}${viewing}`);
     renderViewing();
     board.classList.toggle("can-click", canMove);
-    const text = statusText(controller, describeNetwork(modelState(), controller.size).short);
+    const waitingModel = controller.waitingModel;
+    const text =
+      waitingModel === null
+        ? statusText(controller, describeNetwork(modelState(), controller.size).short)
+        : statusText(controller, describeNetwork(models.stateFor(waitingModel, controller.size), controller.size).short, modelName(waitingModel));
     if (statusLine.textContent !== text) statusLine.textContent = text;
     // Two bots playing on change the line with every move; keep it quiet, also after the end, and say the end of the game once through #live.
     statusLine.setAttribute("aria-live", statusIsMuted(controller) || quietStatus ? "off" : "polite");
@@ -295,7 +357,9 @@ export function startPage(port: SearchPort, network: NetworkSource): GameControl
           : toMove && controller.thinking
             ? "Thinking…"
             : toMove && controller.waiting
-              ? `Waiting for the network: ${describeNetwork(modelState(), controller.size).short}.`
+              ? controller.waitingModel === null
+                ? `Waiting for the network: ${describeNetwork(modelState(), controller.size).short}.`
+                : `Waiting for ${modelName(controller.waitingModel)}: ${describeNetwork(models.stateFor(controller.waitingModel, controller.size), controller.size).short}.`
               : "";
       controls[side].draw();
       const noteElement = element(`note-${side}`, HTMLElement);
@@ -580,7 +644,16 @@ export function startPage(port: SearchPort, network: NetworkSource): GameControl
     const size = Number(sizeSelect.value);
     // Before the game starts, so a bot that moves first does not search with another size's network.
     controller.setNetworkReady(models.state(size).status === "ready");
-    controller.newGame(size, { p1: controls.p1.playerFor(size), p2: controls.p2.playerFor(size) });
+    const chosen: Players = { p1: controls.p1.playerFor(size), p2: controls.p2.playerFor(size) };
+    for (const side of SIDES) {
+      const before = controls[side].player;
+      const after = chosen[side];
+      // A model that does not play the new board (an fc model off its size) gives way to the main bot, said aloud.
+      if (before !== HUMAN && before.model !== undefined && after !== HUMAN && after.model === undefined) {
+        announce(`${modelName(before.model)} does not play ${size} × ${size}, so player ${side === "p1" ? 1 : 2} plays the main bot.`);
+      }
+    }
+    controller.newGame(size, chosen);
     networkChanged();
     void models.select(controller.size);
   }
@@ -633,6 +706,7 @@ export function startPage(port: SearchPort, network: NetworkSource): GameControl
     seatsChosen = true;
     quietForSeatChange();
     controller.setPlayers({ p1: p2, p2: p1 });
+    syncSeatModels();
     render();
     announce("Sides swapped.");
   });
