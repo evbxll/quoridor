@@ -30,6 +30,8 @@ export interface GameRecord {
   readonly reason: Reason;
   /** The moves in standard notation, joined by dots (the `m` of the link). */
   readonly moves: string;
+  /** A seat was edited while the game was on, so the bots listed are not the ones that played all of it. */
+  readonly seatChanged: boolean;
 }
 
 /** What the page knows about a game when it ends. */
@@ -40,6 +42,7 @@ export interface FinishedGame {
   readonly winner: Winner;
   readonly reason: Reason;
   readonly moves: readonly string[];
+  readonly seatChanged: boolean;
 }
 
 export const seatOf = (player: Player): Seat =>
@@ -75,6 +78,12 @@ export function resultText(winner: Winner, reason: Reason): string {
 
 /** Whether both seats hold the same player (a bot with the same settings, or two people): such a game says nothing about either. */
 export const isMirror = (record: Pick<GameRecord, "p1" | "p2">): boolean => seatKey(record.p1) === seatKey(record.p2);
+
+/** Whether the game counts in the tally: both seats are different players, and the same two played it from its start to its end. */
+export const isCounted = (record: GameRecord): boolean => !isMirror(record) && !record.seatChanged;
+
+/** Largest game number read back from storage; a bigger one is not one the page wrote. */
+const MAX_ID = 1_000_000_000;
 
 /** One identity's record over the kept games. */
 export interface Tally {
@@ -113,12 +122,14 @@ function readRecord(value: unknown): GameRecord | null {
   const p1 = readSeat(row["p1"]);
   const p2 = readSeat(row["p2"]);
   if (p1 === null || p2 === null) return null;
-  if (typeof id !== "number" || !Number.isInteger(id) || id < 1) return null;
+  if (typeof id !== "number" || !Number.isSafeInteger(id) || id < 1 || id > MAX_ID) return null;
+  const changed = row["seatChanged"];
+  if (changed !== undefined && typeof changed !== "boolean") return null;
   if (typeof size !== "number" || !Number.isInteger(size) || size < 3 || size > 13) return null;
   if (!WINNERS.includes(winner as Winner) || !REASONS.includes(reason as Reason)) return null;
   if ((winner === "draw") === (reason === "goal")) return null;
   if (typeof moves !== "string" || moves.length > 20_000 || !/^[a-z0-9]+(\.[a-z0-9]+)*$/.test(moves)) return null;
-  return { id, size, p1, p2, winner: winner as Winner, reason: reason as Reason, moves };
+  return { id, size, p1, p2, winner: winner as Winner, reason: reason as Reason, moves, seatChanged: changed === true };
 }
 
 /** The games finished this visit, newest last; kept in memory and, where the browser allows, saved. */
@@ -137,7 +148,7 @@ export class GameHistory {
 
   /** Adds a finished game and drops the oldest ones beyond `MAX_GAMES`. */
   add(game: FinishedGame): GameRecord {
-    const record: GameRecord = { id: this.next++, size: game.size, p1: seatOf(game.p1), p2: seatOf(game.p2), winner: game.winner, reason: game.reason, moves: game.moves.join(".") };
+    const record: GameRecord = { id: this.next++, size: game.size, p1: seatOf(game.p1), p2: seatOf(game.p2), winner: game.winner, reason: game.reason, moves: game.moves.join("."), seatChanged: game.seatChanged };
     this.list.push(record);
     if (this.list.length > MAX_GAMES) this.list.splice(0, this.list.length - MAX_GAMES);
     this.save();
@@ -156,20 +167,24 @@ export class GameHistory {
 
   /**
    * Each identity's wins, losses and draws over the kept games, the most games first. Mirror matches
-   * (the same player in both seats) are left out: a win and a loss for one player says nothing.
+   * (the same player in both seats: a win and a loss for one player says nothing) and games with a seat
+   * changed part-way are left out. An identity is counted per board size, and the size is named when the
+   * kept games span more than one.
    */
   tallies(): Tally[] {
     const totals = new Map<string, { name: string; wins: number; losses: number; draws: number }>();
-    const count = (seat: Seat, outcome: "wins" | "losses" | "draws"): void => {
-      const key = seatKey(seat);
-      const entry = totals.get(key) ?? { name: seat.kind === "bot" ? botName(seat) : "You", wins: 0, losses: 0, draws: 0 };
+    const sized = new Set(this.list.map((game) => game.size)).size > 1;
+    const count = (seat: Seat, size: number, outcome: "wins" | "losses" | "draws"): void => {
+      const key = `${size}:${seatKey(seat)}`;
+      const name = seat.kind === "bot" ? botName(seat) : "You";
+      const entry = totals.get(key) ?? { name: sized ? `${name} on ${size} × ${size}` : name, wins: 0, losses: 0, draws: 0 };
       entry[outcome]++;
       totals.set(key, entry);
     };
     for (const game of this.list) {
-      if (isMirror(game)) continue;
-      count(game.p1, game.winner === "draw" ? "draws" : game.winner === "p1" ? "wins" : "losses");
-      count(game.p2, game.winner === "draw" ? "draws" : game.winner === "p2" ? "wins" : "losses");
+      if (!isCounted(game)) continue;
+      count(game.p1, game.size, game.winner === "draw" ? "draws" : game.winner === "p1" ? "wins" : "losses");
+      count(game.p2, game.size, game.winner === "draw" ? "draws" : game.winner === "p2" ? "wins" : "losses");
     }
     return [...totals.entries()]
       .map(([key, t]) => ({ key, ...t, score: (t.wins + t.draws / 2) / (t.wins + t.losses + t.draws) }))
@@ -184,7 +199,15 @@ export class GameHistory {
       if (typeof data !== "object" || data === null || (data as { v?: unknown }).v !== 1) return;
       const rows = (data as { games?: unknown }).games;
       if (!Array.isArray(rows)) return;
-      const kept = rows.map(readRecord).filter((record): record is GameRecord => record !== null);
+      // A game number is unique: a repeated one is not what the page wrote, and Open finds a game by it.
+      const kept: GameRecord[] = [];
+      const seen = new Set<number>();
+      for (const row of rows) {
+        const record = readRecord(row);
+        if (record === null || seen.has(record.id)) continue;
+        seen.add(record.id);
+        kept.push(record);
+      }
       this.list = kept.slice(-MAX_GAMES);
       this.next = this.list.reduce((high, record) => Math.max(high, record.id), 0) + 1;
     } catch {

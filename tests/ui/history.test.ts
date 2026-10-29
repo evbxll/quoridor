@@ -16,7 +16,7 @@ class MemoryStorage implements StorageLike {
   removeItem = (key: string): void => void this.items.delete(key);
 }
 
-const game = (over: Partial<FinishedGame> = {}): FinishedGame => ({ size: 7, p1: BEGINNER, p2: STRONG, winner: "p1", reason: "goal", moves: ["d2", "d6", "d3"], ...over });
+const game = (over: Partial<FinishedGame> = {}): FinishedGame => ({ size: 7, p1: BEGINNER, p2: STRONG, winner: "p1", reason: "goal", moves: ["d2", "d6", "d3"], seatChanged: false, ...over });
 
 describe("resultText", () => {
   it("names each way a game ends, in words", () => {
@@ -227,5 +227,69 @@ describe("models in the history", () => {
     const storage = new MemoryStorage();
     storage.items.set(HISTORY_KEY, JSON.stringify({ v: 1, games: [row({ ...net, model: "<img>" }), row({ ...net, model: 5 }), row({ ...net, model: "" }), row({ ...net, engine: "heuristic", model: "fc-9x9-a" }), row({ ...net, model: "x".repeat(200) })] }));
     expect(new GameHistory(storage).games).toEqual([]);
+  });
+});
+
+describe("games whose seats changed, and boards of different sizes", () => {
+  it("lists a game with a seat changed part-way but leaves it out of the tally, and keeps that through a reload", () => {
+    const storage = new MemoryStorage();
+    const history = new GameHistory(storage);
+    history.add(game({ seatChanged: true }));
+    history.add(game({ winner: "p2" }));
+    expect(history.games).toHaveLength(2);
+    expect(history.tallies().map((t) => [t.name, t.wins, t.losses])).toEqual([
+      ["Beginner (heuristic, 5, varied)", 0, 1],
+      ["Strong (network, 32)", 1, 0],
+    ]);
+    expect(new GameHistory(storage).games.map((g) => g.seatChanged)).toEqual([true, false]);
+  });
+
+  it("reads a saved row without the field as unchanged, and drops one where it is not a boolean", () => {
+    const row = (id: number, extra: object) => ({ id, size: 7, p1: { kind: "human" }, p2: { kind: "human" }, winner: "p1", reason: "goal", moves: "d2", ...extra });
+    const storage = new MemoryStorage();
+    storage.items.set(HISTORY_KEY, JSON.stringify({ v: 1, games: [row(1, {}), row(2, { seatChanged: "yes" }), row(3, { seatChanged: true })] }));
+    expect(new GameHistory(storage).games.map((g) => [g.id, g.seatChanged])).toEqual([[1, false], [3, true]]);
+  });
+
+  it("scores a bot separately on each board size, and names the size only when there is more than one", () => {
+    const history = new GameHistory();
+    history.add(game({ size: 7 }));
+    expect(history.tallies().map((t) => t.name).sort()).toEqual(["Beginner (heuristic, 5, varied)", "Strong (network, 32)"]);
+    history.add(game({ size: 9, winner: "p2" }));
+    const rows = history.tallies().map((t) => [t.name, t.wins, t.losses]);
+    expect(rows).toHaveLength(4);
+    expect(rows).toContainEqual(["Beginner (heuristic, 5, varied) on 7 × 7", 1, 0]);
+    expect(rows).toContainEqual(["Beginner (heuristic, 5, varied) on 9 × 9", 0, 1]);
+  });
+});
+
+describe("GameHistory reading ids and size from storage", () => {
+  const row = (id: unknown, moves = "d2") => ({ id, size: 7, p1: { kind: "human" }, p2: { kind: "bot", engine: "heuristic", simulations: 5, vary: true }, winner: "p1", reason: "goal", moves });
+
+  it("keeps the first of two rows with one game number, so Open finds one game", () => {
+    const storage = new MemoryStorage();
+    storage.items.set(HISTORY_KEY, JSON.stringify({ v: 1, games: [row(1, "d2"), row(1, "e2"), row(2, "f2")] }));
+    const history = new GameHistory(storage);
+    expect(history.games.map((g) => [g.id, g.moves])).toEqual([[1, "d2"], [2, "f2"]]);
+  });
+
+  it("drops game numbers that are not safe whole numbers or are beyond any the page wrote, and numbers on after the rest", () => {
+    const storage = new MemoryStorage();
+    storage.items.set(HISTORY_KEY, JSON.stringify({ v: 1, games: [row(2 ** 53 + 1), row(2 ** 53), row(1e12), row(1.5), row(0), row(-3), row(7)] }));
+    const history = new GameHistory(storage);
+    expect(history.games.map((g) => g.id)).toEqual([7]);
+    expect(history.add(game()).id).toBe(8);
+  });
+
+  it("ignores valid saved text that is longer than the size limit", () => {
+    const long = "a1.".repeat(3000) + "a1";
+    const rows = Array.from({ length: 60 }, (_, i) => row(i + 1, long));
+    const text = JSON.stringify({ v: 1, games: rows });
+    expect(text.length).toBeGreaterThan(MAX_SAVED_CHARS);
+    const storage = new MemoryStorage();
+    storage.items.set(HISTORY_KEY, text);
+    expect(new GameHistory(storage).games).toEqual([]);
+    storage.items.set(HISTORY_KEY, JSON.stringify({ v: 1, games: rows.slice(0, 30) }));
+    expect(new GameHistory(storage).games).toHaveLength(30);
   });
 });

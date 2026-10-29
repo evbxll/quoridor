@@ -8,6 +8,7 @@ import { closePopoverOnEscapeOrOutside, element, onPress, setEnabled } from "./d
 import { AutoControls } from "./autoControls";
 import { type AutoHost, AutoPlay } from "./autoplay";
 import { GamesCard } from "./gamesCard";
+import { SeatWatch } from "./seatWatch";
 import { botOfSeat, type GameRecord, GameHistory, type StorageLike } from "./history";
 import { ModelManager, type ModelState, type StartInfo } from "../model/manager";
 import type { ModelEnv } from "../model/store";
@@ -224,6 +225,7 @@ export function startPage(port: SearchPort, network: NetworkSource): GameControl
   const analysis = new Analysis(controller, port, () => modelState().status === "ready", render, () => evalVisible() || analysisOpen());
 
   const gameLog = new GameHistory(savedStorage());
+  const seatWatch = new SeatWatch();
   const games = new GamesCard(gameLog, announce, () => statusLine.focus(), () => (controller.moves.length > 0 && controller.result === null) || autoplay.active, openRecord);
   const autoHost: AutoHost = {
     get size() {
@@ -251,6 +253,7 @@ export function startPage(port: SearchPort, network: NetworkSource): GameControl
       showPlayers(players);
       controller.setNetworkReady(models.state(game.size).status === "ready");
       controller.load(game, players);
+      seatWatch.begin(players);
       networkChanged();
       void models.select(controller.size);
     },
@@ -269,10 +272,16 @@ export function startPage(port: SearchPort, network: NetworkSource): GameControl
   /** Opens a game from the Games card as a link would, with the bot that played it (the person takes the other side). */
   function openRecord(record: GameRecord): void {
     const hash = `#n=${record.size}&m=${record.moves}`;
-    if (location.hash === hash) return;
     const seat = record.p2.kind === "bot" ? record.p2 : record.p1.kind === "bot" ? record.p1 : null;
     carriedBot = seat === null ? null : botOfSeat(seat);
-    location.hash = hash;
+    if (location.hash !== hash) {
+      location.hash = hash;
+      return;
+    }
+    // The game is already on the board, so the address will not change: open it here, which ends auto-play and gives a person a seat.
+    const wasAuto = autoplay.active;
+    openHash();
+    announce(`${wasAuto ? "Auto-play stopped. " : ""}Game ${record.id} is on the board; you play it.`);
   }
 
   /** A person may move: it is a person's turn, and the position on the board is the latest. */
@@ -413,12 +422,14 @@ export function startPage(port: SearchPort, network: NetworkSource): GameControl
     // Two bots playing on change the line with every move; keep it quiet, also after the end, and say the end of the game once through #live.
     statusLine.setAttribute("aria-live", statusIsMuted(controller) || quietStatus ? "off" : "polite");
     const result = controller.result;
+    seatWatch.observe(controller.players, controller.moves.length);
     if (result === null) {
       recordedHash = "";
       announcedEnd = "";
     } else if (recordedHash !== controller.hash) {
       recordedHash = controller.hash;
-      gameLog.add({ size: controller.size, p1: controller.players.p1, p2: controller.players.p2, winner: result.winner, reason: result.reason, moves: controller.moves });
+      const seats = seatWatch.seats ?? controller.players;
+      gameLog.add({ size: controller.size, p1: seats.p1, p2: seats.p2, winner: result.winner, reason: result.reason, moves: controller.moves, seatChanged: seatWatch.changed });
     }
     autoplay.update();
     // The end of a game and the countdown that follows it are one sentence, read once.
@@ -775,7 +786,9 @@ export function startPage(port: SearchPort, network: NetworkSource): GameControl
       shownPercent = null;
       controller.setNetworkReady(models.state(game.size).status === "ready");
       // The bot is fitted to the link's board size.
-      controller.load(game, human === "p1" ? { p1: HUMAN, p2: bot } : { p1: bot, p2: HUMAN });
+      const seats: Players = human === "p1" ? { p1: HUMAN, p2: bot } : { p1: bot, p2: HUMAN };
+      controller.load(game, seats);
+      seatWatch.begin(seats);
       sizeSelect.value = String(controller.size);
       showPlayers(controller.players);
       seatsChosen = true;

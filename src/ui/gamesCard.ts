@@ -1,5 +1,6 @@
 import { element } from "./dom";
 import { OpenConfirm } from "./confirmOpen";
+import { modelName } from "./bots";
 import { type GameHistory, type GameRecord, isMirror, resultText, seatNames } from "./history";
 
 /** How long "Clear history" waits for its second press, in milliseconds. */
@@ -11,6 +12,15 @@ const cell = (tag: "td" | "th", text: string, scope?: "row" | "col"): HTMLTableC
   if (scope !== undefined) node.scope = scope;
   return node;
 };
+
+/** What decides a redraw: the games and the names the models have now (they arrive from their cards after the first draw). */
+export function drawSignature(games: readonly GameRecord[]): string {
+  const modelIds = new Set(games.flatMap((game) => [game.p1, game.p2].flatMap((seat) => (seat.kind === "bot" && seat.model !== undefined ? [seat.model] : []))));
+  return `${games.length}|${games[games.length - 1]?.id ?? 0}|${[...modelIds].map(modelName).join(",")}`;
+}
+
+/** Why a game is listed but not counted, in words after the result. */
+const notes = (game: GameRecord): string => (game.seatChanged ? " (seat changed)" : "") + (isMirror(game) ? " (mirror match)" : "");
 
 const percent = (share: number): string => `${Math.round(share * 100)}%`;
 
@@ -64,8 +74,7 @@ export class GamesCard {
   draw(): void {
     const games = this.history.games;
     this.card.hidden = games.length === 0;
-    const last = games[games.length - 1];
-    const signature = `${games.length}|${last?.id ?? 0}`;
+    const signature = drawSignature(games);
     if (signature === this.drawn) return;
     this.drawn = signature;
     this.tally.replaceChildren(
@@ -86,7 +95,7 @@ export class GamesCard {
         link.setAttribute("aria-label", `Open game ${game.id}, on a ${game.size} by ${game.size} board`);
         const open = document.createElement("td");
         open.append(link);
-        row.append(cell("th", String(game.id), "row"), cell("td", names.p1), cell("td", names.p2), cell("td", isMirror(game) ? `${resultText(game.winner, game.reason)} (mirror match)` : resultText(game.winner, game.reason)), cell("td", String(game.moves.split(".").length)), open);
+        row.append(cell("th", String(game.id), "row"), cell("td", names.p1), cell("td", names.p2), cell("td", resultText(game.winner, game.reason) + notes(game)), cell("td", String(game.moves.split(".").length)), open);
         return row;
       }),
     );

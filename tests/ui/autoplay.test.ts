@@ -201,16 +201,37 @@ describe("AutoPlay", () => {
     expect(host.loads).toHaveLength(1);
   });
 
-  it("does not start a game over one that is running, or over a person's", () => {
-    const { host, clock, auto } = setup();
-    auto.start();
-    host.finish();
-    settle(auto);
-    clock.tick();
-    clock.tick();
-    // Somebody started another game by hand during the last second.
-    host.result = null;
+  /** A run whose game has ended and whose countdown is at its last second, for a test to change one thing before the last tick. */
+  function lastSecond() {
+    const made = setup();
+    made.auto.start();
+    made.host.finish();
+    settle(made.auto);
+    made.clock.tick();
+    made.clock.tick();
+    return made;
+  }
+
+  it("does not start a game when a game is running as the countdown ends", () => {
+    const { host, clock, auto } = lastSecond();
+    // The game is over as far as the result goes, but the bots are running (a game started by hand that has not reported yet).
     host.running = true;
+    clock.tick();
+    expect(host.loads).toHaveLength(1);
+    expect(auto.active).toBe(false);
+  });
+
+  it("does not start a game when a person has taken a seat as the countdown ends", () => {
+    const { host, clock, auto } = lastSecond();
+    host.players = { p1: HUMAN, p2: NORMAL };
+    clock.tick();
+    expect(host.loads).toHaveLength(1);
+    expect(auto.active).toBe(false);
+  });
+
+  it("does not start a game when the board was cleared of its result as the countdown ends", () => {
+    const { host, clock, auto } = lastSecond();
+    host.result = null;
     clock.tick();
     expect(host.loads).toHaveLength(1);
     expect(auto.active).toBe(false);
