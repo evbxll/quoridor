@@ -34,6 +34,10 @@ const MODEL_ID = /^[A-Za-z0-9._-]+$/;
 const SHA256 = /^[0-9a-f]{64}$/;
 /** A `bots` entry with this value means: no network at that size. */
 const NO_NETWORK = "heuristic";
+/** Longest text and longest size list `parseCard` accepts. */
+const MAX_TEXT = 400;
+const MAX_SIZES = 32;
+const shortText = (/** @type {unknown} */ value) => typeof value === "string" && value.length <= MAX_TEXT;
 /** The input plane counts the page can encode (`SUPPORTED_PLANES` in `src/ai/encoding.ts`; a test keeps the two equal). */
 export const SUPPORTED_PLANES = [6, 10];
 
@@ -93,13 +97,15 @@ function validateIndex(index) {
 
 /**
  * Checks a model's card the way the page reads it (`src/model/card.ts`): it is this model's, it states the plane
- * count of a model the page can slice an input for, and it can be played at the sizes it claims.
+ * count of a model the page can slice an input for, and it can be played at the sizes it claims. Every field
+ * `parseCard` requires is required here with the same limits (texts of at most 400 characters, at most 32 sizes),
+ * so a card the page would refuse is refused before it is deployed; a test keeps the two in step.
  * @param {string} id
  * @param {any} card
  * @param {string} actual Hex sha256 of the model file.
  * @returns {string[]} Error messages.
  */
-function checkCard(id, card, actual) {
+export function checkCard(id, card, actual) {
   /** @type {string[]} */
   const errors = [];
   /** @param {string} message */
@@ -114,11 +120,23 @@ function checkCard(id, card, actual) {
   }
   if (!SUPPORTED_PLANES.includes(network.input_planes)) {
     fail(`its card says ${network.input_planes} input planes; the page can build ${SUPPORTED_PLANES.join(" or ")}`);
-  } else if (!Array.isArray(card.plane_names) || card.plane_names.length !== network.input_planes) {
+  } else if (!Array.isArray(card.plane_names) || card.plane_names.length !== network.input_planes || !card.plane_names.every(shortText)) {
     fail("its card's plane_names does not match input_planes");
   }
+  for (const name of ["display_name", "license"]) if (!shortText(card[name])) fail(`its card's ${name} is not a short text`);
+  const fields = /** @type {[string, any, number, boolean][]} */ ([
+    ["parameters", card.parameters, 0, false],
+    ["channels", network.channels, 1, false],
+    ["blocks", network.blocks, 0, false],
+    ["pool_every", network.pool_every, 1, true],
+    ["head_channels", network.head_channels, 1, true],
+    ["board_size", network.board_size, 2, true],
+  ]);
+  for (const [name, value, least, optional] of fields) {
+    if (!(optional && (value === null || value === undefined)) && !(Number.isInteger(value) && value >= least)) fail(`its card's ${name} is not a whole number of at least ${least}`);
+  }
   const whole = (/** @type {any} */ value) => Number.isInteger(value) && value >= 2;
-  if (!Array.isArray(card.sizes) || card.sizes.length === 0 || !card.sizes.every(whole) || !whole(card.trained_size)) {
+  if (!Array.isArray(card.sizes) || card.sizes.length === 0 || card.sizes.length > MAX_SIZES || !card.sizes.every(whole) || !whole(card.trained_size)) {
     fail("its card needs sizes (board sizes) and a trained_size");
   } else if (network.head === "fc" && (card.sizes.length !== 1 || card.sizes[0] !== card.trained_size)) {
     fail("an fc model plays its trained size only, so its card must list that size alone");

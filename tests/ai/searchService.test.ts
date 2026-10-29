@@ -364,6 +364,23 @@ describe("search client", () => {
     expect(total(result!.visits)).toBe(10);
   });
 
+  it("configures a replacement worker so that the last default network stays the default", async () => {
+    const { client, workers } = loopback();
+    const spec = (modelId: string, asDefault: boolean): EngineSpec => ({ kind: "network", model: new ArrayBuffer(8), threads: 1, modelId, planes: 10, fixedSize: null, asDefault });
+    await client.configure(engine);
+    await client.configure(spec("m1", true));
+    await client.configure(spec("m2", false));
+    await client.configure(spec("m3", true));
+    workers[0]!.fail("boom");
+    await client.search(params);
+    const replayed = workers[1]!.received.flatMap((r) => (r.type === "configure" && r.engine.kind === "network" ? [[r.engine.modelId, r.engine.asDefault]] : []));
+    expect(replayed).toEqual([
+      ["m1", false],
+      ["m2", false],
+      ["m3", true],
+    ]);
+  });
+
   it("configures a replacement worker with every engine it had", async () => {
     const { client, workers } = loopback();
     const network: EngineSpec = { kind: "network", model: new ArrayBuffer(8), threads: 1, modelId: "m1", planes: 10, fixedSize: null, asDefault: true };

@@ -145,9 +145,13 @@ export class ModelManager {
     await (current === "downloading" ? this.flights.get(id) : this.download(entry));
   }
 
-  /** Stops the session of a model a seat no longer uses; it loads again from Cache Storage on the next `ensure`. */
+  /**
+   * Stops the session of a model a seat no longer uses; it loads again from Cache Storage on the next `ensure`.
+   * The network of the selected size is still in use by the bot, so for it a release only unpins.
+   */
   async release(id: string): Promise<void> {
     this.pinned.delete(id);
+    if (this.wanted?.id === id) return;
     if (this.defaultId === id) this.defaultId = null;
     if (this.states.get(id)?.status !== "ready") return;
     this.states.delete(id);
@@ -224,15 +228,24 @@ export class ModelManager {
         this.onChange();
         return;
       }
-      await this.start(model.bytes, { id, ...inputOf(card), asDefault: this.wanted?.id === id }).catch((error: unknown) => {
-        throw new ModelError("start", `The network could not be started (${error instanceof Error ? error.message : String(error)}).`);
-      });
+      const begin = (asDefault: boolean): Promise<void> =>
+        this.start(model.bytes, { id, ...inputOf(card), asDefault }).catch((error: unknown) => {
+          throw new ModelError("start", `The network could not be started (${error instanceof Error ? error.message : String(error)}).`);
+        });
+      const startedAsDefault = this.wanted?.id === id;
+      await begin(startedAsDefault);
       if (!current()) return;
       if (superseded()) {
-        // Another size was chosen while the worker started this one; the later start wins in the worker.
+        // Another size was chosen while the worker started this one: free the session it made.
         this.states.delete(id);
         this.onChange();
+        void this.stop?.(id);
         return;
+      }
+      if (this.wanted?.id === id && !startedAsDefault) {
+        // This size was chosen while the worker started the model for a seat: start it again as the default, from the same bytes.
+        await begin(true);
+        if (!current()) return;
       }
       if (this.wanted?.id === id) {
         this.defaultId = id;

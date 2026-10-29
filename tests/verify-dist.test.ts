@@ -1,10 +1,12 @@
 import { createHash } from "node:crypto";
+import { readFileSync } from "node:fs";
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { SUPPORTED_PLANES as SCRIPT_PLANES, verifyDist } from "../scripts/verify-dist.mjs";
+import { checkCard, SUPPORTED_PLANES as SCRIPT_PLANES, verifyDist } from "../scripts/verify-dist.mjs";
 import { SUPPORTED_PLANES } from "../src/ai/encoding";
+import { parseCard } from "../src/model/card";
 import { cardJson, fcCardJson } from "./helpers/cards";
 
 let root: string;
@@ -128,6 +130,60 @@ describe("verifyDist", () => {
       expect([...SCRIPT_PLANES]).toEqual([...SUPPORTED_PLANES]);
     });
 
+    it("refuses a card with no display_name or a 500-character license", () => {
+      publish("m1", "onnx", cardJson("m1", {}, sha));
+      publish("m2", "two", cardJson("m2", { display_name: undefined }, other));
+      index({ gallery: ["m2"] });
+      expect(verifyDist(dist, root)).toEqual(["model m2: its card's display_name is not a short text"]);
+      publish("m2", "two", cardJson("m2", { license: "x".repeat(500) }, other));
+      expect(verifyDist(dist, root)).toEqual(["model m2: its card's license is not a short text"]);
+    });
+
+    it("refuses exactly the cards the page refuses", () => {
+      const long = "x".repeat(401);
+      const network = (over: object) => ({ head: "conv", input_planes: 10, channels: 128, blocks: 8, pool_every: 3, head_channels: 32, board_size: null, ...over });
+      const cards: [string, Record<string, unknown>][] = [
+        ["a good conv card", cardJson("m1", {}, sha)],
+        ["a good fc card", fcCardJson("m1", sha)],
+        ["a text of 400 characters", cardJson("m1", { display_name: "x".repeat(400) }, sha)],
+        ["a text of 401 characters", cardJson("m1", { display_name: long }, sha)],
+        ["a license that is a number", cardJson("m1", { license: 3 }, sha)],
+        ["no parameters", cardJson("m1", { parameters: undefined }, sha)],
+        ["fractional parameters", cardJson("m1", { parameters: 1.5 }, sha)],
+        ["no channels", cardJson("m1", { network: network({ channels: undefined }) }, sha)],
+        ["zero channels", cardJson("m1", { network: network({ channels: 0 }) }, sha)],
+        ["blocks as text", cardJson("m1", { network: network({ blocks: "8" }) }, sha)],
+        ["a pool_every of 0", cardJson("m1", { network: network({ pool_every: 0 }) }, sha)],
+        ["a head_channels of text", cardJson("m1", { network: network({ head_channels: "32" }) }, sha)],
+        ["a board_size of 1", cardJson("m1", { network: network({ board_size: 1 }) }, sha)],
+        ["33 sizes", cardJson("m1", { sizes: Array.from({ length: 33 }, (_, i) => i + 2) }, sha)],
+        ["32 sizes", cardJson("m1", { sizes: Array.from({ length: 32 }, (_, i) => i + 2) }, sha)],
+        ["a plane name that is a number", cardJson("m1", { plane_names: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10] }, sha)],
+        ["a plane name of 401 characters", cardJson("m1", { plane_names: new Array(10).fill(long) }, sha)],
+        ["6 planes with 10 names", cardJson("m1", { network: network({ input_planes: 6 }) }, sha)],
+      ];
+      for (const [name, card] of cards) {
+        const json = JSON.parse(JSON.stringify(card));
+        let refusedByPage = false;
+        try {
+          parseCard(json);
+        } catch {
+          refusedByPage = true;
+        }
+        expect(checkCard("m1", json, sha).length > 0, name).toBe(refusedByPage);
+      }
+    });
+
+    it("accepts every card published in public/models, which the page reads as well", () => {
+      const published = JSON.parse(readFileSync("public/models/index.json", "utf8")) as { models: { id: string; sha256: string }[] };
+      expect(published.models.length).toBeGreaterThan(0);
+      for (const { id, sha256 } of published.models) {
+        const card = JSON.parse(readFileSync(`public/models/${id}/card.json`, "utf8"));
+        expect(() => parseCard(card), id).not.toThrow();
+        expect(checkCard(id, card, sha256), id).toEqual([]);
+      }
+    });
+
     it("accepts a gallery with a conv and a 6-plane fc model", () => {
       publish("m1", "onnx", cardJson("m1", {}, sha));
       publish("m2", "two", fcCardJson("m2", other));
@@ -164,7 +220,7 @@ describe("verifyDist", () => {
     it("refuses a gallery model whose card has a plane count the page cannot slice", () => {
       publish("m1", "onnx", cardJson("m1", {}, sha));
       for (const planes of [4, 8, 12]) {
-        publish("m2", "two", cardJson("m2", { network: { head: "conv", input_planes: planes }, plane_names: new Array(planes).fill("p") }, other));
+        publish("m2", "two", cardJson("m2", { network: { head: "conv", input_planes: planes, channels: 128, blocks: 8 }, plane_names: new Array(planes).fill("p") }, other));
         index({ gallery: ["m2"] });
         expect(verifyDist(dist, root)).toEqual([`model m2: its card says ${planes} input planes; the page can build 6 or 10`]);
       }

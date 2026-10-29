@@ -15,6 +15,7 @@ export interface TestModel {
 function withCard(id: string, dir: string): TestModel {
   const cardPath = join(dir, "card.json");
   if (!existsSync(cardPath)) return { id, dir, planes: 10, fixedSize: null };
+  // A card the page would refuse must fail the tests, not make the model quietly disappear from them.
   const { planes, fixedSize } = inputOf(parseCard(JSON.parse(readFileSync(cardPath, "utf8"))));
   return { id, dir, planes, fixedSize };
 }
@@ -27,7 +28,7 @@ function complete(dir: string): boolean {
  * The models the tests can check: the folder `override` names (the
  * `QUORIDOR_TEST_MODEL_DIR` setting), else `test-data/model`, else every
  * model published in `public/models/index.json` under `root` whose files are
- * all there. Empty when there is none.
+ * all there. Empty when there is none. Throws if a model's `card.json` is one the page would refuse.
  */
 export function discoverModels(root: string, override: string | undefined): TestModel[] {
   const local = override ?? join(root, "test-data", "model");
@@ -35,12 +36,14 @@ export function discoverModels(root: string, override: string | undefined): Test
   if (override) return [];
   const indexPath = join(root, "public", "models", "index.json");
   if (!existsSync(indexPath)) return [];
+  let models: ReturnType<typeof parseIndex>["models"];
   try {
-    return parseIndex(JSON.parse(readFileSync(indexPath, "utf8")))
-      .models.map((model) => ({ id: model.id, dir: join(root, "public", "models", model.id) }))
-      .filter((model) => complete(model.dir))
-      .map((model) => withCard(model.id, model.dir));
+    models = parseIndex(JSON.parse(readFileSync(indexPath, "utf8"))).models;
   } catch {
     return [];
   }
+  return models
+    .map((model) => ({ id: model.id, dir: join(root, "public", "models", model.id) }))
+    .filter((model) => complete(model.dir))
+    .map((model) => withCard(model.id, model.dir));
 }

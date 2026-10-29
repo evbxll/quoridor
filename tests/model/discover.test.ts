@@ -58,6 +58,14 @@ describe("discoverModels", () => {
     ]);
   });
 
+  it("fails when a published model's card is one the page would refuse, instead of leaving the model out", () => {
+    site();
+    publish("a", ["model.onnx", "golden.json"]);
+    writeFileSync(join(root, "public", "models", "a", "card.json"), JSON.stringify(cardJson("a", { license: "x".repeat(500) })));
+    index(["a"]);
+    expect(() => discoverModels(root, undefined)).toThrow("license");
+  });
+
   it("prefers the folder the setting names, and does not fall back to the published models when it is empty", () => {
     site();
     publish("a", ["model.onnx", "golden.json"]);

@@ -23,17 +23,20 @@ const files = (extra: Files = {}, indexJson: object = { models, bots: { 9: "m1" 
   ...extra,
 });
 
-function build(extra: Files = {}, indexJson?: object, caches = new FakeCaches()) {
+function build(extra: Files = {}, indexJson?: object, caches = new FakeCaches(), begin?: (info: StartInfo) => Promise<void>) {
   const { fetch, requested } = fakeFetch(files(extra, indexJson));
   const infos: StartInfo[] = [];
   const stopped: string[] = [];
   const manager = new ModelManager(
     envOf(fetch, caches),
-    async (_bytes, info) => void infos.push(info),
+    async (_bytes, info) => {
+      infos.push(info);
+      await begin?.(info);
+    },
     () => {},
     async (id) => void stopped.push(id),
   );
-  return { manager, infos, stopped, requested };
+  return { manager, infos, stopped, requested, caches };
 }
 
 describe("ModelManager keyed by model id", () => {
@@ -165,5 +168,84 @@ describe("ModelManager keyed by model id", () => {
     expect(manager.gallery).toEqual([]);
     expect(manager.state(9)).toMatchObject({ status: "ready", model: "m1" });
     expect(requested.filter((url) => url.endsWith(".onnx") || url.endsWith("card.json")).sort()).toHaveLength(2);
+  });
+
+  /** A gate a test opens when it wants a worker start to finish. */
+  const gate = () => {
+    let open: () => void = () => {};
+    const opened = new Promise<void>((resolve) => (open = resolve));
+    return { opened, open };
+  };
+  const settle = () => new Promise((resolve) => setTimeout(resolve, 20));
+  const twoBots = { models, bots: { 9: "m1", 7: "m2" }, gallery: [] };
+
+  it("keeps the network of the selected size when a seat that had asked for it lets it go", async () => {
+    const { manager, stopped } = build();
+    await manager.select(9);
+    await manager.ensure("m1");
+    await manager.release("m1");
+    expect(stopped).toEqual([]);
+    expect(manager.state(9)).toMatchObject({ status: "ready", model: "m1" });
+  });
+
+  it("frees the session of a model a seat released while the worker was starting it", async () => {
+    const hold = gate();
+    const { manager, stopped } = build({}, undefined, undefined, (info) => (info.id === "m2" ? hold.opened : Promise.resolve()));
+    const loading = manager.ensure("m2");
+    await settle();
+    await manager.release("m2");
+    hold.open();
+    await loading;
+    expect(stopped).toEqual(["m2"]);
+    expect(manager.stateOf("m2")).toEqual({ status: "idle" });
+  });
+
+  it("frees the session of the network of a size that was left while the worker was starting it", async () => {
+    const hold = gate();
+    const { manager, stopped } = build({}, twoBots, undefined, (info) => (info.id === "m1" ? hold.opened : Promise.resolve()));
+    const first = manager.select(9);
+    await settle();
+    await manager.select(7);
+    hold.open();
+    await first;
+    expect(stopped).toEqual(["m1"]);
+    expect(manager.state(9)).toEqual({ status: "checking" });
+    expect(manager.state(7)).toMatchObject({ status: "ready", model: "m2" });
+  });
+
+  it("starts a model a seat asked for as the default when its size is chosen while it starts", async () => {
+    const hold = gate();
+    const { manager, infos, stopped } = build({}, twoBots, undefined, (info) => (info.id === "m2" && !info.asDefault ? hold.opened : Promise.resolve()));
+    await manager.select(9);
+    const seat = manager.ensure("m2");
+    await settle();
+    await manager.select(7);
+    hold.open();
+    await seat;
+    expect(infos.filter((info) => info.id === "m2").map((info) => info.asDefault)).toEqual([false, true]);
+    expect(stopped).toEqual(["m1"]);
+    expect(manager.state(7)).toMatchObject({ status: "ready", model: "m2" });
+  });
+
+  it("stops downloading the model when its card cannot be used", async () => {
+    let seen: AbortSignal | undefined;
+    const { manager } = build({
+      "models/m2/card.json": () => new Response("{ nope"),
+      "models/m2/model.onnx": (signal) => {
+        seen = signal;
+        return streamed(m2, 3, signal ? { stallAfter: 1, signal } : { stallAfter: 1 });
+      },
+    });
+    await manager.ensure("m2");
+    await settle();
+    expect(manager.stateOf("m2")).toMatchObject({ status: "unavailable", reason: "bad-card" });
+    // The download either never started or was aborted; it is not left running (or stalled) behind the failure.
+    expect(seen === undefined || seen.aborted).toBe(true);
+  });
+
+  it("saves the card for offline use", async () => {
+    const { manager, caches } = build();
+    await manager.ensure("m2");
+    expect([...caches.stored.keys()].some((url) => url.endsWith("models/m2/card.json"))).toBe(true);
   });
 });

@@ -39,6 +39,10 @@ export class SearchClient {
   /** Chooses the evaluator the worker searches with; any search in flight is cancelled. */
   async configure(engine: EngineSpec): Promise<void> {
     this.start();
+    if (engine.kind === "network" && engine.asDefault) {
+      // One default: a replacement worker is configured in this order and must end up with this one.
+      for (const [slot, other] of this.engines) if (other.kind === "network" && other.asDefault) this.engines.set(slot, { ...other, asDefault: false });
+    }
     this.engines.set(slotOf(engine.kind, engine.kind === "network" ? engine.modelId : undefined), engine);
     const response = await this.request({ type: "configure", id: this.nextId++, engine });
     if (response.type === "error") throw new Error(response.message);
