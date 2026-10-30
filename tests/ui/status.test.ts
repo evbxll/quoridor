@@ -3,7 +3,7 @@ import { parseMove } from "../../src/engine/notation";
 import { Game } from "../../src/engine/game";
 import { GameController, HUMAN, type Players } from "../../src/ui/controller";
 import { botOf } from "../../src/ui/bots";
-import { botsArePlaying, moveRows, playerName, statusIsMuted, statusText } from "../../src/ui/status";
+import { botsArePlaying, moveRows, playerName, seatNote, statusIsMuted, statusText } from "../../src/ui/status";
 
 const [NORMAL, STRONG] = [botOf("normal"), botOf("strong")];
 const idle = { search: () => new Promise<never>(() => {}), cancel: () => {} };
@@ -110,5 +110,21 @@ describe("statusIsMuted", () => {
     expect(botsArePlaying(bots)).toBe(true);
     bots.pause();
     expect(botsArePlaying(bots)).toBe(false);
+  });
+});
+
+describe("seatNote", () => {
+  const network = (id: string | null): string => (id === null ? "ready" : "downloading");
+
+  it("says who plays a person's side", () => {
+    expect(seatNote(loaded("#n=5", { p1: HUMAN, p2: NORMAL }), "p1", true, network)).toBe("You play this side.");
+    expect(seatNote(loaded("#n=5", { p1: HUMAN, p2: HUMAN }), "p2", false, network)).toBe("A person plays this side.");
+  });
+
+  it("says a bot is thinking only on its own turn", () => {
+    const controller = new GameController(idle, () => {});
+    controller.newGame(5, { p1: NORMAL, p2: HUMAN });
+    expect(seatNote(controller, "p1", true, network)).toBe("Thinking…");
+    expect(seatNote(controller, "p1", false, network)).toBe("");
   });
 });
