@@ -5,6 +5,7 @@ import type { Evaluator } from "./evaluator";
 import { C_PUCT, FPU_REDUCTION, Mcts, selectAction } from "./mcts";
 import { type EngineSpec, type Request, type Response, slotOf } from "./protocol";
 import { seededRandom } from "./random";
+import { createYielder } from "./yielder";
 
 /** Milliseconds of uninterrupted search before the worker lets its message queue run. */
 const SLICE_MS = 15;
@@ -29,11 +30,6 @@ interface Run {
   /** Whether the run uses the game's kept tree. */
   readonly reuse: boolean;
   cancelled: boolean;
-}
-
-/** Lets pending messages run: a promise that is already resolved would not. */
-function nextTask(): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, 0));
 }
 
 /**
@@ -97,14 +93,19 @@ export function createSearchService(post: (response: Response) => void, makeEval
     if (!evaluator) throw new Error(request.model === undefined ? `The ${request.engine} engine is not configured` : `The model ${request.model} is not configured`);
     const { mcts } = await treeFor(request, slot, evaluator);
     if (mcts.rootState.isEnd()) throw new Error("The game is over");
-    let sliceStart = performance.now();
-    for (let done = 0; done < request.simulations; done++) {
-      if (mine.cancelled) return abandon(mine);
-      await mcts.search(1);
-      if (performance.now() - sliceStart >= SLICE_MS) {
-        await nextTask();
-        sliceStart = performance.now();
+    const yielder = createYielder();
+    try {
+      let sliceStart = performance.now();
+      for (let done = 0; done < request.simulations; done++) {
+        if (mine.cancelled) return abandon(mine);
+        await mcts.search(1);
+        if (performance.now() - sliceStart >= SLICE_MS) {
+          await yielder.next();
+          sliceStart = performance.now();
+        }
       }
+    } finally {
+      yielder.close();
     }
     if (mine.cancelled) return abandon(mine);
     const result = await mcts.search(0);
