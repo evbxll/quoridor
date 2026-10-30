@@ -4,26 +4,6 @@
       "id": "s9-conv-paths-g105",
       "path": "models/s9-conv-paths-g105/model.onnx",
       "sha256": "bf8842f19958c49f741f25f39712044ae445ea5b7014d8c62d8e2b5bd86f98fb"
-    },
-    {
-      "id": "s9-conv-paths-g010",
-      "path": "models/s9-conv-paths-g010/model.onnx",
-      "sha256": "e2c350f1242fe635736a7dad2aa71365dea1cd7dc10073510563e4952effd96f"
-    },
-    {
-      "id": "s9-conv-paths-g030",
-      "path": "models/s9-conv-paths-g030/model.onnx",
-      "sha256": "af98157a240859d0c50b9f6e9e2ee4d6a9522c2ba06802582cba55fe76b83f8c"
-    },
-    {
-      "id": "s9-conv-paths-g050",
-      "path": "models/s9-conv-paths-g050/model.onnx",
-      "sha256": "de0bbfd3e04455b5427e34cac3def35e96cce91be0980ac45b157e26893181cd"
-    },
-    {
-      "id": "s9-conv-paths-g080",
-      "path": "models/s9-conv-paths-g080/model.onnx",
-      "sha256": "b9f279555358391672f7a04e33a45de45e3e19c80eb39143798678658765a494"
     }
   ],
   "bots": {
@@ -31,11 +11,5 @@
     "7": "s9-conv-paths-g105",
     "9": "s9-conv-paths-g105",
     "11": "s9-conv-paths-g105"
-  },
-  "gallery": [
-    "s9-conv-paths-g010",
-    "s9-conv-paths-g030",
-    "s9-conv-paths-g050",
-    "s9-conv-paths-g080"
-  ]
+  }
 }
