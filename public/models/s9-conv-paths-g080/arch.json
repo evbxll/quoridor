@@ -1,0 +1,416 @@
+{
+  "description": "Network structure for the architecture diagram, generated from the PyTorch module at export. N is the board size. See docs/public-site-design.md section 15.8.",
+  "version": 1,
+  "head": "conv",
+  "input": {
+    "planes": [
+      "horizontal walls",
+      "vertical walls",
+      "mover pawn",
+      "opponent pawn",
+      "mover walls left",
+      "opponent walls left",
+      "mover goal distance",
+      "opponent goal distance",
+      "mover shortest-path cells",
+      "opponent shortest-path cells"
+    ],
+    "size": "any",
+    "shape": "10xNxN"
+  },
+  "layers": [
+    {
+      "id": "input",
+      "kind": "input",
+      "label": "Input planes",
+      "in": null,
+      "out": 10,
+      "shape": "10xNxN",
+      "params": 0,
+      "parts": {}
+    },
+    {
+      "id": "stem",
+      "kind": "stem",
+      "label": "Stem 3x3 conv",
+      "in": 10,
+      "out": 128,
+      "shape": "128xNxN",
+      "params": 11776,
+      "parts": {
+        "conv": 11520,
+        "bn": 256
+      }
+    },
+    {
+      "id": "block_1",
+      "kind": "residual_block",
+      "label": "Block 1",
+      "in": 128,
+      "out": 128,
+      "shape": "128xNxN",
+      "params": 295424,
+      "parts": {
+        "conv1": 147456,
+        "bn1": 256,
+        "conv2": 147456,
+        "bn2": 256
+      }
+    },
+    {
+      "id": "block_2",
+      "kind": "residual_block",
+      "label": "Block 2",
+      "in": 128,
+      "out": 128,
+      "shape": "128xNxN",
+      "params": 295424,
+      "parts": {
+        "conv1": 147456,
+        "bn1": 256,
+        "conv2": 147456,
+        "bn2": 256
+      }
+    },
+    {
+      "id": "block_3",
+      "kind": "global_pooling_block",
+      "label": "Block 3 (global pooling)",
+      "in": 128,
+      "out": 128,
+      "shape": "128xNxN",
+      "params": 303744,
+      "parts": {
+        "conv1": 147456,
+        "bn1": 256,
+        "conv2": 147456,
+        "bn2": 256,
+        "pool_fc": 8320
+      },
+      "pooled_channels": 32
+    },
+    {
+      "id": "block_4",
+      "kind": "residual_block",
+      "label": "Block 4",
+      "in": 128,
+      "out": 128,
+      "shape": "128xNxN",
+      "params": 295424,
+      "parts": {
+        "conv1": 147456,
+        "bn1": 256,
+        "conv2": 147456,
+        "bn2": 256
+      }
+    },
+    {
+      "id": "block_5",
+      "kind": "residual_block",
+      "label": "Block 5",
+      "in": 128,
+      "out": 128,
+      "shape": "128xNxN",
+      "params": 295424,
+      "parts": {
+        "conv1": 147456,
+        "bn1": 256,
+        "conv2": 147456,
+        "bn2": 256
+      }
+    },
+    {
+      "id": "block_6",
+      "kind": "global_pooling_block",
+      "label": "Block 6 (global pooling)",
+      "in": 128,
+      "out": 128,
+      "shape": "128xNxN",
+      "params": 303744,
+      "parts": {
+        "conv1": 147456,
+        "bn1": 256,
+        "conv2": 147456,
+        "bn2": 256,
+        "pool_fc": 8320
+      },
+      "pooled_channels": 32
+    },
+    {
+      "id": "block_7",
+      "kind": "residual_block",
+      "label": "Block 7",
+      "in": 128,
+      "out": 128,
+      "shape": "128xNxN",
+      "params": 295424,
+      "parts": {
+        "conv1": 147456,
+        "bn1": 256,
+        "conv2": 147456,
+        "bn2": 256
+      }
+    },
+    {
+      "id": "block_8",
+      "kind": "residual_block",
+      "label": "Block 8",
+      "in": 128,
+      "out": 128,
+      "shape": "128xNxN",
+      "params": 295424,
+      "parts": {
+        "conv1": 147456,
+        "bn1": 256,
+        "conv2": 147456,
+        "bn2": 256
+      }
+    },
+    {
+      "id": "policy",
+      "kind": "policy_head",
+      "label": "Policy head",
+      "in": 128,
+      "out": null,
+      "shape": "actions",
+      "params": 37582,
+      "parts": {
+        "policy_conv": 36928,
+        "pawn_logits": 396,
+        "wall_logits": 258
+      },
+      "trunk": [
+        {
+          "op": "conv",
+          "kernel": 3,
+          "in": 128,
+          "out": 32
+        }
+      ],
+      "branches": [
+        {
+          "name": "pawn_logits",
+          "ops": [
+            {
+              "op": "conv",
+              "kernel": 1,
+              "in": 32,
+              "out": 12
+            },
+            {
+              "op": "pawn_gather",
+              "plane": "mover pawn",
+              "source": "input"
+            }
+          ]
+        },
+        {
+          "name": "wall_logits",
+          "ops": [
+            {
+              "op": "conv",
+              "kernel": 2,
+              "in": 32,
+              "out": 2
+            },
+            {
+              "op": "flatten",
+              "features": "2(N-1)^2"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "value",
+      "kind": "value_head",
+      "label": "Value head",
+      "in": 128,
+      "out": null,
+      "shape": "1",
+      "params": 45377,
+      "parts": {
+        "value_conv": 36928,
+        "value_fc1": 8320,
+        "value_fc2": 129
+      },
+      "trunk": [
+        {
+          "op": "conv",
+          "kernel": 3,
+          "in": 128,
+          "out": 32
+        },
+        {
+          "op": "pool",
+          "stats": [
+            "mean",
+            "max"
+          ]
+        },
+        {
+          "op": "dense",
+          "in": 64,
+          "out": 128
+        },
+        {
+          "op": "dense",
+          "in": 128,
+          "out": 1
+        }
+      ],
+      "branches": []
+    }
+  ],
+  "edges": [
+    {
+      "from": "input",
+      "to": "stem",
+      "kind": "flow"
+    },
+    {
+      "from": "stem",
+      "to": "block_1",
+      "kind": "flow"
+    },
+    {
+      "from": "stem",
+      "to": "block_1",
+      "kind": "skip"
+    },
+    {
+      "from": "block_1",
+      "to": "block_2",
+      "kind": "flow"
+    },
+    {
+      "from": "block_1",
+      "to": "block_2",
+      "kind": "skip"
+    },
+    {
+      "from": "block_2",
+      "to": "block_3",
+      "kind": "flow"
+    },
+    {
+      "from": "block_2",
+      "to": "block_3",
+      "kind": "skip"
+    },
+    {
+      "from": "block_3",
+      "to": "block_3",
+      "kind": "pool_bias"
+    },
+    {
+      "from": "block_3",
+      "to": "block_4",
+      "kind": "flow"
+    },
+    {
+      "from": "block_3",
+      "to": "block_4",
+      "kind": "skip"
+    },
+    {
+      "from": "block_4",
+      "to": "block_5",
+      "kind": "flow"
+    },
+    {
+      "from": "block_4",
+      "to": "block_5",
+      "kind": "skip"
+    },
+    {
+      "from": "block_5",
+      "to": "block_6",
+      "kind": "flow"
+    },
+    {
+      "from": "block_5",
+      "to": "block_6",
+      "kind": "skip"
+    },
+    {
+      "from": "block_6",
+      "to": "block_6",
+      "kind": "pool_bias"
+    },
+    {
+      "from": "block_6",
+      "to": "block_7",
+      "kind": "flow"
+    },
+    {
+      "from": "block_6",
+      "to": "block_7",
+      "kind": "skip"
+    },
+    {
+      "from": "block_7",
+      "to": "block_8",
+      "kind": "flow"
+    },
+    {
+      "from": "block_7",
+      "to": "block_8",
+      "kind": "skip"
+    },
+    {
+      "from": "block_8",
+      "to": "policy",
+      "kind": "flow"
+    },
+    {
+      "from": "block_8",
+      "to": "value",
+      "kind": "flow"
+    },
+    {
+      "from": "input",
+      "to": "policy",
+      "kind": "pawn_gather"
+    }
+  ],
+  "outputs": {
+    "policy": {
+      "actions": {
+        "5": 44,
+        "7": 84,
+        "9": 140,
+        "11": 212
+      },
+      "layout": [
+        {
+          "name": "pawn moves",
+          "count": 12
+        },
+        {
+          "name": "horizontal walls",
+          "count": "(N-1)^2"
+        },
+        {
+          "name": "vertical walls",
+          "count": "(N-1)^2"
+        }
+      ],
+      "meaning": "probability of each action for the player to move (softmax)"
+    },
+    "value": {
+      "range": [
+        -1,
+        1
+      ],
+      "meaning": "expected result for the player to move (tanh)"
+    }
+  },
+  "parameters": 2474767,
+  "notes": [
+    "Parameter counts include BatchNorm; the exported ONNX folds BatchNorm into the convolutions.",
+    "The two walls-left input planes are fractions of the starting walls: the network divides them by the starting walls of the board size, GameConfig.get_wall_count (round(5x(x-1)/36) up to 9x9, x + 1 above), at the input.",
+    "The residual tower holds 96% of the parameters.",
+    "Size-generic: the same weights play every board size."
+  ]
+}
