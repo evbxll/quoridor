@@ -1,30 +1,37 @@
 import type { GlobalAction } from "../engine/actions";
 import { Game } from "../engine/game";
-import type { GameState } from "../engine/state";
-import { ANALYSIS_SIMULATIONS, Analysis, replay } from "./analysis";
+import { Analysis } from "./analysis";
+import { copyLink, recordHash, syncAddress } from "./address";
+import { liveAnnouncer } from "./announce";
 import { type Bot, botLabel, botOf, capFor, modelName, setModelLabel, TIME_SOURCES, withModel } from "./bots";
-import { describeBoard, renderBoard, wallOwners } from "./board";
-import { closePopoverOnEscapeOrOutside, element, onPress, setEnabled } from "./dom";
+import { closePopoverOnEscapeOrOutside, element, onPress } from "./dom";
 import { AutoControls } from "./autoControls";
 import { type AutoHost, AutoPlay } from "./autoplay";
 import { GamesCard } from "./gamesCard";
 import { SeatWatch } from "./seatWatch";
-import { botOfSeat, type GameRecord, GameHistory, type StorageLike } from "./history";
+import { botOfSeat, type GameRecord, GameHistory } from "./history";
 import { ModelManager, type ModelState, type StartInfo } from "../model/manager";
 import type { ModelEnv } from "../model/store";
-import { GameController, HUMAN, isOfferedSize, type Players, samePlayer, type SearchPort, type Side, sideOf, type Speed } from "./controller";
-import { evalBar } from "./evalBar";
+import { GameController, HUMAN, isOfferedSize, type Players, samePlayer, type SearchPort, type Side, type Speed } from "./controller";
 import { buildModelOptions, extraModels, modelTitle } from "./modelInfo";
-import { barBlurb, markerBlurb } from "./evalTip";
-import { boardSpan, cellAt, PAD, wallAt } from "./geometry";
+import { describeNetwork } from "./networkText";
+import { saveShowEval, savedShowEval, savedStorage } from "./persistence";
+import { cellAt, wallAt } from "./geometry";
 import { WallPreview } from "./pointer";
 import { Tooltips } from "./tooltip";
 import { visibleControls } from "./visibility";
 import { SeatControls, type SeatContext, type ModelsView } from "./seatControls";
 import { dropUnplayable, droppedSentence, SeatModels, setSeatPlayers } from "./seatModels";
 import { supportsSize } from "../model/card";
-import { botsArePlaying, moveRows, playerName, statusIsMuted, statusText } from "./status";
-import { describeTarget, findAction, moveCursor, pawnTargets } from "./targets";
+import { statusIsMuted, statusText } from "./status";
+import { describeTarget, findAction, moveCursor } from "./targets";
+import { drawAnalysis } from "./view/analysis";
+import { BoardView } from "./view/board";
+import { drawControls } from "./view/controls";
+import { EvalView } from "./view/eval";
+import { drawViewing, MovesView } from "./view/moves";
+import { drawNetwork } from "./view/network";
+import { drawSeats } from "./view/seats";
 
 /** How the page gets the network: where to fetch it from, and how to give it to the search worker. */
 export interface NetworkSource {
@@ -35,79 +42,15 @@ export interface NetworkSource {
 }
 
 const SIDES = ["p1", "p2"] as const;
-/** How many suggested moves the analysis lists; matches the three rows reserved for them. */
-const TOP_LINES = 3;
 const NORMAL = botOf("normal");
 /** A visitor plays player 1 against Strong, the network at 32 searches, unless they choose otherwise. */
 const DEFAULT_PLAYERS: Players = { p1: HUMAN, p2: botOf("strong") };
-
-const SHOW_EVAL_KEY = "quoridor.showEval";
-
-/** Whether the viewer last chose to see the evaluation in games with a person; on until switched off. Storage can be blocked. */
-function savedShowEval(): boolean {
-  try {
-    return localStorage.getItem(SHOW_EVAL_KEY) !== "off";
-  } catch {
-    return true;
-  }
-}
-
-function saveShowEval(on: boolean): void {
-  try {
-    localStorage.setItem(SHOW_EVAL_KEY, on ? "on" : "off");
-  } catch {
-    // The choice then lasts for this visit only.
-  }
-}
-
-/** The browser's storage, or null where it is blocked. */
-function savedStorage(): StorageLike | null {
-  try {
-    return localStorage;
-  } catch {
-    return null;
-  }
-}
-
-const megabytes = (bytes: number): string => (bytes / 1e6).toFixed(1);
-
-/** Where the network stands, in words: the chip in the top bar with its popover, and the short form for a bot that waits for it. */
-function describeNetwork(state: ModelState, size: number): { line: string; short: string; chip: string; tone: "ok" | "busy" | "off" | "bad" } {
-  switch (state.status) {
-    case "checking":
-      return { line: "Network: looking for it…", short: "looking for it", chip: "checking", tone: "busy" };
-    case "idle":
-      return { line: "Network: not loaded.", short: "not loaded", chip: "not loaded", tone: "off" };
-    case "unavailable":
-      if (state.reason === "bad-card" || state.reason === "unknown-model" || state.reason === "unsupported-size") {
-        return { line: `Network: not usable. ${state.message ?? ""}`.trim(), short: "not usable", chip: "not usable", tone: "bad" };
-      }
-      return state.reason === "not-offered"
-        ? { line: `Network: not offered at ${size} × ${size}. Strong and Max are off; Beginner and Normal play.`, short: "not offered at this size", chip: "not offered here", tone: "off" }
-        : { line: "Network: none is published yet. Strong and Max are off; Beginner and Normal play.", short: "none published", chip: "not published", tone: "off" };
-    case "downloading": {
-      const percent = state.total === null ? null : Math.floor((state.loaded / state.total) * 100);
-      const done = state.total === null ? `${megabytes(state.loaded)} MB` : `${megabytes(state.loaded)} of ${megabytes(state.total)} MB`;
-      return { line: `Network: downloading, ${done}.`, short: percent === null ? `downloading, ${done}` : `downloading, ${percent}%`, chip: percent === null ? "downloading" : `downloading ${percent}%`, tone: "busy" };
-    }
-    case "ready":
-      return {
-        line: `Network: ready (${state.model}${state.fromCache ? ", loaded from this device" : ""}).${state.saved ? "" : " It could not be saved for offline use."}`,
-        short: "ready",
-        chip: "ready",
-        tone: "ok",
-      };
-    case "failed":
-      return { line: `Network: failed. ${state.message}`, short: "the download failed; choose Retry download", chip: "failed", tone: "bad" };
-  }
-}
 
 /** Wires the controller to the page: draws the position, the players and the eval bar, and turns clicks and keys into moves. */
 export function startPage(port: SearchPort, network: NetworkSource): GameController {
   const board = element("board", SVGSVGElement);
   const sizeSelect = element("size", HTMLSelectElement);
   const speedSelect = element("speed", HTMLSelectElement);
-  const live = element("live", HTMLElement);
   const statusLine = element("status", HTMLElement);
   const retryButton = element("retry", HTMLButtonElement);
   const undoButton = element("undo", HTMLButtonElement);
@@ -115,7 +58,6 @@ export function startPage(port: SearchPort, network: NetworkSource): GameControl
   const stepButton = element("step", HTMLButtonElement);
   const analysisToggle = element("analysis-toggle", HTMLInputElement);
   const networkRetry = element("network-retry", HTMLButtonElement);
-  const networkProgress = element("network-progress", HTMLProgressElement);
   const showEval = element("show-eval", HTMLInputElement);
   const newButton = element("new", HTMLButtonElement);
   showEval.checked = savedShowEval();
@@ -124,11 +66,9 @@ export function startPage(port: SearchPort, network: NetworkSource): GameControl
 
   const preview = new WallPreview();
   let cursor: GlobalAction | null = null; // shown only once the keyboard is in use on the board
-  let drawn = "";
-  let ownersKey = "";
-  let owners = new Map<string, 0 | 1>();
-  /** The eval bar's last fresh percentage, kept (dimmed) while the next position is read. */
-  let shownPercent: number | null = null;
+  const boardView = new BoardView(board);
+  const evalView = new EvalView();
+  const movesView = new MovesView();
   /** Whether the viewer has picked a seat, or opened a link that did: until then the seats are the site's default, which follows the network. */
   let seatsChosen = false;
   /** The game whose end was last put in the history, so a finished game is listed once, and not one that was only opened. */
@@ -145,9 +85,7 @@ export function startPage(port: SearchPort, network: NetworkSource): GameControl
     }, 300);
   };
 
-  const announce = (text: string): void => {
-    live.textContent = text === live.textContent ? `${text} ` : text;
-  };
+  const announce = liveAnnouncer(element("live", HTMLElement));
 
   const controller = new GameController(port, () => analysis.update());
   let progressFrame = false;
@@ -249,7 +187,7 @@ export function startPage(port: SearchPort, network: NetworkSource): GameControl
     load(game, players) {
       preview.clear();
       analysis.reset();
-      shownPercent = null;
+      evalView.reset();
       showPlayers(players);
       controller.setNetworkReady(models.state(game.size).status === "ready");
       controller.load(game, players);
@@ -271,7 +209,7 @@ export function startPage(port: SearchPort, network: NetworkSource): GameControl
   };
   /** Opens a game from the Games card as a link would, with the bot that played it (the person takes the other side). */
   function openRecord(record: GameRecord): void {
-    const hash = `#n=${record.size}&m=${record.moves}`;
+    const hash = recordHash(record);
     const seat = record.p2.kind === "bot" ? record.p2 : record.p1.kind === "bot" ? record.p1 : null;
     carriedBot = seat === null ? null : botOfSeat(seat);
     if (location.hash !== hash) {
@@ -364,60 +302,14 @@ export function startPage(port: SearchPort, network: NetworkSource): GameControl
     controller.setReadyModels(new Set(seatModelIds().filter((id) => models.stateFor(id, controller.size).status === "ready")));
   }
 
-  function renderNetwork(): void {
-    const state = modelState();
-    const { line, chip, tone } = describeNetwork(state, controller.size);
-    const text = element("network-text", HTMLElement);
-    if (text.textContent !== line) text.textContent = line;
-    element("network-chip", HTMLElement).textContent = `Network: ${chip}`;
-    element("network-dot", HTMLElement).dataset["tone"] = tone;
-    if (state.status === "downloading") {
-      networkProgress.hidden = false;
-      if (state.total === null) networkProgress.removeAttribute("value");
-      else {
-        networkProgress.max = state.total;
-        networkProgress.value = state.loaded;
-      }
-    } else networkProgress.hidden = true;
-    if (state.status !== "failed" && document.activeElement === networkRetry) element("network-summary", HTMLElement).focus();
-    networkRetry.hidden = state.status !== "failed";
-  }
+  const networkShort = (id: string | null): string => describeNetwork(id === null ? modelState() : models.stateFor(id, controller.size), controller.size).short;
 
   function render(): void {
-    const past = analysis.viewingPast ? replay(controller.size, controller.moves, analysis.ply) : null;
-    const state: GameState = past ? past.state : controller.state;
     const canMove = canPlay();
-    const wall = canMove ? preview.wall : null;
-    const ply = past ? analysis.ply : controller.moves.length;
-    const key = `${controller.size}|${controller.moves.slice(0, ply).join(".")}`;
-    if (key !== ownersKey) {
-      ownersKey = key;
-      owners = wallOwners(controller.size, controller.moves.slice(0, ply));
-    }
-    const markup = renderBoard(state, {
-      owners,
-      targets: canMove ? pawnTargets(state) : [],
-      ghost: wall ? { wall, legal: findAction(state, wall) !== null } : null,
-      cursor: cursor ? { target: cursor, legal: findAction(state, cursor) !== null } : null,
-      last: past ? past.last : controller.lastMove,
-    });
-    if (markup !== drawn) {
-      drawn = markup;
-      const span = boardSpan(controller.size);
-      board.setAttribute("viewBox", `0 0 ${span + 2 * PAD} ${span + 2 * PAD}`);
-      board.innerHTML = markup;
-      // The eval bar's track spans the board's drawn square (its margin is PAD - 6 units), so its ends line up with the board's.
-      element("eval", HTMLElement).style.gridTemplateRows = `minmax(0, ${PAD - 6}fr) minmax(0, ${span + 12}fr) minmax(0, ${PAD - 6}fr)`;
-    }
-    const viewing = past ? ` Showing the position after move ${analysis.ply} of ${controller.moves.length}.` : "";
-    board.setAttribute("aria-label", `Quoridor. ${describeBoard(state)}${viewing}`);
-    renderViewing();
-    board.classList.toggle("can-click", canMove);
+    const state = boardView.draw(controller, analysis, canMove, preview.wall, cursor);
+    drawViewing(controller, analysis);
     const waitingModel = controller.waitingModel;
-    const text =
-      waitingModel === null
-        ? statusText(controller, describeNetwork(modelState(), controller.size).short)
-        : statusText(controller, describeNetwork(models.stateFor(waitingModel, controller.size), controller.size).short, modelName(waitingModel));
+    const text = statusText(controller, networkShort(waitingModel), waitingModel === null ? undefined : modelName(waitingModel));
     if (statusLine.textContent !== text) statusLine.textContent = text;
     // Two bots playing on change the line with every move; keep it quiet, also after the end, and say the end of the game once through #live.
     statusLine.setAttribute("aria-live", statusIsMuted(controller) || quietStatus ? "off" : "polite");
@@ -441,205 +333,15 @@ export function startPage(port: SearchPort, network: NetworkSource): GameControl
     const countdown = autoplay.takeAnnouncement();
     if (countdown !== null) sentences.push(countdown);
     if (sentences.length > 0) announce(sentences.join(" "));
-    renderSeats(state);
-    renderControls();
+    drawSeats(state, controller, analysis.viewingPast, controls, networkShort);
+    drawControls(controlsNow(), controller, autoplay.countdown !== null);
     games.draw();
     autoControls.draw();
-    renderMoves();
-    renderEval();
-    renderAnalysis();
-    renderNetwork();
-    // Some browsers throw if the address is rewritten too often, and a progress bar needs no new address.
-    if (location.hash !== controller.hash) history.replaceState(null, "", controller.hash);
-  }
-
-  function renderSeats(state: GameState): void {
-    const players = controller.players;
-    for (const side of SIDES) {
-      const seat = players[side];
-      const toMove = controller.result === null && controller.mover === side && !analysis.viewingPast;
-      const note =
-        seat === HUMAN
-          ? playerName(players, side) === "You"
-            ? "You play this side."
-            : "A person plays this side."
-          : toMove && controller.thinking
-            ? "Thinking…"
-            : toMove && controller.waiting
-              ? controller.waitingModel === null
-                ? `Waiting for the network: ${describeNetwork(modelState(), controller.size).short}.`
-                : `Waiting for ${modelName(controller.waitingModel)}: ${describeNetwork(models.stateFor(controller.waitingModel, controller.size), controller.size).short}.`
-              : "";
-      controls[side].draw();
-      const noteElement = element(`note-${side}`, HTMLElement);
-      if (noteElement.textContent !== note) noteElement.textContent = note;
-      const seatElement = element(`seat-${side}`, HTMLElement);
-      seatElement.classList.toggle("to-move", toMove);
-      seatElement.classList.toggle("thinking", toMove && controller.thinking);
-      const walls = state.wallsLeft(side === "p1" ? 0 : 1);
-      const wallsElement = element(`walls-${side}`, HTMLElement);
-      wallsElement.innerHTML = `<b>${walls}</b> ${walls === 1 ? "wall" : "walls"} left`;
-    }
-  }
-
-  function renderControls(): void {
-    const shown = controlsNow();
-    element("bot-controls", HTMLElement).hidden = !shown.botControls;
-    element("person-controls", HTMLElement).hidden = !shown.undo;
-    element("how-to-move", HTMLElement).hidden = !shown.howToMove;
-    const published = shown.analysis;
-    // Hidden by visibility, not removed, so the status line below does not move.
-    element("eval-toggle", HTMLElement).classList.toggle("off", !shown.evaluationToggle);
-    // Without a network there is nothing to analyse; the note takes the checkbox's place, so the card does not change size.
-    element("analysis-label", HTMLElement).hidden = !published;
-    element("analysis-off", HTMLElement).hidden = published;
-    // The board size waits for New game; the button says so while it differs from the game on the board.
-    const pending = Number(sizeSelect.value) !== controller.size;
-    newButton.classList.toggle("pending", pending);
-    newButton.title = pending ? "The board size you chose starts when you press New game" : "";
-    toggleButton.classList.toggle("blocked", shown.startBlocked);
-    toggleButton.textContent = shown.startBlocked ? (autoplay.countdown !== null ? "Game over: next game starting" : "Game over: press New game") : controller.running ? "Pause" : controller.moves.length > 0 ? "Resume" : "Start";
-    setEnabled(toggleButton, !shown.startBlocked);
-    setEnabled(stepButton, controller.canStep);
-    setEnabled(undoButton, controller.canUndo);
-    // The row is about to go; keep the keyboard on the page instead of dropping it to the top.
-    if (controller.error === null && document.activeElement === retryButton) statusLine.focus();
-    element("retry-row", HTMLElement).hidden = controller.error === null;
-  }
-
-  /** Sets a blurb's text; one that is open updates in place, and nothing is announced. */
-  function setTip(id: string, text: string): void {
-    const tip = element(id, HTMLElement);
-    if (tip.textContent !== text) tip.textContent = text;
-  }
-
-  function renderEval(): void {
-    const container = element("eval", HTMLElement);
-    const meter = element("eval-meter", HTMLElement);
-    // A person may hide the evaluation so as not to lean on it; two bots playing always show it.
-    const visible = evalVisible();
-    const ticks = visible && (!controller.hasHuman || analysisToggle.checked);
-    const bar = evalBar(analysis.view, shownPercent, ticks ? controller.opinions(analysis.ply) : null);
-    container.classList.toggle("off", !visible);
-    container.setAttribute("aria-hidden", String(!visible));
-    if (!bar.stale) shownPercent = bar.percent;
-    container.classList.toggle("empty", bar.percent === null);
-    container.classList.toggle("stale", bar.stale);
-    if (bar.percent === null) meter.removeAttribute("aria-valuenow");
-    else meter.setAttribute("aria-valuenow", String(bar.percent));
-    meter.setAttribute("aria-valuetext", bar.label);
-    element("eval-fill", HTMLElement).style.height = `${bar.percent ?? 0}%`;
-    element("eval-p1", HTMLElement).textContent = bar.percent === null ? "–" : `${bar.percent}%`;
-    element("eval-p2", HTMLElement).textContent = bar.percent === null ? "–" : `${100 - bar.percent}%`;
-    const sources = ticks ? controller.opinionSources(analysis.ply) : null;
-    for (const side of SIDES) {
-      const tick = element(`tick-${side}`, HTMLElement);
-      const value = bar.ticks[side];
-      tick.hidden = value === null;
-      if (value !== null) tick.style.bottom = `${value}%`;
-      setTip(`tip-${side}`, markerBlurb({ side, seat: controller.players[side], p1Percent: value, source: sources?.[side] ?? null, viewingPast: analysis.viewingPast }));
-    }
-    const status = analysis.view.status;
-    setTip("tip-bar", barBlurb({ percent: bar.percent, stale: bar.stale, unavailable: status === "unavailable", failed: status === "failed", ply: analysis.ply, moves: controller.moves.length, simulations: ANALYSIS_SIMULATIONS }));
-    tooltips.refresh();
-  }
-
-  /** Says which position is on the board: the latest, or an earlier one with the way back. Not read aloud with each change; the board's label carries it. */
-  function renderViewing(): void {
-    const count = controller.moves.length;
-    const past = analysis.viewingPast;
-    const note = element("viewing", HTMLElement);
-    note.classList.toggle("past", past);
-    note.textContent = past ? `Viewing ${analysis.where}` : count === 0 ? "The start of the game." : `Live: move ${count} of ${count}.`;
-    element("step-live", HTMLButtonElement).classList.toggle("live", !past);
-    setEnabled(element("step-first", HTMLButtonElement), analysis.ply > 0);
-    setEnabled(element("step-prev", HTMLButtonElement), analysis.ply > 0);
-    setEnabled(element("step-next", HTMLButtonElement), analysis.ply < count);
-    setEnabled(element("step-last", HTMLButtonElement), analysis.ply < count);
-  }
-
-  function renderAnalysis(): void {
-    element("analysis-box", HTMLElement).hidden = !analysisOpen();
-    if (!analysisOpen()) return;
-    const view = analysis.view;
-    const lines = element("analysis-lines", HTMLOListElement);
-    const note = element("analysis-note", HTMLElement);
-    const reading = view.status === "ready" ? view.reading.lines : [];
-    const rows: HTMLLIElement[] = [];
-    for (let i = 0; i < TOP_LINES; i++) {
-      const line = reading[i];
-      const item = document.createElement("li");
-      if (line === undefined) item.className = "blank";
-      else {
-        const percent = Math.round(line.share * 100);
-        item.className = i === 0 ? "best" : "";
-        item.innerHTML = `<span class="rank">${i + 1}</span><span class="move"></span><span class="share"><span style="width:${percent}%"></span></span><span class="percent">${percent}%</span>`;
-        item.querySelector(".move")!.textContent = line.move;
-      }
-      rows.push(item);
-    }
-    lines.replaceChildren(...rows);
-    if (view.status === "ready") {
-      note.textContent = reading.length > 0 ? "The player to move would choose these most often." : "The game is over here.";
-      // While two bots play on, a new reading arrives with every move; it stays on screen but is not read aloud.
-      const sentence = botsArePlaying(controller) ? null : analysis.takeAnnouncement();
-      if (sentence) announce(sentence);
-    } else {
-      note.textContent =
-        view.status === "unavailable"
-          ? "Analysis needs the network, which is not ready."
-          : view.status === "searching"
-            ? "The network is reading this position."
-            : `The analysis failed (${view.message}).`;
-    }
-  }
-
-  let movesDrawn = "";
-
-  function renderMoves(): void {
-    const moves = controller.moves;
-    const list = element("moves", HTMLOListElement);
-    const signature = moves.join(".");
-    if (signature !== movesDrawn) {
-      movesDrawn = signature;
-      // Rebuilding must not take keyboard focus away from the move being used.
-      const focused = document.activeElement;
-      const focusedPly = focused instanceof HTMLElement && list.contains(focused) ? focused.dataset["ply"] : undefined;
-      list.replaceChildren(
-        ...moveRows(moves).map((row, i) => {
-          const item = document.createElement("li");
-          row.forEach((move, k) => {
-            const ply = i * 2 + k + 1;
-            const cell = document.createElement("button");
-            cell.type = "button";
-            cell.textContent = move;
-            cell.dataset["ply"] = String(ply);
-            cell.className = sideOf(ply - 1);
-            cell.setAttribute("aria-label", `Show the position after move ${ply}, ${move}`);
-            cell.addEventListener("click", () => analysis.goTo(ply));
-            item.append(cell);
-          });
-          return item;
-        }),
-      );
-      if (focusedPly !== undefined) list.querySelector<HTMLElement>(`[data-ply="${focusedPly}"]`)?.focus();
-    }
-    // The viewed move is marked in place; the entries themselves stay.
-    let viewed: HTMLElement | null = null;
-    for (const cell of list.querySelectorAll<HTMLElement>("[data-ply]")) {
-      const current = Number(cell.dataset["ply"]) === analysis.ply;
-      cell.classList.toggle("latest", current);
-      if (current) cell.setAttribute("aria-current", "step");
-      else cell.removeAttribute("aria-current");
-      if (current) viewed = cell;
-    }
-    if (!analysis.viewingPast) list.scrollTop = list.scrollHeight;
-    else if (viewed) {
-      // Keep the viewed move in sight without pulling the list to the end.
-      if (viewed.offsetTop < list.scrollTop) list.scrollTop = viewed.offsetTop;
-      else if (viewed.offsetTop + viewed.offsetHeight > list.scrollTop + list.clientHeight) list.scrollTop = viewed.offsetTop + viewed.offsetHeight - list.clientHeight;
-    }
-    element("moves-empty", HTMLElement).hidden = moves.length > 0;
+    movesView.draw(controller, analysis);
+    evalView.draw(controller, analysis, evalVisible(), analysisToggle.checked, tooltips);
+    drawAnalysis(controller, analysis, analysisOpen(), announce);
+    drawNetwork(modelState(), controller.size);
+    syncAddress(controller.hash);
   }
 
   /** The cell or groove under the pointer. */
@@ -750,7 +452,7 @@ export function startPage(port: SearchPort, network: NetworkSource): GameControl
     autoplay.interrupt();
     preview.clear();
     analysis.reset();
-    shownPercent = null;
+    evalView.reset();
     const size = Number(sizeSelect.value);
     // Before the game starts, so a bot that moves first does not search with another size's network.
     controller.setNetworkReady(models.state(size).status === "ready");
@@ -783,7 +485,7 @@ export function startPage(port: SearchPort, network: NetworkSource): GameControl
       if (game.result !== null) recordedHash = game.toHash();
       preview.clear();
       analysis.reset();
-      shownPercent = null;
+      evalView.reset();
       controller.setNetworkReady(models.state(game.size).status === "ready");
       // The bot is fitted to the link's board size.
       const seats: Players = human === "p1" ? { p1: HUMAN, p2: bot } : { p1: bot, p2: HUMAN };
@@ -798,7 +500,7 @@ export function startPage(port: SearchPort, network: NetworkSource): GameControl
     } catch {
       announce("That link could not be opened, so it was ignored.");
       networkChanged();
-      if (location.hash !== controller.hash) history.replaceState(null, "", controller.hash);
+      syncAddress(controller.hash);
       return false;
     }
   }
@@ -852,10 +554,7 @@ export function startPage(port: SearchPort, network: NetworkSource): GameControl
   onPress(element("step-last", HTMLButtonElement), () => analysis.goTo(controller.moves.length));
   networkRetry.addEventListener("click", () => void models.retry(controller.size));
   element("copy", HTMLButtonElement).addEventListener("click", () => {
-    navigator.clipboard.writeText(location.href).then(
-      () => announce("Link copied."),
-      () => announce("Could not copy; the link is in the address bar."),
-    );
+    copyLink(announce);
   });
   window.addEventListener("hashchange", () => {
     if (location.hash !== controller.hash) openHash();

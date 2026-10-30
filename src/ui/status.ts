@@ -1,5 +1,5 @@
 import { maxPlies } from "../engine/constants";
-import { botLabel } from "./bots";
+import { botLabel, modelName } from "./bots";
 import { type GameController, HUMAN, type Players, type Side, sideOf } from "./controller";
 
 /** A seat in words: "You" for the one person against a bot, "Player 1" for either of two people, "Player 2 (Strong)" for a bot. */
@@ -57,4 +57,20 @@ export function botsArePlaying(controller: Pick<GameController, "hasHuman" | "ru
  */
 export function statusIsMuted(controller: Pick<GameController, "hasHuman" | "running" | "result">): boolean {
   return botsArePlaying(controller) || (!controller.hasHuman && controller.result !== null);
+}
+
+/**
+ * The note under a seat: who plays it, or that its bot is thinking or waiting. `toMove` says it is this seat's turn on the latest position;
+ * `network` says where the network, or the gallery model with that id, stands.
+ */
+export function seatNote(controller: GameController, side: Side, toMove: boolean, network: (modelId: string | null) => string): string {
+  const players = controller.players;
+  if (players[side] === HUMAN) return playerName(players, side) === "You" ? "You play this side." : "A person plays this side.";
+  if (toMove && controller.thinking) return "Thinking…";
+  if (toMove && controller.waiting) {
+    return controller.waitingModel === null
+      ? `Waiting for the network: ${network(null)}.`
+      : `Waiting for ${modelName(controller.waitingModel)}: ${network(controller.waitingModel)}.`;
+  }
+  return "";
 }
