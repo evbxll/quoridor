@@ -106,7 +106,7 @@ describe("what a seat says about its model", () => {
 
   it("says what Beginner and Normal are, and nothing for custom heuristic settings", () => {
     expect(seatStrength(botOf("beginner"), null, 9)).toBe("Much weaker than Normal.");
-    expect(seatStrength(botOf("normal"), g105, 7)).toBe("The reference level: about even with its author on 9 × 9.");
+    expect(seatStrength(botOf("normal"), g105, 7)).toBe("A solid all-round opponent.");
     expect(seatStrength({ ...botOf("normal"), simulations: 400 }, null, 9)).toBe("");
   });
 

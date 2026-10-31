@@ -279,12 +279,9 @@ select {
 .seat-body select { width: 100%; }
 .seat-note { margin: 0; min-height: 1.45em; color: var(--muted); font-size: 0.875rem; }
 .seat.thinking .seat-note { color: var(--text); font-weight: 600; }
-/* A bot's settings: one summary line, and in it the simulations, Vary moves and the time a move. The time keeps two lines of room, so dragging the slider moves nothing. */
+/* A bot's settings, all in view: the simulations slider, the time a move, the time on this device and Vary moves. The time keeps two lines of room, so dragging the slider moves nothing. */
 .bot-settings { display: flex; flex-direction: column; gap: 6px; }
 .seat-body select.player { font-weight: 600; }
-.seat-more > summary { cursor: pointer; padding: 3px 2px; font-size: 0.875rem; color: var(--muted); font-variant-numeric: tabular-nums; } /* wraps in a narrow seat: none of it is cut off */
-.seat-more[open] > summary { color: var(--text); }
-.seat-more-body { display: flex; flex-direction: column; gap: 4px; padding: 4px 0 2px; }
 .field { display: flex; flex-direction: column; gap: 2px; font-size: 0.875rem; color: var(--muted); }
 .field select { color: var(--text); font-size: 0.875rem; width: 100%; }
 .sims-row { display: flex; flex-wrap: wrap; align-items: center; gap: 2px 10px; font-size: 0.875rem; }

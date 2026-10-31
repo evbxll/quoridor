@@ -1,6 +1,6 @@
 import type { ModelCard } from "../model/card";
 import type { ModelState } from "../model/manager";
-import { type Bot, botLabel, botOf, botSummary, describeEstimate, estimateMs, fitTo, formatMs, PRESETS, sameBot, stepsFor, timeModelOf, withModel } from "./bots";
+import { type Bot, botLabel, botOf, botSummary, describeEstimate, fitTo, formatMs, PRESETS, sameBot, stepsFor, timeModelOf, withModel } from "./bots";
 import { HUMAN, type MoveTime, type Player, type Side } from "./controller";
 import { playableModel } from "./seatModels";
 import { choiceOf, CUSTOM, ENGINE_GROUPS, seatAfterChoice } from "./seatChoice";
@@ -49,8 +49,8 @@ function setText(target: HTMLElement, text: string): void {
  * The controls of one seat. One select says what the player is: Human, a heuristic level (Beginner, Normal)
  * or a neural-network level (Strong, Max). A bot whose settings match no preset is shown as "Custom (engine)" in
  * the select, as a disabled entry that is there only while it is Custom. Dragging the simulations is the way to make it so.
- * A network bot has a Network select when more than one network is published. The simulations slider is always shown; "Vary
- * moves" sits in a disclosure whose one-line summary gives the budget and the time a move. The page reads the
+ * A network bot has a Network select when more than one network is published. Always shown under it: the simulations
+ * slider with its value, one line on the time a move, the seat's latest time on this device, and "Vary moves". The page reads the
  * seat with `player`. `onEdit` is called after each change, with a sentence to announce or null when the
  * control already announces itself (the slider); the page applies the change to the game at once.
  */
@@ -69,8 +69,6 @@ export class SeatControls {
   /** The bot's name when its settings were last committed (a pick, a released slider, a toggle), to announce a change of level. */
   private settled = botLabel(DEFAULT_BOT);
   private readonly settings: HTMLElement;
-  private readonly more: HTMLDetailsElement;
-  private readonly summary: HTMLElement;
   private readonly slider: HTMLInputElement;
   private readonly value: HTMLOutputElement;
   private readonly estimate: HTMLElement;
@@ -131,18 +129,15 @@ export class SeatControls {
     this.value.htmlFor = this.slider.id;
     // The slider's aria-valuetext says the value; an output is a live region and would say it again.
     this.value.setAttribute("aria-hidden", "true");
-    this.more = make("details", this.settings, { className: "seat-more" });
-    this.summary = make("summary", this.more);
-    const body = make("div", this.more, { className: "seat-more-body" });
-    const varyLabel = make("label", body, { className: "check" });
+    this.estimate = make("p", this.settings, { id: id("estimate"), className: "seat-hint estimate" });
+    this.measured = make("p", this.settings, { id: id("measured"), className: "seat-hint measured" });
+    this.slider.setAttribute("aria-describedby", `${this.estimate.id} ${this.measured.id}`);
+    const varyLabel = make("label", this.settings, { className: "check" });
     this.vary = make("input", varyLabel, { id: id("vary") });
     this.vary.type = "checkbox";
     varyLabel.append(" Vary moves");
     const varyNote = make("span", varyLabel, { id: id("vary-note"), className: "seat-hint", textContent: "so games differ" });
     this.vary.setAttribute("aria-describedby", varyNote.id);
-    this.estimate = make("p", body, { id: id("estimate"), className: "seat-hint estimate" });
-    this.measured = make("p", body, { id: id("measured"), className: "seat-hint measured" });
-    this.slider.setAttribute("aria-describedby", `${this.estimate.id} ${this.measured.id}`);
 
     /** Applies a change to the bot; `remember` keeps its simulations as the person's choice. */
     const edit = (bot: Bot, announce: boolean, remember: boolean): void => {
@@ -244,9 +239,6 @@ export class SeatControls {
     const card = this.model === undefined ? null : models.card(this.model);
     // The time table belongs to a make of network: a gallery model of the same make as the measured one uses it, another is unmeasured.
     const model = bot.engine !== "network" ? null : this.model === undefined ? mainModel : card === null ? this.model : timeModelOf(card);
-    const found = estimateMs(bot, size, model);
-    const time = found === null ? "time unmeasured" : `≈ ${formatMs(found.ms)} a move`;
-    setText(this.summary, `${bot.simulations.toLocaleString("en-US")} simulations · ${time}${bot.vary ? " · varied" : ""}`);
     const here = moveTime !== null && moveTime.size === size && sameBot(moveTime.bot, withModel(bot, this.model)) ? `On this device: ${formatMs(moveTime.ms)}.` : "";
     setText(this.estimate, describeEstimate(bot, size, model));
     setText(this.measured, here);

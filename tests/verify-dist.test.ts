@@ -282,6 +282,9 @@ describe("only public words in what the site ships", () => {
     ["the old disclosure", "How this was measured"],
     ["a commit field", "private_git_sha"],
     ["a ratings folder", "ratings_folder"],
+    ["the old Normal note", "The reference level: about even with its author on 9 × 9."],
+    ["its author", "even with its Author"],
+    ["calibration", "calibrated against Normal"],
     ["a git commit id", "ec23805c5cc030885812c9a980ea2f65e10d0ddf"],
     ["a no-break space", "fresh\u00a0tree"],
   ])("refuses %s in a shipped script", (_name, words) => {

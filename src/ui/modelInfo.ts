@@ -91,7 +91,7 @@ const ELO_ROUNDING = 50;
 /** What the heuristic presets are, against Normal, in words; Custom heuristic settings get no line. */
 const HEURISTIC_STRENGTH: Partial<Record<PresetId, string>> = {
   beginner: "Much weaker than Normal.",
-  normal: "The reference level: about even with its author on 9 × 9.",
+  normal: "A solid all-round opponent.",
 };
 
 /**

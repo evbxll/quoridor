@@ -103,7 +103,7 @@ const isPlainStrength = (/** @type {any} */ entry) =>
   typeof entry === "object" && entry !== null && Object.keys(entry).every((key) => key === "size" || key === "elo_vs_normal") && Number.isInteger(entry.size) && Number.isFinite(entry.elo_vs_normal);
 
 /**
- * Words that belong to how the models were made and rated, or to the private repository, never to the public site.
+ * Words that belong to how the models were made, rated and calibrated, or to the private repository, never to the public site.
  * They are matched on normalised text (`normalise`): lower case, any run of spaces, no-break spaces, hyphens or
  * underscores as one space, so "Self-play", "self_play" and "SELF PLAY" are one form. Plurals are included.
  *
@@ -130,6 +130,9 @@ export const FORBIDDEN_TERMS = [
   /\bhow this was measured\b/,
   /\bgit sha\b/,
   /\bratings? folders?\b/,
+  /\bits author\b/,
+  /\breference level\b/,
+  /\bcalibrat(?:e|es|ed|ing|ion|ions)\b/,
 ];
 
 /** A git commit id: 40 hex digits on their own (a sha256, 64 of them, is not one). */
