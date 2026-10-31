@@ -1,5 +1,5 @@
 import type { ModelEnv } from "../../model/store";
-import { describeArchitecture, drawArchitecture, parametersText, parseArchitecture } from "../architecture";
+import { architectureUrl, describeArchitecture, drawArchitecture, parametersText, parseArchitecture } from "../architecture";
 import { element } from "../dom";
 
 /**
@@ -8,7 +8,7 @@ import { element } from "../dom";
  */
 export async function showArchitecture(env: ModelEnv, id: string): Promise<void> {
   try {
-    const response = await env.fetch(new URL(`models/${id}/arch.json`, env.base), { credentials: "omit", mode: "same-origin" });
+    const response = await env.fetch(architectureUrl(env.base, id), { credentials: "omit", mode: "same-origin" });
     if (!response.ok) return;
     const arch = parseArchitecture(await response.json());
     drawArchitecture(element("arch-diagram", SVGSVGElement), arch);

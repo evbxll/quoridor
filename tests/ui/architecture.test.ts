@@ -1,6 +1,6 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
-import { describeArchitecture, parametersText, parseArchitecture } from "../../src/ui/architecture";
+import { architectureUrl, describeArchitecture, parametersText, parseArchitecture } from "../../src/ui/architecture";
 import { forbiddenIn } from "../../scripts/verify-dist.mjs";
 
 const published = JSON.parse(readFileSync("public/models/s9-conv-paths-g105/arch.json", "utf8")) as Record<string, unknown>;
@@ -27,6 +27,15 @@ describe("the network in the About card", () => {
     expect(parametersText(2474767)).toBe("2.5 million");
   });
 
+  it("draws up to 64 blocks", () => {
+    const many = { ...published, layers: [...(published["layers"] as { kind: string }[]), ...Array.from({ length: 56 }, () => ({ kind: "residual_block" }))] };
+    expect(parseArchitecture(many).blocks).toHaveLength(64);
+  });
+
+  it("reads the file beside the model, under the site's base", () => {
+    expect(architectureUrl("https://example.org/quoridor/", "s9-conv-paths-g105").href).toBe("https://example.org/quoridor/models/s9-conv-paths-g105/arch.json");
+  });
+
   it.each([
     ["not an object", null],
     ["no input planes", { ...published, input: { planes: [] } }],
@@ -34,6 +43,7 @@ describe("the network in the About card", () => {
     ["no blocks", { ...published, layers: (published["layers"] as { kind: string }[]).filter((layer) => !layer.kind.endsWith("block")) }],
     ["no heads", { ...published, layers: (published["layers"] as { kind: string }[]).filter((layer) => layer.kind !== "value_head") }],
     ["no parameter count", { ...published, parameters: "many" }],
+    ["more blocks than the card draws (64)", { ...published, layers: [...(published["layers"] as { kind: string }[]), ...Array.from({ length: 57 }, () => ({ kind: "residual_block" }))] }],
     ["a plane name that is too long", { ...published, input: { planes: ["x".repeat(81)] } }],
   ])("refuses a file with %s, so the card keeps its words alone", (_name, json) => {
     expect(() => parseArchitecture(json)).toThrow();

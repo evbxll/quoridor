@@ -35,6 +35,9 @@ export function parseArchitecture(json: unknown): Architecture {
   return { planes: planes as string[], channels: stem["out"], blocks: blocks.map((layer) => layer["kind"] === "global_pooling_block"), parameters };
 }
 
+/** Where a model's `arch.json` is published: beside its `model.onnx`, as the publisher writes them (`models/<id>/`). */
+export const architectureUrl = (base: string, id: string): URL => new URL(`models/${encodeURIComponent(id)}/arch.json`, base);
+
 const plural = (count: number, word: string): string => `${count} ${word}${count === 1 ? "" : "s"}`;
 
 /** The network's parameters in words: "2.5 million". */
