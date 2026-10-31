@@ -128,7 +128,6 @@ export function fitTo(bot: Bot, size: number): Bot {
   return simulations === bot.simulations ? bot : { ...bot, simulations };
 }
 
-
 /** How sure a time is: measured at exactly this budget, or interpolated or derived. */
 export type EstimateKind = "measured" | "estimate";
 
