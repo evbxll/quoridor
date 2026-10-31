@@ -19,6 +19,25 @@ export function saveShowEval(on: boolean): void {
   }
 }
 
+const SETUP_KEY = "quoridor.setup.v1";
+
+/** The board size and seats the viewer last used, as `setupText` writes them, or null; a page opened without a link starts from them. */
+export function savedSetupText(): string | null {
+  try {
+    return localStorage.getItem(SETUP_KEY);
+  } catch {
+    return null;
+  }
+}
+
+export function saveSetupText(text: string): void {
+  try {
+    localStorage.setItem(SETUP_KEY, text);
+  } catch {
+    // The setup then lasts for this visit only.
+  }
+}
+
 /** The browser's storage, or null where it is blocked. */
 export function savedStorage(): StorageLike | null {
   try {

@@ -114,7 +114,7 @@ describe("a model the board does not offer", () => {
   it("is said in one sentence for both seats", () => {
     const { dropped } = dropUnplayable(players("fc", "fc"), offered, 7);
     expect(droppedSentence(dropped, 7, (id) => `Model ${id}`)).toBe(
-      "Model fc does not play 7 × 7, so player 1 plays the main bot; Model fc does not play 7 × 7, so player 2 plays the main bot.",
+      "Model fc is not offered on 7 × 7, so player 1 plays the main network; Model fc is not offered on 7 × 7, so player 2 plays the main network.",
     );
     expect(droppedSentence([], 7, (id) => id)).toBeNull();
   });

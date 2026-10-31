@@ -12,10 +12,11 @@ import { SeatWatch } from "./seatWatch";
 import { botOfSeat, type GameRecord, GameHistory } from "./history";
 import { ModelManager, type ModelState, type StartInfo } from "../model/manager";
 import type { ModelEnv } from "../model/store";
-import { GameController, HUMAN, isOfferedSize, type Players, samePlayer, type SearchPort, type Side, type Speed } from "./controller";
+import { GameController, HUMAN, isOfferedSize, type Player, type Players, samePlayer, type SearchPort, type Side, type Speed } from "./controller";
 import { buildModelOptions, extraModels, modelTitle } from "./modelInfo";
 import { describeNetwork } from "./networkText";
-import { saveShowEval, savedShowEval, savedStorage } from "./persistence";
+import { saveSetupText, saveShowEval, savedSetupText, savedShowEval, savedStorage } from "./persistence";
+import { addressOf, readSetup, seatsOf, setupText } from "./setupLink";
 import { cellAt, wallAt } from "./geometry";
 import { WallPreview } from "./pointer";
 import { Tooltips } from "./tooltip";
@@ -45,6 +46,7 @@ const SIDES = ["p1", "p2"] as const;
 const NORMAL = botOf("normal");
 /** A visitor plays player 1 against Strong, the network at 32 searches, unless they choose otherwise. */
 const DEFAULT_PLAYERS: Players = { p1: HUMAN, p2: botOf("strong") };
+const describePlayer = (player: Player): string => (player === HUMAN ? "a person" : botLabel(player));
 
 /** Wires the controller to the page: draws the position, the players and the eval bar, and turns clicks and keys into moves. */
 export function startPage(port: SearchPort, network: NetworkSource): GameController {
@@ -72,6 +74,8 @@ export function startPage(port: SearchPort, network: NetworkSource): GameControl
   const movesView = new MovesView();
   /** Whether the viewer has picked a seat, or opened a link that did: until then the seats are the site's default, which follows the network. */
   let seatsChosen = false;
+  /** The setup last kept for the next visit, so it is written only when it changes. */
+  let keptSetup = "";
   /** The game whose end was last put in the history, so a finished game is listed once, and not one that was only opened. */
   let recordedHash = "";
   /** The game whose end was last announced, so a finished game of two bots is announced once. */
@@ -340,7 +344,13 @@ export function startPage(port: SearchPort, network: NetworkSource): GameControl
     evalView.draw(controller, analysis, evalVisible(), analysisToggle.checked, tooltips);
     drawAnalysis(controller, analysis, analysisOpen(), announce);
     drawNetwork(modelState(), controller.size);
-    syncAddress(controller.hash);
+    const address = addressOf(controller.hash, controller.players);
+    syncAddress(address);
+    const setup = setupText({ size: controller.size, players: controller.players });
+    if (setup !== keptSetup) {
+      keptSetup = setup;
+      saveSetupText(setup);
+    }
   }
 
   /** The cell or groove under the pointer. */
@@ -472,13 +482,9 @@ export function startPage(port: SearchPort, network: NetworkSource): GameControl
       const game = Game.fromHash(location.hash);
       // Before anything changes: a link may name a size the engine reads and the site does not offer.
       if (!isOfferedSize(game.size)) throw new RangeError(`The site has no ${game.size}x${game.size} board`);
-      const chosen: Players = { p1: controls.p1.playerFor(game.size), p2: controls.p2.playerFor(game.size) };
-      const carried = carriedBot;
+      const linked = seatsOf(location.hash, game.size);
+      const seats = linked === null ? seatsForOlderLink(game) : { p1: linked.seats.p1 ?? DEFAULT_PLAYERS.p1, p2: linked.seats.p2 ?? DEFAULT_PLAYERS.p2 };
       carriedBot = null;
-      // A game opened from the history keeps the bot that played it, model included.
-      const bot = carried !== null ? fitCarried(carried, game.size) : chosen.p1 !== HUMAN ? chosen.p1 : chosen.p2 !== HUMAN ? chosen.p2 : DEFAULT_PLAYERS.p2;
-      // The person plays the side to move, or player 1 if the game is over.
-      const human: Side = game.result === null && !game.state.p1Turn ? "p2" : "p1";
       autoplay.interrupt();
       // A game that is already over is shown, not played, so it is not listed again.
       if (game.result !== null) recordedHash = game.toHash();
@@ -486,8 +492,7 @@ export function startPage(port: SearchPort, network: NetworkSource): GameControl
       analysis.reset();
       evalView.reset();
       controller.setNetworkReady(models.state(game.size).status === "ready");
-      // The bot is fitted to the link's board size.
-      const seats: Players = human === "p1" ? { p1: HUMAN, p2: bot } : { p1: bot, p2: HUMAN };
+      // A link's seats are restored as they were; two bots wait for Start, as they always do.
       controller.load(game, seats);
       seatWatch.begin(seats);
       sizeSelect.value = String(controller.size);
@@ -495,13 +500,28 @@ export function startPage(port: SearchPort, network: NetworkSource): GameControl
       seatsChosen = true;
       networkChanged();
       void models.select(controller.size);
+      if (linked !== null && linked.unreadable.length > 0) {
+        const parts = linked.unreadable.map((side) => `player ${side === "p1" ? 1 : 2} plays ${describePlayer(DEFAULT_PLAYERS[side])}`);
+        announce(`Part of the link could not be read, so ${parts.join(" and ")}.`);
+      }
       return true;
     } catch {
       announce("That link could not be opened, so it was ignored.");
       networkChanged();
-      syncAddress(controller.hash);
+      syncAddress(addressOf(controller.hash, controller.players));
       return false;
     }
+  }
+
+  /**
+   * The seats for a link that names none (an older link, or one from the Games card): the person plays the side to
+   * move, or player 1 if the game is over, against the bot that played it (from the Games card) or the one chosen.
+   */
+  function seatsForOlderLink(game: Game): Players {
+    const chosen: Players = { p1: controls.p1.playerFor(game.size), p2: controls.p2.playerFor(game.size) };
+    const bot = carriedBot !== null ? fitCarried(carriedBot, game.size) : chosen.p1 !== HUMAN ? chosen.p1 : chosen.p2 !== HUMAN ? chosen.p2 : DEFAULT_PLAYERS.p2;
+    const human: Side = game.result === null && !game.state.p1Turn ? "p2" : "p1";
+    return human === "p1" ? { p1: HUMAN, p2: bot } : { p1: bot, p2: HUMAN };
   }
 
   newButton.addEventListener("click", newGame);
@@ -556,11 +576,17 @@ export function startPage(port: SearchPort, network: NetworkSource): GameControl
     copyLink(announce);
   });
   window.addEventListener("hashchange", () => {
-    if (location.hash !== controller.hash) openHash();
+    if (location.hash !== addressOf(controller.hash, controller.players)) openHash();
     else carriedBot = null;
   });
 
-  showPlayers(DEFAULT_PLAYERS);
+  // Without a link the page starts from the setup last used here, if any; a link wins.
+  const kept = readSetup(savedSetupText(), DEFAULT_PLAYERS);
+  showPlayers(kept?.players ?? DEFAULT_PLAYERS);
+  if (kept !== null) {
+    sizeSelect.value = String(kept.size);
+    seatsChosen = true;
+  }
   if (location.hash.length <= 1 || !openHash()) newGame();
   return controller;
 }

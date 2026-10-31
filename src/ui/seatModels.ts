@@ -32,7 +32,7 @@ export function dropUnplayable(players: Players, offered: Offered, size: number)
 /** One sentence for every seat that lost its model, or null if none did. */
 export function droppedSentence(dropped: readonly Dropped[], size: number, nameOf: (id: string) => string): string | null {
   if (dropped.length === 0) return null;
-  const parts = dropped.map(({ side, model }) => `${nameOf(model)} does not play ${size} × ${size}, so player ${side === "p1" ? 1 : 2} plays the main bot`);
+  const parts = dropped.map(({ side, model }) => `${nameOf(model)} is not offered on ${size} × ${size}, so player ${side === "p1" ? 1 : 2} plays the main network`);
   return `${parts.join("; ")}.`;
 }
 
