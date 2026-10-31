@@ -103,7 +103,7 @@
                 <label class="check"><input id="auto-swap" type="checkbox" checked /> Swap sides each game</label>
                 <label class="check"><input id="auto-opening" type="checkbox" checked /> Varied openings</label>
               </div>
-              <p class="hint">Up to 100 games. Player 1 moves first, which is an edge, so compare bots only with sides swapped. Varied openings play 4 random pawn moves; only 35 openings exist, so they repeat. Vary moves in a bot's settings adds more variety.</p>
+              <p class="hint">Up to 100 games. Player 1 moves first, which is an edge, so swap sides to compare bots fairly. Varied openings start each game with 4 random pawn moves.</p>
               <div class="auto-status">
                 <span id="auto-line" class="auto-line"></span>
                 <button id="auto-cancel" class="off" type="button">Cancel</button>
@@ -144,10 +144,6 @@
               <p id="note-p1" class="seat-note"></p>
             </div>
           </div>
-          <details class="sources">
-            <summary>Where the times come from</summary>
-            <p id="time-sources" class="hint"></p>
-          </details>
         </section>
 
         <section class="card review" aria-labelledby="moves-title">

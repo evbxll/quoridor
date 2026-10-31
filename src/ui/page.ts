@@ -3,7 +3,7 @@ import { Game } from "../engine/game";
 import { Analysis } from "./analysis";
 import { copyLink, recordHash, syncAddress } from "./address";
 import { liveAnnouncer } from "./announce";
-import { type Bot, botLabel, botOf, capFor, modelName, setModelLabel, TIME_SOURCES, withModel } from "./bots";
+import { type Bot, botLabel, botOf, capFor, modelName, setModelLabel, withModel } from "./bots";
 import { closePopoverOnEscapeOrOutside, element, onPress } from "./dom";
 import { AutoControls } from "./autoControls";
 import { type AutoHost, AutoPlay } from "./autoplay";
@@ -117,14 +117,12 @@ export function startPage(port: SearchPort, network: NetworkSource): GameControl
     announce(state.status === "ready" ? `${title} is ready.` : `${title} could not be loaded. ${why}`.trim());
   };
   const seatModels = new SeatModels(models, modelStatusSaid);
-  /** Cards are read once, only when there is a model to choose beyond the main bot; their labels name the models in summaries and blurbs. */
+  /** Cards are read once: the main model's for its strength line, and the gallery's to choose among; their labels name the models in summaries and blurbs. */
   const cardsAsked = new Set<string>();
   const cardsFailed = new Set<string>();
   const askForCards = (): void => {
     const main = models.mainIdFor(controller.size);
-    const extras = extraModels(main, models.gallery);
-    if (extras.length === 0) return;
-    for (const id of main === null ? extras : [main, ...extras]) {
+    for (const id of [...(main === null ? [] : [main]), ...extraModels(main, models.gallery)]) {
       if (cardsAsked.has(id)) continue;
       cardsAsked.add(id);
       models.card(id).then(
@@ -562,7 +560,6 @@ export function startPage(port: SearchPort, network: NetworkSource): GameControl
     else carriedBot = null;
   });
 
-  element("time-sources", HTMLElement).textContent = `Times for the main network and models made like it: ${TIME_SOURCES.network}. ${TIME_SOURCES.others.map((source) => `${source}. `).join("")}Times for the heuristic: ${TIME_SOURCES.heuristic}. "On this device" is the page's own clock for the bot's latest move.`;
   showPlayers(DEFAULT_PLAYERS);
   if (location.hash.length <= 1 || !openHash()) newGame();
   return controller;

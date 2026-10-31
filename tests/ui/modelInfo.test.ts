@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { type ModelCard, parseCard } from "../../src/model/card";
 import { botLabel, botOf, botSummary, estimateMs, MEASURED_MODEL, modelName, presetOf, sameBot, setModelLabel, timeModelOf, withModel } from "../../src/ui/bots";
-import { buildModelOptions, choosableModels, describeModelStatus, disabledReason, extraModels, MAIN_MODEL, modelTitle, offSizeNote, strengthDetail, strengthLine } from "../../src/ui/modelInfo";
+import { buildModelOptions, choosableModels, describeModelStatus, disabledReason, extraModels, MAIN_MODEL, modelTitle, seatStrength } from "../../src/ui/modelInfo";
 import { cardJson, fcCardJson } from "../helpers/cards";
 
 const ladder = (elo: number): Record<string, unknown> => ({ ...(cardJson("x").strength as Record<string, unknown>[])[0], elo, interval: [elo - 37.5, elo + 37.5] });
@@ -80,32 +80,33 @@ describe("what a seat says about its model", () => {
   const g105 = CARDS["s9-conv-paths-g105"]!;
   const g050 = CARDS["s9-conv-paths-g050"]!;
 
-  it("gives no off-size note on the trained size or for an fc model", () => {
-    expect(offSizeNote("s9-conv-paths-g050", g050, 9)).toBeNull();
-    expect(offSizeNote("s9-fpu-basic-g112", fc, 9)).toBeNull();
+  it("gives a network bot its card's rating against Normal: moved by Normal's 40 over the cards' zero, rounded to 50", () => {
+    // g105's card: +557.8 at 25 simulations on 9x9.
+    expect(seatStrength(botOf("strong"), g105, 9)).toBe("≈ +500 Elo vs Normal");
+    expect(seatStrength(botOf("max"), g105, 9)).toBe("≈ +500 Elo vs Normal");
+    expect(seatStrength(botOf("strong"), g050, 9)).toBe("≈ +350 Elo vs Normal");
   });
 
-  it("says an older generation's strength on another size is unmeasured", () => {
-    expect(offSizeNote("s9-conv-paths-g050", g050, 7)).toBe(
-      "Trained on 9x9. Its convolutional architecture can play other sizes, but it was never trained on this one, so its strength here is unmeasured.",
-    );
+  it("names the size it was rated on when the board is another one", () => {
+    expect(seatStrength(botOf("strong"), g105, 11)).toBe("≈ +500 Elo vs Normal (measured on 9 × 9)");
   });
 
-  it("cites the measured score where the repo has one", () => {
-    expect(offSizeNote("s9-conv-paths-g105", g105, 11)).toContain("0.927 [0.833, 1.000] at 32 simulations");
-    expect(offSizeNote("s9-conv-paths-g105", g105, 11)).not.toContain("unmeasured");
-    expect(offSizeNote("s9-conv-paths-g105", g105, 5)).toContain("unmeasured");
+  it("gives none below the rated simulations, without a card, or without a rating", () => {
+    expect(seatStrength({ ...botOf("strong"), simulations: 16 }, g105, 9)).toBe("");
+    expect(seatStrength(botOf("strong"), null, 9)).toBe("");
+    expect(seatStrength(botOf("strong"), conv("x", 1, null), 9)).toBe("");
   });
 
-  it("states the ladder Elo with its interval, opponent and budget, and that it is not a win rate", () => {
-    expect(strengthLine(g050, 9)).toBe("9x9 ladder Elo +407 [+369, +444] vs the Evan bot at 25 simulations (95%). Ladder Elo, not a win rate.");
-    expect(strengthLine(g050, 11)).toMatch(/^Not rated on 11x11\. 9x9 ladder Elo/);
-    expect(strengthLine(conv("x", 1, null), 9)).toBe("No strength is measured for this model.");
-    expect(strengthDetail(g050, 9)).toContain("Evan bot");
-    expect(strengthDetail(g050, 9)).toContain("2 random legal actions");
-    expect(strengthDetail(g050, 9)).toContain("Laplace");
+  it("says what Beginner and Normal are, and nothing for custom heuristic settings", () => {
+    expect(seatStrength(botOf("beginner"), null, 9)).toBe("Much weaker than Normal.");
+    expect(seatStrength(botOf("normal"), g105, 7)).toBe("The reference level: about even with its author on 9 × 9.");
+    expect(seatStrength({ ...botOf("normal"), simulations: 400 }, null, 9)).toBe("");
   });
 
+  it("never names the reference bot, the ladder, intervals, openings or the method", () => {
+    const lines = [seatStrength(botOf("strong"), g105, 9), seatStrength(botOf("strong"), g105, 11), seatStrength(botOf("normal"), null, 9), seatStrength(botOf("beginner"), null, 9)];
+    for (const line of lines) expect(line).not.toMatch(/Evan|ladder|interval|anchor|opening|fresh|simulation|\[/i);
+  });
   it("describes each state of a model", () => {
     const t = "Conv, gen 50";
     expect(describeModelStatus(t, { status: "idle" }).text).toBe("Conv, gen 50: not loaded.");
@@ -146,8 +147,8 @@ describe("time estimates by model", () => {
     expect(timeModelOf(CARDS["s9-conv-paths-g050"]!)).toBe(MEASURED_MODEL);
     expect(timeModelOf(fc)).toBe("s9-fpu-basic-g112");
     const bot = botOf("strong");
-    expect(estimateMs(bot, 9, timeModelOf(CARDS["s9-conv-paths-g050"]!))).toEqual({ ms: 155, p90: 213, kind: "measured" });
-    expect(estimateMs(bot, 9, "s9-fpu-basic-g112")).toEqual({ ms: 128, p90: 170, kind: "measured" });
+    expect(estimateMs(bot, 9, timeModelOf(CARDS["s9-conv-paths-g050"]!))).toEqual({ ms: 155, kind: "measured" });
+    expect(estimateMs(bot, 9, "s9-fpu-basic-g112")).toEqual({ ms: 128, kind: "measured" });
     expect(estimateMs(bot, 7, "s9-fpu-basic-g112")).toBeNull();
     expect(estimateMs(bot, 9, "some-other-model")).toBeNull();
   });

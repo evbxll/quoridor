@@ -13,13 +13,8 @@
     "network": { "default": 800, "bySize": { "11": 400 } },
     "heuristic": { "default": 1600, "bySize": {} }
   },
-  "offSize": {
-    "s9-conv-paths-g105": {
-      "7": { "simulations": 32, "score": 0.948, "interval": [0.895, 0.989], "games": null },
-      "11": { "simulations": 32, "score": 0.927, "interval": [0.833, 1.0], "games": null },
-      "13": { "simulations": 32, "score": 0.958, "interval": [0.891, 1.0], "games": null }
-    }
-  },
+  "normalAboveRatingZero": 40,
+  "normalAboveRatingZeroSource": "Model cards rate a network against the heuristic at 100 simulations with a fresh tree each move (rated 0). Normal plays the same heuristic but reuses its tree, about 40 Elo stronger (private research repo, research/2026-10-25-budget-vs-strength).",
   "times": {
     "device": "a fast desktop",
     "deviceDetail": "Ryzen 7 7700X, Edge, 4 threads; PR #177 of the private research repo, median ms per move with tree reuse",

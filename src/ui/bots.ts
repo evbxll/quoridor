@@ -32,20 +32,19 @@ interface BotsData {
   readonly presets: readonly Preset[];
   readonly steps: PerEngine<readonly number[]>;
   readonly caps: PerEngine<{ readonly default: number; readonly bySize: Readonly<Record<string, number>> }>;
-  /** Scores of a model off its trained size, against the fresh-tree Evan bot, by model id and board size. */
-  readonly offSize: Readonly<Record<string, Readonly<Record<string, { readonly simulations: number; readonly score: number; readonly interval: readonly [number, number]; readonly games: number | null }>>>>;
+  /** How many Elo Normal stands above the zero of the cards' ratings. */
+  readonly normalAboveRatingZero: number;
   readonly times: {
     readonly device: string;
-    readonly deviceDetail: string;
     readonly network: {
       readonly model: string;
       /** What the measured model is made of; a model with the same make is as fast. */
       readonly architecture: { readonly head: string; readonly inputPlanes: number; readonly channels: number; readonly blocks: number };
       readonly bySize: Readonly<Record<string, Points>>;
       /** Models of another make, each with its own measured table. */
-      readonly others: Readonly<Record<string, { readonly source: string; readonly bySize: Readonly<Record<string, Points>> }>>;
+      readonly others: Readonly<Record<string, { readonly bySize: Readonly<Record<string, Points>> }>>;
     };
-    readonly heuristic: { readonly source: string; readonly msAt100: Readonly<Record<string, number>> };
+    readonly heuristic: { readonly msAt100: Readonly<Record<string, number>> };
   };
 }
 
@@ -56,6 +55,11 @@ export const PRESETS: readonly Preset[] = DATA.presets;
 export const MEASURED_ON = DATA.times.device;
 /** The network whose times `bots.json` holds; the page shows no measured time for another one. */
 export const MEASURED_MODEL = DATA.times.network.model;
+/**
+ * How many Elo Normal stands above the zero of the cards' ratings. The cards rate a network against the heuristic at
+ * Normal's 100 simulations with a fresh tree each move; Normal reuses its tree, which is about this much stronger.
+ */
+export const NORMAL_ABOVE_RATING_ZERO = DATA.normalAboveRatingZero;
 
 /** The temperature a bot's searches ask for: 1 samples among the searched moves, 0 plays the most visited. */
 export const temperatureOf = (bot: Bot): number => (bot.vary ? 1 : 0);
@@ -124,13 +128,13 @@ export function fitTo(bot: Bot, size: number): Bot {
   return simulations === bot.simulations ? bot : { ...bot, simulations };
 }
 
+
 /** How sure a time is: measured at exactly this budget, or interpolated or derived. */
 export type EstimateKind = "measured" | "estimate";
 
-/** A time on the measured desktop: the median, the 90th percentile where measured, and how sure it is. */
+/** A time on the measured desktop: the median, and how sure it is. */
 export interface Estimate {
   readonly ms: number;
-  readonly p90: number | null;
   readonly kind: EstimateKind;
 }
 
@@ -139,22 +143,22 @@ export interface Estimate {
  * The network is looked up in the measured table: exact at a measured budget, linear between measured
  * budgets and from zero below the first, none above the last. `model` is the network that would play, if
  * known; a different one than the table's is unmeasured. The heuristic's time is derived from Normal's, in
- * proportion to simulations, so it is always an estimate and has no 90th percentile.
+ * proportion to simulations, so it is always an estimate.
  */
 export function estimateMs(bot: Bot, size: number, model: string | null = null): Estimate | null {
   if (bot.engine === "heuristic") {
     const at100 = DATA.times.heuristic.msAt100[size];
-    return at100 === undefined ? null : { ms: (at100 * bot.simulations) / 100, p90: null, kind: "estimate" };
+    return at100 === undefined ? null : { ms: (at100 * bot.simulations) / 100, kind: "estimate" };
   }
   const table = model === null || model === MEASURED_MODEL ? DATA.times.network.bySize : DATA.times.network.others[model]?.bySize;
   const points = table?.[size];
   if (points === undefined) return null;
   let before: readonly [number, number, number] = [0, 0, 0];
   for (const point of points) {
-    if (bot.simulations === point[0]) return { ms: point[1], p90: point[2], kind: "measured" };
+    if (bot.simulations === point[0]) return { ms: point[1], kind: "measured" };
     if (bot.simulations < point[0]) {
       const along = (bot.simulations - before[0]) / (point[0] - before[0]);
-      return { ms: before[1] + (point[1] - before[1]) * along, p90: before[2] + (point[2] - before[2]) * along, kind: "estimate" };
+      return { ms: before[1] + (point[1] - before[1]) * along, kind: "estimate" };
     }
     before = point;
   }
@@ -168,15 +172,11 @@ export function formatMs(ms: number): string {
   return seconds < 10 ? `${seconds.toFixed(1)} s` : `${Math.round(seconds)} s`;
 }
 
-/** How much slower than its median the slowest tenth of moves must be for the estimate to say so. */
-const SLOW_TAIL = 2;
-
-/** The live estimate beside the simulations control: "About 0.6 s a move on a fast desktop (estimate)." */
+/** The time line in a bot's settings: "About 0.2 s a move on a fast desktop; weaker devices are slower." A time that is not measured at this budget says "Roughly". */
 export function describeEstimate(bot: Bot, size: number, model: string | null = null): string {
   const found = estimateMs(bot, size, model);
   if (found === null) return `Time a move: unmeasured on ${size} × ${size}.`;
-  const tail = found.p90 !== null && found.p90 > SLOW_TAIL * found.ms ? ` 1 move in 10 takes over ${formatMs(found.p90)}.` : "";
-  return `About ${formatMs(found.ms)} a move on ${MEASURED_ON} (${found.kind}).${tail}`;
+  return `${found.kind === "measured" ? "About" : "Roughly"} ${formatMs(found.ms)} a move on ${MEASURED_ON}; weaker devices are slower.`;
 }
 
 /**
@@ -188,14 +188,3 @@ export function timeModelOf(card: ModelCard): string {
   const { head, inputPlanes, channels, blocks } = card.network;
   return head === made.head && inputPlanes === made.inputPlanes && channels === made.channels && blocks === made.blocks ? MEASURED_MODEL : card.id;
 }
-
-/** The measurement of a model off its trained size, if the repo has one: "0.927 [0.833, 1.000] at 32 simulations". */
-export function offSizeMeasure(id: string, size: number): string | null {
-  const found = DATA.offSize[id]?.[size];
-  if (found === undefined) return null;
-  const games = found.games === null ? "" : `, ${found.games} games`;
-  return `${found.score.toFixed(3)} [${found.interval[0].toFixed(3)}, ${found.interval[1].toFixed(3)}] at ${found.simulations} simulations${games}`;
-}
-
-/** Where the measured and derived times come from, for the estimate's text alternative. */
-export const TIME_SOURCES = { network: DATA.times.deviceDetail, heuristic: DATA.times.heuristic.source, others: Object.values(DATA.times.network.others).map((other) => other.source) } as const;

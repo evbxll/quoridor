@@ -101,12 +101,12 @@ describe("time estimates", () => {
   const network = (simulations: number): Bot => ({ engine: "network", simulations, vary: false });
 
   it("are the measured medians at the measured budgets", () => {
-    expect(estimateMs(network(32), 9)).toEqual({ ms: 155, p90: 213, kind: "measured" });
-    expect(estimateMs(network(200), 9)).toEqual({ ms: 635, p90: 1234, kind: "measured" });
-    expect(estimateMs(network(400), 9)).toEqual({ ms: 2377, p90: 3538, kind: "measured" });
-    expect(estimateMs(network(800), 9)).toEqual({ ms: 3865, p90: 5795, kind: "measured" });
-    expect(estimateMs(network(32), 5)).toEqual({ ms: 50, p90: 74, kind: "measured" });
-    expect(estimateMs(network(200), 11)).toEqual({ ms: 848, p90: 1720, kind: "measured" });
+    expect(estimateMs(network(32), 9)).toEqual({ ms: 155, kind: "measured" });
+    expect(estimateMs(network(200), 9)).toEqual({ ms: 635, kind: "measured" });
+    expect(estimateMs(network(400), 9)).toEqual({ ms: 2377, kind: "measured" });
+    expect(estimateMs(network(800), 9)).toEqual({ ms: 3865, kind: "measured" });
+    expect(estimateMs(network(32), 5)).toEqual({ ms: 50, kind: "measured" });
+    expect(estimateMs(network(200), 11)).toEqual({ ms: 848, kind: "measured" });
   });
 
   it("are interpolated between measured budgets and marked as estimates", () => {
@@ -129,30 +129,22 @@ describe("time estimates", () => {
   it("are unmeasured on a size with no table (13x13 is not offered yet) and for another network", () => {
     expect(estimateMs(network(32), 13)).toBeNull();
     expect(estimateMs(network(32), 9, "another-model")).toBeNull();
-    expect(estimateMs(network(32), 9, MEASURED_MODEL)).toEqual({ ms: 155, p90: 213, kind: "measured" });
+    expect(estimateMs(network(32), 9, MEASURED_MODEL)).toEqual({ ms: 155, kind: "measured" });
   });
 
   it("are derived for the heuristic from Normal's time, in proportion to simulations, and always an estimate", () => {
     const heuristic = (simulations: number): Bot => ({ engine: "heuristic", simulations, vary: false });
-    expect(estimateMs(heuristic(100), 9)).toEqual({ ms: 14, p90: null, kind: "estimate" });
-    expect(estimateMs(heuristic(1600), 9)).toEqual({ ms: 224, p90: null, kind: "estimate" });
+    expect(estimateMs(heuristic(100), 9)).toEqual({ ms: 14, kind: "estimate" });
+    expect(estimateMs(heuristic(1600), 9)).toEqual({ ms: 224, kind: "estimate" });
     expect(estimateMs(heuristic(5), 11)!.ms).toBeCloseTo(1.2, 6);
     expect(estimateMs(heuristic(100), 13)).toBeNull();
   });
 
-  it("read as a sentence that names the kind and the machine", () => {
-    expect(describeEstimate(network(32), 9)).toBe("About 0.2 s a move on a fast desktop (measured).");
-    expect(describeEstimate(network(100), 9)).toBe("About 0.3 s a move on a fast desktop (estimate).");
+  it("read as one sentence with the machine and the note that weaker devices are slower; a time not measured at this budget is rough", () => {
+    expect(describeEstimate(network(32), 9)).toBe("About 0.2 s a move on a fast desktop; weaker devices are slower.");
+    expect(describeEstimate(network(100), 9)).toBe("Roughly 0.3 s a move on a fast desktop; weaker devices are slower.");
+    expect(describeEstimate({ engine: "heuristic", simulations: 100, vary: false }, 9)).toBe("Roughly 14 ms a move on a fast desktop; weaker devices are slower.");
   });
-
-  it("add the 90th percentile where it is more than twice the median, and only there", () => {
-    expect(describeEstimate(network(400), 5)).toBe("About 0.4 s a move on a fast desktop (measured). 1 move in 10 takes over 2.0 s.");
-    expect(describeEstimate(network(800), 5)).toContain("1 move in 10 takes over 2.8 s");
-    expect(describeEstimate(network(200), 7)).toContain("over 0.9 s");
-    expect(describeEstimate(network(200), 9)).not.toContain("1 move in 10");
-    expect(describeEstimate({ engine: "heuristic", simulations: 100, vary: false }, 9)).not.toContain("1 move in 10");
-  });
-
   it("format as ms below a tenth of a second, seconds with a decimal below ten, whole seconds above", () => {
     expect([1, 50, 99.6, 155, 635, 3865, 9949, 14200].map(formatMs)).toEqual(["1 ms", "50 ms", "100 ms", "0.2 s", "0.6 s", "3.9 s", "9.9 s", "14 s"]);
   });

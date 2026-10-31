@@ -4,7 +4,7 @@ import { type Bot, botLabel, botOf, botSummary, describeEstimate, estimateMs, fi
 import { HUMAN, type MoveTime, type Player, type Side } from "./controller";
 import { playableModel } from "./seatModels";
 import { choiceOf, CUSTOM, ENGINE_GROUPS, seatAfterChoice } from "./seatChoice";
-import { describeModelStatus, FIRST_USE_NOTE, MAIN_MODEL, type ModelOption, modelTitle, offSizeNote, strengthDetail, strengthLine } from "./modelInfo";
+import { describeModelStatus, FIRST_USE_NOTE, MAIN_MODEL, type ModelOption, modelTitle, seatStrength } from "./modelInfo";
 
 const DEFAULT_BOT: Bot = botOf("strong");
 
@@ -76,10 +76,7 @@ export class SeatControls {
   private readonly modelStatus: HTMLElement;
   private readonly modelProgress: HTMLProgressElement;
   private readonly modelRetry: HTMLButtonElement;
-  private readonly modelOffSize: HTMLElement;
-  private readonly modelStrength: HTMLElement;
-  private readonly modelDetail: HTMLElement;
-  private readonly modelDetailBox: HTMLElement;
+  private readonly strength: HTMLElement;
 
   constructor(
     private readonly side: Side,
@@ -112,12 +109,10 @@ export class SeatControls {
     this.modelProgress.setAttribute("aria-label", `Player ${side === "p1" ? 1 : 2} network download`);
     this.modelRetry = make("button", actions, { className: "model-retry", textContent: "Retry download" });
     this.modelRetry.type = "button";
-    this.modelOffSize = make("p", this.modelBox, { id: id("model-offsize"), className: "seat-hint model-offsize" });
-    this.modelStrength = make("p", this.modelBox, { id: id("model-strength"), className: "seat-hint model-strength" });
-    this.modelDetailBox = make("details", this.modelBox, { className: "model-detail" });
-    make("summary", this.modelDetailBox, { textContent: "How this was measured" });
-    this.modelDetail = make("p", this.modelDetailBox, { className: "seat-hint" });
-    this.modelSelect.setAttribute("aria-describedby", `${this.modelStatus.id} ${this.modelOffSize.id} ${this.modelStrength.id}`);
+    this.modelSelect.setAttribute("aria-describedby", this.modelStatus.id);
+    // One line of strength against Normal, in words a player needs; its line is kept when empty, so changing the level moves nothing below it.
+    this.strength = make("p", this.settings, { id: id("strength"), className: "seat-hint strength" });
+    this.choice.setAttribute("aria-describedby", this.strength.id);
 
     this.more = make("details", this.settings, { className: "seat-more" });
     this.summary = make("summary", this.more);
@@ -245,6 +240,8 @@ export class SeatControls {
     const here = moveTime !== null && moveTime.size === size && sameBot(moveTime.bot, withModel(bot, this.model)) ? ` On this device: ${formatMs(moveTime.ms)}.` : "";
     setText(this.estimate, describeEstimate(bot, size, model) + here);
     if (this.vary.checked !== bot.vary) this.vary.checked = bot.vary;
+    const rated = bot.engine === "network" ? (this.model ?? models.mainId) : null;
+    setText(this.strength, seatStrength(bot, rated === null ? null : models.card(rated), size));
     this.drawModel(bot.engine === "network", size, models);
   }
 
@@ -256,11 +253,8 @@ export class SeatControls {
     syncOptions(this.modelSelect, models.options);
     const value = this.model ?? MAIN_MODEL;
     if (this.modelSelect.value !== value) this.modelSelect.value = value;
-    const id = this.model ?? models.mainId;
-    const card = id === null ? null : models.card(id);
-
     const state = this.model === undefined ? null : models.state(this.model);
-    const status = this.model === undefined || state === null ? null : describeModelStatus(modelTitle(this.model, card), state);
+    const status = this.model === undefined || state === null ? null : describeModelStatus(modelTitle(this.model, models.card(this.model)), state);
     // One line for both the download note and the model's state, so the row is the same height whichever it says; the progress bar and Retry keep their room when not shown.
     setText(this.modelStatus, status?.text ?? FIRST_USE_NOTE);
     this.modelProgress.style.visibility = status?.downloading ? "visible" : "hidden";
@@ -272,14 +266,6 @@ export class SeatControls {
     if (!failed && document.activeElement === this.modelRetry) this.modelSelect.focus();
     this.modelRetry.style.visibility = failed ? "visible" : "hidden";
     this.modelRetry.disabled = !failed;
-
-    setText(this.modelOffSize, id !== null && card !== null ? (offSizeNote(id, card, size) ?? "") : "");
-    this.modelOffSize.hidden = this.modelOffSize.textContent === "";
-    setText(this.modelStrength, card === null ? "" : strengthLine(card, size));
-    this.modelStrength.hidden = card === null;
-    const detail = card === null ? null : strengthDetail(card, size);
-    setText(this.modelDetail, detail ?? "");
-    this.modelDetailBox.hidden = detail === null;
   }
 }
 

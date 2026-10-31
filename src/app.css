@@ -244,6 +244,7 @@ select {
 .check .seat-hint { margin-left: 4px; }
 .seat-hint { margin: 0; color: var(--muted); font-size: 13px; line-height: 1.35; font-variant-numeric: tabular-nums; }
 .seat-hint.estimate { min-height: 2.7em; }
+.seat-hint.strength { min-height: 1.35em; }
 /* The Model select appears only when more than one model is published; its notes take the room they need, and the Players card grows to hold them. */
 .model-box { display: flex; flex-direction: column; gap: 4px; }
 /* The text keeps the height of its longest wording (four lines of the narrow card) and the progress bar and Retry keep their line when hidden, so nothing below moves while a model loads. */
@@ -252,10 +253,6 @@ select {
 .model-actions { display: flex; align-items: center; gap: 8px; min-height: 30px; }
 .model-progress { width: 64px; accent-color: var(--accent); }
 .model-retry { padding: 2px 10px; font-size: 13px; }
-.model-detail > summary { cursor: pointer; padding: 2px; font-size: 13px; color: var(--muted); }
-.sources { margin-top: 6px; font-size: 13px; color: var(--muted); }
-.sources > summary { cursor: pointer; padding: 4px 2px; }
-.sources > p { margin-top: 4px; }
 .walls { color: var(--muted); font-size: 13px; white-space: nowrap; font-variant-numeric: tabular-nums; }
 .walls b { color: var(--text); font-size: 15px; }
 .swap { align-self: center; font-size: 13px; margin: -2px 0; }

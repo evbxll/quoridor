@@ -1,12 +1,12 @@
 import { type ModelCard, supportsSize } from "../model/card";
 import type { ModelState } from "../model/manager";
-import { offSizeMeasure } from "./bots";
+import { type Bot, NORMAL_ABOVE_RATING_ZERO, type PresetId, presetOf } from "./bots";
 
 /** The value of the Network select's first option: the main model, whichever the index names for the board. */
 export const MAIN_MODEL = "";
 
-/** What the seat says before a model is picked: the download is large. */
-export const FIRST_USE_NOTE = "A model other than the main bot downloads about 10 MB the first time you pick it.";
+/** What the seat says before another network is picked: the download is large. */
+export const FIRST_USE_NOTE = "Another network downloads about 10 MB the first time you pick it.";
 
 /** One entry of a seat's Network select. */
 export interface ModelOption {
@@ -57,7 +57,7 @@ export function modelTitle(id: string, card: ModelCard | null): string {
   return card.network.head === "fc" ? "Fully connected" : "Convolutional";
 }
 
-/** The 9x9 ladder rating in the card, if it has one. */
+/** The card's rating at a board size, if it has one. */
 const ladder = (card: ModelCard, size: number) => card.strength.find((entry) => entry.size === size) ?? null;
 
 /** Why the model cannot be picked for this size, or null if it can. A model whose card is not read yet cannot be told to play the size, so it waits ("loading"). */
@@ -85,31 +85,33 @@ export function buildModelOptions(input: OptionInput): ModelOption[] {
   return options;
 }
 
-/** The note for a conv model on a size other than the one it trained on, or null when there is none to give. */
-export function offSizeNote(id: string, card: ModelCard, size: number): string | null {
-  if (card.network.head !== "conv" || size === card.trainedSize) return null;
-  const trained = `Trained on ${card.trainedSize}x${card.trainedSize}. Its convolutional architecture can play other sizes, but it was never trained on this one`;
-  const measured = offSizeMeasure(id, size);
-  return measured === null
-    ? `${trained}, so its strength here is unmeasured.`
-    : `${trained}. Measured here: score ${measured} against the Evan bot (fresh tree, 95% interval over start positions).`;
-}
+/** Elo figures are shown to the nearest this many: the ratings behind them are good to about ±40. */
+const ELO_ROUNDING = 50;
 
-/** One line of strength from the card, at the board size if the card rates it there, else where it does. */
-export function strengthLine(card: ModelCard, size: number): string {
-  const here = ladder(card, size);
-  const entry = here ?? card.strength[0] ?? null;
-  if (entry === null) return `No strength is measured for this model.`;
-  const level = Math.round(entry.intervalLevel * 100);
-  const rating = `${entry.size}x${entry.size} ladder Elo ${eloText(entry.elo)} [${eloText(entry.interval[0])}, ${eloText(entry.interval[1])}] vs the Evan bot at ${entry.simulations} simulations (${level}%). Ladder Elo, not a win rate.`;
-  return here === null ? `Not rated on ${size}x${size}. ${rating}` : rating;
-}
+/** What the heuristic presets are, against Normal, in words; Custom heuristic settings get no line. */
+const HEURISTIC_STRENGTH: Partial<Record<PresetId, string>> = {
+  beginner: "Much weaker than Normal.",
+  normal: "The reference level: about even with its author on 9 × 9.",
+};
 
-/** The conditions of the rating, from the card's own fields, for the disclosure under the strength line. */
-export function strengthDetail(card: ModelCard, size: number): string | null {
-  const entry = ladder(card, size) ?? card.strength[0] ?? null;
-  if (entry === null) return null;
-  return `Rated against: ${entry.anchor}. Openings: ${entry.openings}. Settings: ${entry.settings}. Interval: ${entry.intervalMethod}. ${entry.ladderGames} ladder games.`;
+/**
+ * A bot's strength for a casual player, in one line, or "" when there is none to give.
+ *
+ * A network bot's comes from its card: "≈ +500 Elo vs Normal". The card's rating at the board size (or the size it was
+ * rated on, which is then named) is moved from the card's zero to Normal (`NORMAL_ABOVE_RATING_ZERO`) and rounded to
+ * 50. The card rates the network at fewer simulations than Strong and Max play, without reusing its tree, so for
+ * them the figure is if anything low; a bot with fewer simulations than were rated gets no line.
+ */
+export function seatStrength(bot: Bot, card: ModelCard | null, size: number): string {
+  if (bot.engine === "heuristic") {
+    const preset = presetOf(bot);
+    return preset === null ? "" : (HEURISTIC_STRENGTH[preset.id] ?? "");
+  }
+  const entry = card === null ? null : (ladder(card, size) ?? card.strength[0] ?? null);
+  if (entry === null || bot.simulations < entry.simulations) return "";
+  const elo = Math.round((entry.elo - NORMAL_ABOVE_RATING_ZERO) / ELO_ROUNDING) * ELO_ROUNDING;
+  const where = entry.size === size ? "" : ` (measured on ${entry.size} × ${entry.size})`;
+  return `≈ ${eloText(elo)} Elo vs Normal${where}`;
 }
 
 /** Where a seat's model stands, in words, and how far a download is (null when unknown or not downloading). */
