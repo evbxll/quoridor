@@ -1,7 +1,7 @@
 import type { AutoPlay } from "./autoplay";
 import { element, onPress } from "./dom";
 
-/** The auto-play group inside the bot controls: the checkbox, its two options, and the countdown line with Cancel. */
+/** The auto-play card, shown with the bot controls: the checkbox, its two options, and the countdown line with Cancel. */
 export class AutoControls {
   private readonly on = element("auto-on", HTMLInputElement);
   private readonly swap = element("auto-swap", HTMLInputElement);

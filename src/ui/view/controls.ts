@@ -8,6 +8,7 @@ export function drawControls(shown: Visible, controller: GameController, countdo
   const newButton = element("new", HTMLButtonElement);
   const toggleButton = element("toggle", HTMLButtonElement);
   element("bot-controls", HTMLElement).hidden = !shown.botControls;
+  element("auto", HTMLElement).hidden = !shown.botControls;
   element("person-controls", HTMLElement).hidden = !shown.undo;
   element("how-to-move", HTMLElement).hidden = !shown.howToMove;
   const published = shown.analysis;

@@ -1,12 +1,14 @@
 // Checks that editing the players never moves the game's main controls, and takes screenshots.
 //
 // Drives a headless Chromium-family browser (Edge or Chrome) over the DevTools protocol against a
-// running copy of the site, at 1280, 390 and 320 px wide, in the light and the dark theme. In each, it
+// running copy of the site, at 1440, 1280, 1024, 768, 390 and 320 px wide, in the light and the dark theme. In each, it
 // seats two bots, then changes every control of both seats in turn (each option of each select,
 // each checkbox both ways, each slider step, each disclosure open and shut), Swap sides, and the
 // View menu, and measures Start, Step, the board and the eval bar after every change. Any move of
 // more than half a pixel fails the run, and so does the page growing wider than the window. Then it
 // plays two Beginners with auto-play on and checks the same during the countdown to the next game.
+// Where the board's column stays in view (a wide, tall window), it last scrolls the column beside the
+// board from top to bottom and fails if the board or its controls leave the window at any step.
 //
 // Usage:
 //   npm run build && npx vite preview --port 4318 --strictPort   (in another terminal)
@@ -20,7 +22,10 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 const WIDTHS = [
+  { width: 1440, height: 900, mobile: false },
   { width: 1280, height: 800, mobile: false },
+  { width: 1024, height: 768, mobile: false },
+  { width: 768, height: 1024, mobile: false },
   { width: 390, height: 844, mobile: true },
   { width: 320, height: 700, mobile: true },
 ];
@@ -275,6 +280,25 @@ const COUNTDOWN = `(async () => {
   return { before, during, label: shownLabel };
 })()`;
 
+/** Where the board's column is sticky: scrolls the page through the game area and reports the board and the column at each step. */
+const SCROLL = `(async () => {
+  ${IN_PAGE}
+  const play = document.querySelector(".play");
+  if (getComputedStyle(play).position !== "sticky") return null;
+  const last = Math.max(0, document.querySelector(".arena").getBoundingClientRect().bottom + scrollY - innerHeight);
+  const steps = [];
+  for (const share of [0, 0.25, 0.5, 0.75, 1]) {
+    scrollTo(0, Math.round(last * share));
+    await settle();
+    const board = document.getElementById("board").getBoundingClientRect();
+    const column = play.getBoundingClientRect();
+    steps.push({ scrollY: Math.round(scrollY), board: [Math.round(board.top), Math.round(board.bottom)], column: [Math.round(column.top), Math.round(column.bottom)], inView: board.top >= 0 && column.top >= 0 && column.bottom <= innerHeight });
+  }
+  scrollTo(0, 0);
+  await settle();
+  return { window: innerHeight, steps };
+})()`;
+
 /**
  * Loads the page fresh at a width and theme, waiting for the service worker's one reload and the first drawing.
  * @param {Page} page
@@ -363,13 +387,23 @@ async function main() {
         for (const entry of bad.slice(0, 12)) console.log(`  ${entry.what}: ${JSON.stringify(entry.moved)}`);
         if (bad.length > 12) console.log(`  ... and ${bad.length - 12} more`);
         failures += bad.length;
+        /** @type {{window: number, steps: {scrollY: number, board: number[], column: number[], inView: boolean}[]} | null} */
+        const scroll = await page.evaluate(SCROLL);
+        if (scroll === null) {
+          console.log(`${tag}: the board's column is not sticky here`);
+        } else {
+          const out = scroll.steps.filter((step) => !step.inView);
+          const steps = scroll.steps.map((step) => `${step.scrollY}: board ${step.board.join("-")}, column ${step.column.join("-")}`).join("; ");
+          console.log(`${tag}: scrolling the ${scroll.window}px window, ${out.length === 0 ? "the board and its controls stayed in view" : `${out.length} steps left them out of view`} (${steps})`);
+          failures += out.length;
+        }
       }
     }
   } finally {
     await close();
   }
   if (failures > 0) {
-    console.error(`layout-probe: ${failures} edits moved a watched control`);
+    console.error(`layout-probe: ${failures} checks failed`);
     process.exit(1);
   }
   console.log("layout-probe: ok");

@@ -15,20 +15,45 @@ describe("page order", () => {
     for (const id of ["new", "toggle", "step", "speed", "undo", "retry"]) expect(at(`id="${id}"`), id).toBeLessThan(players);
   });
 
-  it("keeps the game controls in the first card of the panel, right after the board", () => {
-    const panel = at('class="panel"');
+  it("puts the game controls right under the board, in the board's own column, before the column beside it", () => {
+    const play = at('class="play"');
+    const stage = at('class="stage"');
     const game = at('class="card game"');
-    expect(game).toBeGreaterThan(panel);
-    expect(html.slice(panel, game)).not.toContain('class="card');
+    const side = at('class="side"');
+    expect(play).toBeLessThan(stage);
+    expect(stage).toBeLessThan(game);
+    expect(game).toBeLessThan(side);
+    expect(html.slice(stage, game)).not.toContain('class="card');
   });
 
-  it("puts both view choices in the View menu beside the board, not in the move list", () => {
+  it("puts both view choices in the View menu, the first of the game controls after the board", () => {
+    const board = at('id="board"');
     const view = at('id="view"');
-    const panel = at('class="panel"');
+    const size = at('id="size"');
+    expect(board).toBeLessThan(view);
     for (const id of ["show-eval", "analysis-toggle"]) {
       expect(at(`id="${id}"`), id).toBeGreaterThan(view);
-      expect(at(`id="${id}"`), id).toBeLessThan(panel);
+      expect(at(`id="${id}"`), id).toBeLessThan(size);
     }
+  });
+
+  it("puts the games and the notes on the bots under the game, across the page", () => {
+    const side = at('class="side"');
+    const more = at('class="more"');
+    expect(side).toBeLessThan(more);
+    for (const id of ["games", "about"]) expect(at(`id="${id}"`), id).toBeGreaterThan(more);
+  });
+});
+
+describe("the board's column", () => {
+  it("stays in view while the page scrolls only on a wide and tall window", () => {
+    expect(css.match(/position: sticky/g)).toHaveLength(1);
+    expect(css).toMatch(/@media \(min-width: 900px\) and \(min-height: 560px\) \{\s*\.play \{ position: sticky; top: 8px; \}/);
+  });
+
+  it("sizes the board from the window's height as well as the column's width, so the column fits the window", () => {
+    expect(css).toMatch(/--b: min\(calc\(100cqw - 64px\), var\(--board-h\), 800px\)/);
+    expect(css).toMatch(/--board-h: max\(280px, calc\(100dvh - var\(--chrome\)\)\)/);
   });
 });
 

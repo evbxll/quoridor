@@ -129,38 +129,92 @@ select {
 
 .topbar {
   display: flex; align-items: center; justify-content: space-between;
-  max-width: 1180px; margin: 0 auto; padding: 12px 24px 4px;
+  max-width: 1440px; margin: 0 auto; padding: 12px 24px 4px;
 }
 .topbar h1 { margin: 0; font-size: 1.1875rem; font-weight: 650; letter-spacing: .01em; }
 .topbar { position: relative; }
 .topbar-end { display: flex; align-items: center; gap: 8px; min-height: 36px; }
 
-/* The board is the hero; the panel beside it stays narrow. */
+/* One column by default (phones, upright tablets): the board, its controls right under it, then the players and moves,
+   then the games and the notes on the bots. The board's side is the smaller of the column's width and the room the
+   window's height leaves once the header, the status line and the controls are counted (--chrome), so all of them fit
+   on the first screen; it never goes under 280px, so a very short window scrolls instead of shrinking the board away. */
 .layout {
-  display: grid; grid-template-columns: minmax(0, 1fr) 330px; gap: 28px;
-  max-width: 1180px; margin: 0 auto; padding: 8px 24px 32px; align-items: start;
+  --chrome: 320px;
+  --board-h: max(280px, calc(100vh - var(--chrome)));
+  display: flex; flex-direction: column; gap: 16px;
+  max-width: 1440px; margin: 0 auto; padding: 6px 16px 24px;
 }
-.stage { display: flex; flex-direction: column; align-items: center; gap: 8px; min-width: 0; }
-.stage { --board-max: calc(100vh - 140px); }
-.board-row { display: flex; gap: 8px; width: 100%; max-width: calc(var(--board-max) + 64px); }
-/* The View menu sits under the board's left edge. Its choices open in a popover out of the page's flow, so opening it moves nothing. */
-.view-row { position: relative; display: flex; align-items: center; min-height: 28px; width: 100%; max-width: calc(var(--board-max) + 64px); padding-left: 64px; }
-.view > summary { cursor: pointer; padding: 2px 8px; border: 1px solid var(--line); border-radius: 999px; background: var(--card); color: var(--muted); font-size: 0.875rem; }
-.view[open] > summary, .view > summary:hover { color: var(--text); }
-.view-pop {
-  position: absolute; left: 64px; top: calc(100% + 4px); z-index: 2; width: min(300px, calc(100vw - 96px)); /* starts 80px from the page edge: it never widens the page */
-  display: flex; flex-direction: column; gap: 2px; padding: 10px 12px;
-  background: var(--card); border: 1px solid var(--line); border-radius: 12px; box-shadow: 0 6px 20px var(--shadow);
+.arena { display: grid; grid-template-columns: minmax(0, 1fr); gap: 16px; }
+@supports (height: 100dvh) {
+  .layout { --board-h: max(280px, calc(100dvh - var(--chrome))); }
 }
-.view-pop .hint { padding-left: 24px; margin-bottom: 4px; }
-.view-pop label:has(input:disabled) { color: var(--muted); }
-.board { flex: 1 1 0; min-width: 0; aspect-ratio: 1; user-select: none; touch-action: manipulation; }
+.play { container-type: inline-size; display: flex; flex-direction: column; gap: 10px; min-width: 0; }
+/* --b is the board's side; 64px of the column go to the eval bar beside it. The whole row is sized from it, so the bar always spans the board. */
+.stage { --b: min(calc(100cqw - 64px), var(--board-h), 800px); display: flex; flex-direction: column; align-items: center; gap: 8px; }
+.board-row { display: flex; gap: 8px; width: calc(var(--b) + 64px); height: var(--b); }
+.board { flex: none; width: var(--b); height: var(--b); user-select: none; touch-action: manipulation; }
 .board:focus-visible { outline: 3px solid var(--focus); outline-offset: 3px; border-radius: 10px; }
 .board:focus:not(:focus-visible) { outline: none; } /* a click focuses the board too; only keyboard focus is outlined */
 .board.can-click { cursor: pointer; }
 /* Focus lands here when Retry goes away; it is not a control, so it draws no ring. */
 .status:focus { outline: none; }
-.status { margin: 4px 0 0; width: 100%; min-height: 2.9em; max-width: 60ch; font-size: 1rem; font-weight: 600; text-align: center; }
+/* Two lines of room, three in a narrow column: the game controls follow the status line, so a longer status must not push them down. */
+.status { margin: 0; width: 100%; min-height: 2.9em; max-width: 60ch; font-size: 1rem; font-weight: 600; text-align: center; }
+@media (max-width: 899px) {
+  @container (max-width: 480px) {
+    .status { font-size: 0.9375rem; min-height: 4.35em; }
+  }
+}
+
+/* The game controls, right under the board: the View menu, the board size and New game, then Start, Step and Speed
+   (or Undo for a person). In a narrow card Start takes a line of its own; in a wider one the three share a line. */
+.game { container-type: inline-size; display: flex; flex-direction: column; gap: 8px; padding: 10px 12px; }
+.game .row { min-height: 36px; }
+.play-row { display: flex; flex-direction: column; gap: 8px; }
+.bot-controls { display: flex; flex-direction: column; gap: 8px; }
+.person-controls { align-self: start; }
+/* Start, Pause and Resume is the main control of a bot game: large, on one line, at one size whatever it says, so nothing beside or below it moves. */
+.run { width: 100%; height: 3.25rem; padding: 0 14px; font-size: 1.125rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+@container (min-width: 440px) {
+  .bot-controls { flex-direction: row; align-items: center; }
+  .run { flex: 1 1 auto; width: auto; height: 2.75rem; }
+  .step-row { flex: none; flex-wrap: nowrap; }
+}
+/* The View menu's choices open in a popover out of the page's flow, upward over the board, so opening it moves nothing and it never runs off the bottom of the window. */
+.view { position: relative; }
+.view > summary { cursor: pointer; padding: 4px 10px; border: 1px solid var(--line); border-radius: 999px; background: var(--card); color: var(--muted); font-size: 0.875rem; }
+.view[open] > summary, .view > summary:hover { color: var(--text); }
+.view-pop {
+  position: absolute; left: 0; bottom: calc(100% + 6px); z-index: 2; width: min(300px, calc(100vw - 48px));
+  display: flex; flex-direction: column; gap: 2px; padding: 10px 12px;
+  background: var(--card); border: 1px solid var(--line); border-radius: 12px; box-shadow: 0 6px 20px var(--shadow);
+}
+.view-pop .hint { padding-left: 24px; margin-bottom: 4px; }
+.view-pop label:has(input:disabled) { color: var(--muted); }
+
+.side { container: side / inline-size; display: flex; flex-direction: column; gap: 12px; min-width: 0; }
+/* The games and the notes on the bots share the page's full width under the game: side by side when there is room, the games wider. */
+.more { display: flex; flex-wrap: wrap; gap: 12px; align-items: flex-start; }
+.more > .games { flex: 3 1 600px; min-width: 0; }
+.more > .about { flex: 2 1 400px; min-width: 0; }
+
+/* A wide window: the board and its controls on the left, the players and moves beside them, the games and notes under both.
+   The left column is as wide as the board, which is sized from the window's height and leaves at least 360px beside it. */
+@media (min-width: 900px) {
+  .layout {
+    --chrome: 252px; /* header 60, status 46, controls 110, gaps 18, and a margin under it all */
+    --board-w: calc(100vw - 48px - 28px - 360px - 64px - 20px); /* page padding, gap, the side column's least width, the eval bar, a scroll bar */
+    gap: 24px; padding: 8px 24px 32px;
+  }
+  .arena { grid-template-columns: calc(min(var(--board-h), var(--board-w), 800px) + 64px) minmax(0, 1fr); gap: 28px; align-items: start; }
+}
+/* ... and tall enough: the left column stays in view while the column beside it scrolls, until the games below take the
+   page. It is never taller than the window (the board is sized from the window's height), so nothing in it is out of
+   reach. A short window just scrolls. */
+@media (min-width: 900px) and (min-height: 560px) {
+  .play { position: sticky; top: 8px; }
+}
 
 /* Eval bar: player 1's share rises from the bottom (player 1's side of the board) in a
    soft blue over player 2's soft red. Its rows line up with the board's edges (set from
@@ -200,7 +254,6 @@ select {
 .tick.p1 { background: var(--p1); }
 .tick.p2 { background: var(--p2); }
 
-.panel { display: flex; flex-direction: column; gap: 12px; min-width: 0; }
 .card { background: var(--card); border: 1px solid var(--line); border-radius: 14px; padding: 14px 16px; }
 .card h2 { margin: 0 0 8px; font-size: 0.875rem; font-weight: 650; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); }
 
@@ -241,6 +294,7 @@ select {
 .check { display: flex; align-items: center; gap: 6px; min-height: 28px; font-size: 0.875rem; }
 .check input { width: 18px; height: 18px; margin: 0; }
 .check .seat-hint { margin-left: 4px; }
+.check:has(> .seat-hint) { flex-wrap: wrap; } /* in a narrow seat the note goes under the box instead of squeezing both into columns */
 .seat-hint { margin: 0; color: var(--muted); font-size: 0.875rem; line-height: 1.35; font-variant-numeric: tabular-nums; }
 .seat-hint.estimate { min-height: 2.7em; }
 .seat-hint.strength { min-height: 1.35em; }
@@ -255,14 +309,11 @@ select {
 .walls { color: var(--muted); font-size: 0.875rem; white-space: nowrap; font-variant-numeric: tabular-nums; }
 .walls b { color: var(--text); font-size: 0.9375rem; }
 .swap { align-self: center; font-size: 0.875rem; margin: -2px 0; }
-/* The game card is first in the panel, so its controls stay put whatever the Players card below them does. */
-.game { display: flex; flex-direction: column; gap: 10px; }
-.game .row { min-height: 36px; }
-/* Start, Pause and Resume is the main control of a bot game: large, and the same size under each label. */
-.bot-controls { display: flex; flex-direction: column; gap: 8px; }
-.person-controls { align-self: start; }
-/* One line, at one height, whatever it says, so Step and Speed below it never move. */
-.run { width: 100%; height: 3.25rem; padding: 0 14px; font-size: 1.125rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+/* A wide column: the two seats side by side, Swap sides between them, so the moves come up beside the board. */
+@container side (min-width: 600px) {
+  .players { display: grid; grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr); align-items: start; gap: 4px; }
+  .swap { max-width: 6.5em; margin: 12px 0 0; }
+}
 
 /* A fixed height, so the card keeps its size as the game goes on; the list scrolls inside. */
 .moves-box { position: relative; height: 168px; }
@@ -277,8 +328,8 @@ select {
 .moves li button { border: none; background: none; padding: 0 6px; margin-left: -6px; border-radius: 6px; min-height: 24px; min-width: 28px; }
 .moves .latest { font-weight: 700; text-decoration: underline; text-underline-offset: 3px; }
 
-/* Automatic games, inside the bot controls: the countdown line keeps its room when idle, so nothing below it moves. */
-.auto { display: flex; flex-direction: column; gap: 4px; border-top: 1px solid var(--line); padding-top: 8px; }
+/* Automatic games, a card of its own while two bots play: the countdown line keeps its room when idle, so nothing below it moves. */
+.auto { display: flex; flex-direction: column; gap: 4px; }
 .auto-options { display: flex; flex-wrap: wrap; gap: 0 16px; padding-left: 24px; }
 .auto-status { display: flex; align-items: center; justify-content: space-between; gap: 8px; min-height: 36px; }
 .auto-line { font-size: 0.875rem; font-weight: 600; font-variant-numeric: tabular-nums; }
@@ -296,7 +347,7 @@ select {
 .games-table thead th { color: var(--muted); font-weight: 650; }
 .games-table a { display: inline-block; min-height: 24px; min-width: 24px; line-height: 24px; color: var(--text); font-weight: 600; text-decoration: underline; text-underline-offset: 3px; }
 .games-table .label { display: none; color: var(--muted); }
-@container (max-width: 560px) {
+@container (max-width: 640px) {
   .games-table thead { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
   .games-table tbody, .games-table tr { display: block; }
   .games-table tr { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 0 8px; padding: 6px 0; border-bottom: 1px solid var(--line); }
@@ -359,26 +410,21 @@ button.theme-toggle svg { width: 20px; height: 20px; stroke-linecap: round; }
 .net-dot[data-tone="busy"] { background: var(--busy); }
 .net-dot[data-tone="bad"] { background: var(--bad); }
 
-/* Phone and narrow windows: the board takes the width, the eval bar stays on its left, the panel follows. */
+/* Narrow windows: one header line, with the chip narrower and the buttons tighter, so the theme button fits beside them. */
 @media (max-width: 820px) {
   .topbar { padding: 10px 16px 2px; }
   .topbar-end { flex-wrap: wrap; justify-content: flex-end; }
-  /* One header line: the chip is narrower and the buttons are tighter, so the theme button fits beside them. */
   .network summary { width: 140px; }
   .topbar-end button.quiet { padding: 4px 6px; }
   .topbar-end .theme-toggle { width: 32px; }
   .network-pop { right: 16px; }
-  .layout { grid-template-columns: minmax(0, 1fr); gap: 16px; padding: 6px 16px 24px; }
-  .stage { --board-max: 100vw; }
-  /* Three lines of room: the game controls follow the status line here, so a longer status must not push them down. */
-  .status { font-size: 0.9375rem; min-height: 4.35em; }
 }
 
 /* Very narrow phones: the title and the theme button share the first line, the chip and Copy link the second. */
 @media (max-width: 379px) {
   .topbar { flex-wrap: wrap; gap: 2px 8px; padding-top: 6px; }
   .topbar-end { display: contents; }
-  .topbar h1 { flex: 1 1 0; min-width: 0; order: 0; }
+  .topbar h1 { flex: 1 1 calc(100% - 44px); min-width: 0; order: 0; } /* fills the first line beside the theme button, so the chip starts the second */
   .topbar-end .theme-toggle { order: 1; width: 28px; height: 28px; }
   .network { order: 2; }
   #copy { order: 3; }
@@ -447,6 +493,14 @@ button.theme-toggle svg { width: 20px; height: 20px; stroke-linecap: round; }
 .arch-label.small { fill: var(--muted); font-size: 12px; }
 .arch-steps { margin: 0 0 8px; padding-left: 20px; font-size: 0.875rem; }
 .arch-steps li + li { margin-top: 4px; }
+.about { container-type: inline-size; }
+.about p { max-width: 75ch; }
+/* A wide card: the drawing beside its steps. */
+@container (min-width: 640px) {
+  .arch { display: grid; grid-template-columns: 300px minmax(0, 1fr); gap: 4px 20px; align-items: start; }
+  .arch-diagram { margin: 4px 0 8px; }
+  .arch > .hint { grid-column: 1 / -1; }
+}
 
 /* Forced colours (Windows contrast themes): the system colours take over, but the eval bar, its markers and the network's dot
    keep theirs, as they carry the reading itself; the side to move and the main button keep an outline. */

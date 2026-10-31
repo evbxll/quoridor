@@ -40,137 +40,157 @@
     </header>
 
     <main class="layout">
-      <section class="stage" aria-label="Game">
-        <div class="board-row">
-          <div id="eval" class="eval">
-            <div class="eval-end" data-tip="tip-bar" aria-hidden="true"><b id="eval-p2">–</b><span>P2</span></div>
-            <div class="eval-main" data-tip="tip-bar">
-              <div class="eval-ticks"><b id="tick-p1" class="tick p1" data-tip="tip-p1" tabindex="0" role="img" aria-label="Player 1's own estimate" aria-describedby="tip-p1" hidden>1</b></div>
-              <div id="eval-meter" class="eval-track" data-tip="tip-bar" tabindex="0" role="meter" aria-label="Chance that player 1 wins, by the network" aria-valuemin="0" aria-valuemax="100" aria-describedby="tip-bar">
-                <span id="eval-fill" class="eval-fill"></span>
-                <span class="eval-even"></span>
+      <div class="arena">
+        <!-- The board and what a game needs while it is played: on a wide, tall window this column stays in view while the column beside it scrolls. -->
+        <div class="play">
+          <section class="stage" aria-label="Game">
+            <div class="board-row">
+              <div id="eval" class="eval">
+                <div class="eval-end" data-tip="tip-bar" aria-hidden="true"><b id="eval-p2">–</b><span>P2</span></div>
+                <div class="eval-main" data-tip="tip-bar">
+                  <div class="eval-ticks"><b id="tick-p1" class="tick p1" data-tip="tip-p1" tabindex="0" role="img" aria-label="Player 1's own estimate" aria-describedby="tip-p1" hidden>1</b></div>
+                  <div id="eval-meter" class="eval-track" data-tip="tip-bar" tabindex="0" role="meter" aria-label="Chance that player 1 wins, by the network" aria-valuemin="0" aria-valuemax="100" aria-describedby="tip-bar">
+                    <span id="eval-fill" class="eval-fill"></span>
+                    <span class="eval-even"></span>
+                  </div>
+                  <div class="eval-ticks right"><b id="tick-p2" class="tick p2" data-tip="tip-p2" tabindex="0" role="img" aria-label="Player 2's own estimate" aria-describedby="tip-p2" hidden>2</b></div>
+                </div>
+                <div class="eval-end" data-tip="tip-bar" aria-hidden="true"><span>P1</span><b id="eval-p1">–</b></div>
               </div>
-              <div class="eval-ticks right"><b id="tick-p2" class="tick p2" data-tip="tip-p2" tabindex="0" role="img" aria-label="Player 2's own estimate" aria-describedby="tip-p2" hidden>2</b></div>
+              <svg id="board" class="board" tabindex="0" role="application" aria-describedby="board-help"></svg>
             </div>
-            <div class="eval-end" data-tip="tip-bar" aria-hidden="true"><span>P1</span><b id="eval-p1">–</b></div>
-          </div>
-          <svg id="board" class="board" tabindex="0" role="application" aria-describedby="board-help"></svg>
-        </div>
-        <div class="view-row">
-          <details id="view" class="view">
-            <summary>View</summary>
-            <div class="view-pop" role="group" aria-label="View options">
-              <label class="check"><input id="show-eval" type="checkbox" checked aria-describedby="show-eval-note" /> Evaluation bar</label>
-              <p id="show-eval-note" class="hint"></p>
-              <label class="check"><input id="analysis-toggle" type="checkbox" aria-describedby="analysis-off" /> Best moves, under the move list</label>
-              <p id="analysis-off" class="hint" hidden>Best moves need the network.</p>
-            </div>
-          </details>
-        </div>
-        <p id="status" class="status" role="status" tabindex="-1"></p>
-      </section>
+            <p id="status" class="status" role="status" tabindex="-1"></p>
+          </section>
 
-      <aside class="panel">
-        <section class="card game" aria-label="Game controls">
-          <div class="row" role="group" aria-label="New game">
-            <label class="inline">Board
-              <select id="size">
-                <option value="5">5 × 5</option>
-                <option value="7">7 × 7</option>
-                <option value="9" selected>9 × 9</option>
-                <option value="11">11 × 11</option>
-              </select>
-            </label>
-            <button id="new" type="button">New game</button>
-          </div>
-          <div id="bot-controls" class="bot-controls" role="group" aria-label="Bot game controls">
-            <button id="toggle" class="primary run" type="button">Start</button>
-            <div class="row">
-              <button id="step" type="button">Step</button>
-              <label class="inline">Speed
-                <select id="speed">
-                  <option value="slow">Slow</option>
-                  <option value="normal" selected>Normal</option>
-                  <option value="fast">Fast</option>
-                  <option value="instant">Instant</option>
+          <section class="card game" aria-label="Game controls">
+            <div class="row new-row" role="group" aria-label="New game">
+              <details id="view" class="view">
+                <summary>View</summary>
+                <div class="view-pop" role="group" aria-label="View options">
+                  <label class="check"><input id="show-eval" type="checkbox" checked aria-describedby="show-eval-note" /> Evaluation bar</label>
+                  <p id="show-eval-note" class="hint"></p>
+                  <label class="check"><input id="analysis-toggle" type="checkbox" aria-describedby="analysis-off" /> Best moves, under the move list</label>
+                  <p id="analysis-off" class="hint" hidden>Best moves need the network.</p>
+                </div>
+              </details>
+              <label class="inline">Board
+                <select id="size">
+                  <option value="5">5 × 5</option>
+                  <option value="7">7 × 7</option>
+                  <option value="9" selected>9 × 9</option>
+                  <option value="11">11 × 11</option>
                 </select>
               </label>
+              <button id="new" type="button">New game</button>
             </div>
-            <div id="auto" class="auto" role="group" aria-label="Automatic games">
-              <label class="check"><input id="auto-on" type="checkbox" /> Play the next game automatically</label>
-              <div class="auto-options">
-                <label class="check"><input id="auto-swap" type="checkbox" checked /> Swap sides each game</label>
-                <label class="check"><input id="auto-opening" type="checkbox" checked /> Varied openings</label>
+            <div class="play-row">
+              <div id="bot-controls" class="bot-controls" role="group" aria-label="Bot game controls">
+                <button id="toggle" class="primary run" type="button">Start</button>
+                <div class="row step-row">
+                  <button id="step" type="button">Step</button>
+                  <label class="inline">Speed
+                    <select id="speed">
+                      <option value="slow">Slow</option>
+                      <option value="normal" selected>Normal</option>
+                      <option value="fast">Fast</option>
+                      <option value="instant">Instant</option>
+                    </select>
+                  </label>
+                </div>
               </div>
-              <p class="hint">Up to 100 games. Player 1 moves first, which is an edge, so swap sides to compare bots fairly. Varied openings start each game with 4 random pawn moves.</p>
-              <div class="auto-status">
-                <span id="auto-line" class="auto-line"></span>
-                <button id="auto-cancel" class="off" type="button">Cancel</button>
+              <div id="person-controls" class="person-controls">
+                <button id="undo" type="button">Undo</button>
+              </div>
+              <div id="retry-row" class="row" hidden>
+                <button id="retry" type="button">Retry</button>
               </div>
             </div>
-          </div>
-          <div id="person-controls" class="person-controls">
-            <button id="undo" type="button">Undo</button>
-          </div>
-          <div id="retry-row" class="row" hidden>
-            <button id="retry" type="button">Retry</button>
-          </div>
-        </section>
+          </section>
+        </div>
 
-        <section class="card players" aria-label="Players">
-          <div id="seat-p2" class="seat">
-            <span class="disc p2" aria-hidden="true">2</span>
-            <div class="seat-body">
-              <div class="seat-head">
-                <label for="player-p2">Player 2</label>
-                <span id="walls-p2" class="walls"></span>
+        <!-- Beside the board on a wide window, under it on a narrow one: the players, then the moves. -->
+        <div class="side">
+          <section class="card players" aria-label="Players">
+            <div id="seat-p2" class="seat">
+              <span class="disc p2" aria-hidden="true">2</span>
+              <div class="seat-body">
+                <div class="seat-head">
+                  <label for="player-p2">Player 2</label>
+                  <span id="walls-p2" class="walls"></span>
+                </div>
+                <select id="player-p2" class="player"></select>
+                <div id="bot-p2" class="bot-settings" role="group" aria-label="Player 2 bot settings" hidden></div>
+                <p id="note-p2" class="seat-note"></p>
               </div>
-              <select id="player-p2" class="player"></select>
-              <div id="bot-p2" class="bot-settings" role="group" aria-label="Player 2 bot settings" hidden></div>
-              <p id="note-p2" class="seat-note"></p>
             </div>
-          </div>
-          <button id="swap" class="swap quiet" type="button"><span aria-hidden="true">&#8645;</span> Swap sides</button>
-          <div id="seat-p1" class="seat">
-            <span class="disc p1" aria-hidden="true">1</span>
-            <div class="seat-body">
-              <div class="seat-head">
-                <label for="player-p1">Player 1</label>
-                <span id="walls-p1" class="walls"></span>
+            <button id="swap" class="swap quiet" type="button"><span aria-hidden="true">&#8645;</span> Swap sides</button>
+            <div id="seat-p1" class="seat">
+              <span class="disc p1" aria-hidden="true">1</span>
+              <div class="seat-body">
+                <div class="seat-head">
+                  <label for="player-p1">Player 1</label>
+                  <span id="walls-p1" class="walls"></span>
+                </div>
+                <select id="player-p1" class="player"></select>
+                <div id="bot-p1" class="bot-settings" role="group" aria-label="Player 1 bot settings" hidden></div>
+                <p id="note-p1" class="seat-note"></p>
               </div>
-              <select id="player-p1" class="player"></select>
-              <div id="bot-p1" class="bot-settings" role="group" aria-label="Player 1 bot settings" hidden></div>
-              <p id="note-p1" class="seat-note"></p>
+            </div>
+          </section>
+
+          <section class="card review" aria-labelledby="moves-title">
+            <div class="review-head">
+              <h2 id="moves-title">Moves &amp; analysis</h2>
+            </div>
+            <div class="review-nav">
+              <div class="row" role="group" aria-label="Step through the game">
+                <button id="step-first" class="icon" type="button" aria-label="First position" title="First position (Home)"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M3 3v10M13 3L6 8l7 5z"/></svg></button>
+                <button id="step-prev" class="icon" type="button" aria-label="Previous position" title="Previous position (Left arrow)"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M12 3L5 8l7 5z"/></svg></button>
+                <button id="step-next" class="icon" type="button" aria-label="Next position" title="Next position (Right arrow)"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M4 3l7 5-7 5z"/></svg></button>
+                <button id="step-last" class="icon" type="button" aria-label="Latest position" title="Latest position (End)"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M13 3v10M3 3l7 5-7 5z"/></svg></button>
+              </div>
+              <button id="step-live" type="button" class="quiet">Back to live</button>
+            </div>
+            <p id="viewing" class="viewing"></p>
+            <div class="moves-box">
+              <ol id="moves" class="moves" aria-label="Moves in standard notation; choose one to see that position"></ol>
+              <p id="moves-empty" class="hint">No moves yet.</p>
+            </div>
+            <div id="analysis-box" class="analysis-box" hidden>
+              <h3>Best moves <span class="hint">share of the network's 32 searches</span></h3>
+              <ol id="analysis-lines" class="lines" aria-label="Best moves"></ol>
+              <p id="analysis-note" class="hint"></p>
+              <p class="hint">The bar beside the board is the network's reading at 32 searches. The numbered markers are each bot's own estimate from its latest move.</p>
+            </div>
+          </section>
+
+          <div id="auto" class="card auto" role="group" aria-label="Automatic games">
+            <label class="check"><input id="auto-on" type="checkbox" /> Play the next game automatically</label>
+            <div class="auto-options">
+              <label class="check"><input id="auto-swap" type="checkbox" checked /> Swap sides each game</label>
+              <label class="check"><input id="auto-opening" type="checkbox" checked /> Varied openings</label>
+            </div>
+            <p class="hint">Up to 100 games. Player 1 moves first, which is an edge, so swap sides to compare bots fairly. Varied openings start each game with 4 random pawn moves.</p>
+            <div class="auto-status">
+              <span id="auto-line" class="auto-line"></span>
+              <button id="auto-cancel" class="off" type="button">Cancel</button>
             </div>
           </div>
-        </section>
 
-        <section class="card review" aria-labelledby="moves-title">
-          <div class="review-head">
-            <h2 id="moves-title">Moves &amp; analysis</h2>
-          </div>
-          <div class="review-nav">
-            <div class="row" role="group" aria-label="Step through the game">
-              <button id="step-first" class="icon" type="button" aria-label="First position" title="First position (Home)"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M3 3v10M13 3L6 8l7 5z"/></svg></button>
-              <button id="step-prev" class="icon" type="button" aria-label="Previous position" title="Previous position (Left arrow)"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M12 3L5 8l7 5z"/></svg></button>
-              <button id="step-next" class="icon" type="button" aria-label="Next position" title="Next position (Right arrow)"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M4 3l7 5-7 5z"/></svg></button>
-              <button id="step-last" class="icon" type="button" aria-label="Latest position" title="Latest position (End)"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M13 3v10M3 3l7 5-7 5z"/></svg></button>
-            </div>
-            <button id="step-live" type="button" class="quiet">Back to live</button>
-          </div>
-          <p id="viewing" class="viewing"></p>
-          <div class="moves-box">
-            <ol id="moves" class="moves" aria-label="Moves in standard notation; choose one to see that position"></ol>
-            <p id="moves-empty" class="hint">No moves yet.</p>
-          </div>
-          <div id="analysis-box" class="analysis-box" hidden>
-            <h3>Best moves <span class="hint">share of the network's 32 searches</span></h3>
-            <ol id="analysis-lines" class="lines" aria-label="Best moves"></ol>
-            <p id="analysis-note" class="hint"></p>
-            <p class="hint">The bar beside the board is the network's reading at 32 searches. The numbered markers are each bot's own estimate from its latest move.</p>
-          </div>
-        </section>
+          <details id="how-to-move" class="card" hidden>
+            <summary>How to move</summary>
+            <p id="board-help" class="hint">
+              Click a cell to move your pawn, or a groove between cells to place a wall; on a touch screen tap a groove
+              once to preview a wall and again to place it. With the keyboard, focus the board, move the cursor with the
+              arrow keys, press H or V to choose a horizontal or vertical wall, P to go back to pawn moves, and Enter to play.
+              Page Up and Page Down step back and forward through the game, and Home and End jump to its start and its latest position.
+            </p>
+          </details>
+        </div>
+      </div>
 
+      <!-- The page's full width under the game: the record of games and how the bots work. -->
+      <div class="more">
         <section id="games" class="card games" aria-labelledby="games-title" hidden>
           <h2 id="games-title">Games</h2>
           <ul id="games-tally" class="tally" aria-label="Record per player"></ul>
@@ -207,17 +227,7 @@
           <h3>What is a convolutional network?</h3>
           <p>It looks at the board through a small window, 3 × 3 squares, that slides over every square, so a pattern it knows in one corner it knows anywhere. Each layer looks at the layer before it, so deeper layers see further: a wall several squares away, or a race between the two pawns. As the window does not depend on the size of the board, one network plays every board size.</p>
         </section>
-
-        <details id="how-to-move" class="card" hidden>
-          <summary>How to move</summary>
-          <p id="board-help" class="hint">
-            Click a cell to move your pawn, or a groove between cells to place a wall; on a touch screen tap a groove
-            once to preview a wall and again to place it. With the keyboard, focus the board, move the cursor with the
-            arrow keys, press H or V to choose a horizontal or vertical wall, P to go back to pawn moves, and Enter to play.
-            Page Up and Page Down step back and forward through the game, and Home and End jump to its start and its latest position.
-          </p>
-        </details>
-      </aside>
+      </div>
     </main>
 
     <div id="tip-bar" class="tip" role="tooltip" hidden></div>
