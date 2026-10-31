@@ -6,7 +6,9 @@
 // each checkbox both ways, each slider step, each disclosure open and shut), Swap sides, and the
 // View menu, and measures Start, Step, the board and the eval bar after every change. Any move of
 // more than half a pixel fails the run, and so does the page growing wider than the window. Then it
-// plays two Beginners with auto-play on and checks the same during the countdown to the next game.
+// steps two Beginners through their first moves and checks that neither the controls nor the move list
+// and the cards after it move as the moves come in, and plays two Beginners with auto-play on and checks
+// the controls during the countdown to the next game.
 // Where the board's column stays in view (a wide, tall window), it last scrolls the column beside the
 // board from top to bottom and fails if the board or its controls leave the window at any step.
 //
@@ -32,6 +34,8 @@ const WIDTHS = [
 const THEMES = ["light", "dark"];
 /** The controls that must not move, by id. Start and Step are measured only while shown (two bots). */
 const WATCHED = ["toggle", "step", "board", "eval"];
+/** What must not move as the first moves of a game come in: the controls, and the move list and the cards after it. */
+const FIRST_MOVES_WATCHED = [...WATCHED, "moves", "auto", "about"];
 const TOLERANCE = 0.5;
 
 const args = process.argv.slice(2);
@@ -144,14 +148,14 @@ async function launch() {
 
 /** The page-side half of the probe: helpers, then the edits, run in the page with `await`. */
 const IN_PAGE = String.raw`
-const WATCHED = ${JSON.stringify(WATCHED)};
+const MEASURED = ${JSON.stringify(FIRST_MOVES_WATCHED)};
 const pause = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 const settle = async () => {
   await pause(120);
   await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
 };
 const shown = (el) => el !== null && el.getClientRects().length > 0 && getComputedStyle(el).visibility !== "hidden";
-const measure = () => Object.fromEntries(WATCHED.map((id) => {
+const measure = () => Object.fromEntries(MEASURED.map((id) => {
   const el = document.getElementById(id);
   if (!shown(el)) return [id, null];
   const r = el.getBoundingClientRect();
@@ -253,6 +257,28 @@ const EDIT_ALL = `(async () => {
   return records;
 })()`;
 
+/** Two Beginners, measured on the empty board and after each of their first three moves, played with Step. */
+const FIRST_MOVES = `(async () => {
+  ${IN_PAGE}
+  for (const side of ["p1", "p2"]) {
+    const select = document.getElementById("player-" + side);
+    select.value = "beginner";
+    fire(select, "change");
+  }
+  document.getElementById("new").click();
+  await settle();
+  const before = measure();
+  const after = [];
+  for (let move = 1; move <= 3; move++) {
+    document.getElementById("step").click();
+    const started = Date.now();
+    while (document.querySelectorAll("#moves [data-ply]").length < move && Date.now() - started < 30000) await pause(50);
+    await settle();
+    after.push({ moves: document.querySelectorAll("#moves [data-ply]").length, at: measure() });
+  }
+  return { before, after };
+})()`;
+
 /** Two Beginners at instant speed with auto-play on, measured before Start and during the countdown to the next game. */
 const COUNTDOWN = `(async () => {
   ${IN_PAGE}
@@ -334,15 +360,16 @@ async function shoot(page, name) {
 /** @typedef {Record<string, number[] | null>} Rects */
 
 /**
- * The largest move of each watched control between `before` and `after`, where both show it.
+ * The largest move of each watched element between `before` and `after`, where both show it.
  * @param {Rects} before
  * @param {Rects} after
+ * @param {string[]} [ids] the elements compared: the controls unless given
  * @returns {Record<string, number>}
  */
-function moved(before, after) {
+function moved(before, after, ids = WATCHED) {
   /** @type {Record<string, number>} */
   const found = {};
-  for (const id of WATCHED) {
+  for (const id of ids) {
     const a = before[id];
     const b = after[id];
     if (!a || !b) continue;
@@ -373,6 +400,12 @@ async function main() {
         });
         // The edits leave every seat disclosure open.
         await shoot(page, `${tag}-settings-open`);
+        /** @type {{before: Rects, after: {moves: number, at: Rects}[]}} */
+        const first = await page.evaluate(FIRST_MOVES);
+        const firstMoved = first.after.map((step) => moved(first.before, step.at, FIRST_MOVES_WATCHED)).filter((found) => Object.keys(found).length > 0);
+        const played = first.after.at(-1)?.moves ?? 0;
+        console.log(`${tag}: first moves ${played === 3 ? "played (3)" : `NOT all played (${played})`}; ${firstMoved.length === 0 ? "nothing moved" : `moved ${JSON.stringify(firstMoved)}`}`);
+        failures += played === 3 && firstMoved.length === 0 ? 0 : 1;
         const countdown = await page.evaluate(COUNTDOWN);
         const countdownMoved = moved(countdown.before, countdown.during);
         const reached = /Next game/.test(countdown.label);

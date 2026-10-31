@@ -74,6 +74,8 @@ export class SeatControls {
   private readonly slider: HTMLInputElement;
   private readonly value: HTMLOutputElement;
   private readonly estimate: HTMLElement;
+  /** The seat's latest move time on this device: a line of its own, kept when empty, so the first move of a game moves nothing below it. */
+  private readonly measured: HTMLElement;
   private readonly vary: HTMLInputElement;
   private readonly modelBox: HTMLElement;
   private readonly modelSelect: HTMLSelectElement;
@@ -139,7 +141,8 @@ export class SeatControls {
     const varyNote = make("span", varyLabel, { id: id("vary-note"), className: "seat-hint", textContent: "so games differ" });
     this.vary.setAttribute("aria-describedby", varyNote.id);
     this.estimate = make("p", body, { id: id("estimate"), className: "seat-hint estimate" });
-    this.slider.setAttribute("aria-describedby", this.estimate.id);
+    this.measured = make("p", body, { id: id("measured"), className: "seat-hint measured" });
+    this.slider.setAttribute("aria-describedby", `${this.estimate.id} ${this.measured.id}`);
 
     /** Applies a change to the bot; `remember` keeps its simulations as the person's choice. */
     const edit = (bot: Bot, announce: boolean, remember: boolean): void => {
@@ -244,8 +247,9 @@ export class SeatControls {
     const found = estimateMs(bot, size, model);
     const time = found === null ? "time unmeasured" : `≈ ${formatMs(found.ms)} a move`;
     setText(this.summary, `${bot.simulations.toLocaleString("en-US")} simulations · ${time}${bot.vary ? " · varied" : ""}`);
-    const here = moveTime !== null && moveTime.size === size && sameBot(moveTime.bot, withModel(bot, this.model)) ? ` On this device: ${formatMs(moveTime.ms)}.` : "";
-    setText(this.estimate, describeEstimate(bot, size, model) + here);
+    const here = moveTime !== null && moveTime.size === size && sameBot(moveTime.bot, withModel(bot, this.model)) ? `On this device: ${formatMs(moveTime.ms)}.` : "";
+    setText(this.estimate, describeEstimate(bot, size, model));
+    setText(this.measured, here);
     if (this.vary.checked !== bot.vary) this.vary.checked = bot.vary;
     const rated = bot.engine === "network" ? (this.model ?? models.mainId) : null;
     setText(this.strength, seatStrength(bot, rated === null ? null : models.card(rated), size));
