@@ -23,7 +23,7 @@ export function describeNetwork(state: ModelState, size: number): { line: string
     }
     case "ready":
       return {
-        line: `Network: ready (${state.model}${state.fromCache ? ", loaded from this device" : ""}).${state.saved ? "" : " It could not be saved for offline use."}`,
+        line: `Network: ready${state.fromCache ? ", loaded from this device" : ""}.${state.saved ? "" : " It could not be saved for offline use."}`,
         short: "ready",
         chip: "ready",
         tone: "ok",

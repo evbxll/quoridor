@@ -1,4 +1,3 @@
-// Ported from the research app's tests/js/geometry.test.mjs.
 import { describe, expect, it } from "vitest";
 import { HORIZONTAL, VERTICAL } from "../../src/engine/actions";
 import { CELL, GAP, PAD, PITCH, boardSpan, cellAt, center, wallAt, wallRect } from "../../src/ui/geometry";

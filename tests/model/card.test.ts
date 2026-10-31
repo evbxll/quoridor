@@ -12,12 +12,9 @@ describe("parseCard", () => {
       license: "CC-BY-4.0",
       parameters: 2474767,
       network: { head: "conv", inputPlanes: 10, channels: 128, blocks: 8, poolEvery: 3, headChannels: 32, boardSize: null },
-      source: { run: "s9-conv-paths", generation: 1 },
     });
     expect(card.planeNames).toHaveLength(10);
-    expect(card.strength).toEqual([
-      expect.objectContaining({ size: 9, simulations: 25, elo: 557.8, interval: [518, 597.5], intervalLevel: 0.95, ladderGames: 560, measured: null }),
-    ]);
+    expect(card.strength).toEqual([{ size: 9, eloVsNormal: 518 }]);
   });
 
   it("reads an fc card with six planes", () => {
@@ -54,7 +51,7 @@ describe("parseCard", () => {
 
   it("leaves out a strength entry that is malformed and keeps the rest", () => {
     const good = (cardJson("m1")["strength"] as Record<string, unknown>[])[0]!;
-    const card = parseCard(cardJson("m1", { strength: [{ ...good, elo: "high" }, good, null, { ...good, interval: [1] }, { ...good, size: 7 }] }));
+    const card = parseCard(cardJson("m1", { strength: [{ ...good, elo_vs_normal: "high" }, good, null, { size: 7 }, { ...good, size: 7 }] }));
     expect(card.strength.map((entry) => entry.size)).toEqual([9, 7]);
     expect(parseCard(cardJson("m1", { strength: "none" })).strength).toEqual([]);
   });

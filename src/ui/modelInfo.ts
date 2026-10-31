@@ -1,6 +1,6 @@
 import { type ModelCard, supportsSize } from "../model/card";
 import type { ModelState } from "../model/manager";
-import { type Bot, NORMAL_ABOVE_RATING_ZERO, type PresetId, presetOf } from "./bots";
+import { type Bot, type PresetId, presetOf } from "./bots";
 
 /** The value of the Network select's first option: the main model, whichever the index names for the board. */
 export const MAIN_MODEL = "";
@@ -58,7 +58,7 @@ export function modelTitle(id: string, card: ModelCard | null): string {
 }
 
 /** The card's rating at a board size, if it has one. */
-const ladder = (card: ModelCard, size: number) => card.strength.find((entry) => entry.size === size) ?? null;
+const ratingAt = (card: ModelCard, size: number) => card.strength.find((entry) => entry.size === size) ?? null;
 
 /** Why the model cannot be picked for this size, or null if it can. A model whose card is not read yet cannot be told to play the size, so it waits ("loading"). */
 export function disabledReason(card: ModelCard | null, size: number): string | null {
@@ -97,11 +97,10 @@ const HEURISTIC_STRENGTH: Partial<Record<PresetId, string>> = {
 /**
  * A bot's strength for a casual player, in one line, or "" when there is none to give.
  *
- * A network bot's comes from its card: "≈ +500 Elo vs Normal". The card's rating at the board size (or the size it was
- * rated on, which is then named) is moved from the card's zero to Normal (`NORMAL_ABOVE_RATING_ZERO`) and rounded to
- * 50. Only the presets it holds for get a line: Strong ("≈ +500 Elo vs Normal"; the card rates the network at fewer
- * simulations, without reusing its tree) and Max ("≈ +500 Elo or more", as it searches far more). A network bot with
- * Vary moves or other Custom settings plays differently from what was rated, so it gets none.
+ * A network bot's comes from its card: its figure against Normal at the board size (or at the size it was rated on,
+ * which is then named), rounded to 50. Only the presets it holds for get a line: Strong ("≈ +500 Elo vs Normal") and Max
+ * ("≈ +500 Elo or more", as it searches far more than was rated). A network bot with Vary moves or other Custom settings
+ * plays otherwise than rated, so it gets none.
  */
 export function seatStrength(bot: Bot, card: ModelCard | null, size: number): string {
   if (bot.engine === "heuristic") {
@@ -109,9 +108,9 @@ export function seatStrength(bot: Bot, card: ModelCard | null, size: number): st
     return preset === null ? "" : (HEURISTIC_STRENGTH[preset.id] ?? "");
   }
   const preset = presetOf(bot)?.id;
-  const entry = card === null ? null : (ladder(card, size) ?? card.strength[0] ?? null);
+  const entry = card === null ? null : (ratingAt(card, size) ?? card.strength[0] ?? null);
   if (entry === null || (preset !== "strong" && preset !== "max")) return "";
-  const elo = Math.round((entry.elo - NORMAL_ABOVE_RATING_ZERO) / ELO_ROUNDING) * ELO_ROUNDING;
+  const elo = Math.round(entry.eloVsNormal / ELO_ROUNDING) * ELO_ROUNDING;
   const where = entry.size === size ? "" : ` (measured on ${entry.size} × ${entry.size})`;
   return `≈ ${eloText(elo)} Elo${preset === "max" ? " or more" : ""} vs Normal${where}`;
 }

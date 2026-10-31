@@ -3,7 +3,7 @@ import { encodeState } from "./encoding";
 import type { Evaluation, Evaluator } from "./evaluator";
 import { LruCache } from "./lru";
 
-/** Positions the evaluation cache keeps (design doc section 4.3; about 17 MB of policies on 11x11). */
+/** Positions the evaluation cache keeps (about 17 MB of policies on 11x11). */
 export const CACHE_POSITIONS = 20_000;
 
 /** A network that evaluates one encoded position: the input is `[planes, size, size]` float32, where `planes` is the model's own plane count. */

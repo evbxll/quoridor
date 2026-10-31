@@ -1,10 +1,10 @@
 import { createHash } from "node:crypto";
-import { readFileSync } from "node:fs";
+import { readdirSync, readFileSync, statSync } from "node:fs";
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { checkCard, SUPPORTED_PLANES as SCRIPT_PLANES, verifyDist } from "../scripts/verify-dist.mjs";
+import { checkCard, forbiddenIn, SUPPORTED_PLANES as SCRIPT_PLANES, verifyDist } from "../scripts/verify-dist.mjs";
 import { SUPPORTED_PLANES } from "../src/ai/encoding";
 import { parseCard } from "../src/model/card";
 import { cardJson, fcCardJson } from "./helpers/cards";
@@ -245,5 +245,33 @@ describe("verifyDist", () => {
   it("reports a model file that is missing", () => {
     write("models/index.json", JSON.stringify({ models: [{ id: "m1", path: "models/m1/model.onnx", sha256: "a".repeat(64) }], bots: {} }));
     expect(verifyDist(dist, root)).toEqual(["model m1: models/m1/model.onnx is missing"]);
+  });
+});
+
+describe("only public words in what the site ships", () => {
+  it("refuses a page, script or model file that says how the models were made or rated", () => {
+    write("assets/a.js", 'const note = "rated against the Evan bot on the ladder";');
+    write("assets/ort-wasm.js", "private research");
+    expect(verifyDist(dist, root)).toEqual([
+      'assets/a.js: "Evan bot" belongs to how the models were made, not to the public site',
+      'assets/a.js: "ladder" belongs to how the models were made, not to the public site',
+    ]);
+  });
+
+  it("allows the page's own words", () => {
+    expect(forbiddenIn("Varied openings. Trained on 9 × 9. ≈ +500 Elo vs Normal. evanbell.site. Max plays 200 simulations.")).toEqual([]);
+    expect(forbiddenIn("fresh tree, Bradley-Terry, gen 105, PR #177, private_git_sha, ratings_folder")).toEqual(["Bradley", "fresh tree", "gen 1", "PR #1", "git_sha", "ratings_folder"]);
+  });
+
+  it("refuses a card field the public site does not ship, and a strength entry that says more than a number", () => {
+    const sha = "c".repeat(64);
+    expect(checkCard("m1", cardJson("m1", { source: { run: "r" } }, sha), sha)).toEqual(["model m1: its card has a field the public site does not ship: source"]);
+    expect(checkCard("m1", cardJson("m1", { strength: [{ size: 9, elo_vs_normal: 1, interval: [0, 2] }] }, sha), sha)).toEqual(["model m1: its card's strength must be a list of {size, elo_vs_normal}"]);
+  });
+
+  it("finds none in the repo's own public files: the README, the page, the bot data and the published models", () => {
+    const files = (dir: string): string[] => readdirSync(dir).flatMap((name) => (statSync(join(dir, name)).isDirectory() ? files(join(dir, name)) : [join(dir, name)]));
+    const shipped = ["README.md", "index.html", "src/ui/bots.json", ...files("public/models").filter((file) => file.endsWith(".json"))];
+    for (const file of shipped) expect(forbiddenIn(readFileSync(file, "utf8")), file).toEqual([]);
   });
 });

@@ -32,8 +32,6 @@ interface BotsData {
   readonly presets: readonly Preset[];
   readonly steps: PerEngine<readonly number[]>;
   readonly caps: PerEngine<{ readonly default: number; readonly bySize: Readonly<Record<string, number>> }>;
-  /** How many Elo Normal stands above the zero of the cards' ratings. */
-  readonly normalAboveRatingZero: number;
   readonly times: {
     readonly device: string;
     readonly network: {
@@ -41,8 +39,6 @@ interface BotsData {
       /** What the measured model is made of; a model with the same make is as fast. */
       readonly architecture: { readonly head: string; readonly inputPlanes: number; readonly channels: number; readonly blocks: number };
       readonly bySize: Readonly<Record<string, Points>>;
-      /** Models of another make, each with its own measured table. */
-      readonly others: Readonly<Record<string, { readonly bySize: Readonly<Record<string, Points>> }>>;
     };
     readonly heuristic: { readonly msAt100: Readonly<Record<string, number>> };
   };
@@ -55,11 +51,6 @@ export const PRESETS: readonly Preset[] = DATA.presets;
 export const MEASURED_ON = DATA.times.device;
 /** The network whose times `bots.json` holds; the page shows no measured time for another one. */
 export const MEASURED_MODEL = DATA.times.network.model;
-/**
- * How many Elo Normal stands above the zero of the cards' ratings. The cards rate a network against the heuristic at
- * Normal's 100 simulations with a fresh tree each move; Normal reuses its tree, which is about this much stronger.
- */
-export const NORMAL_ABOVE_RATING_ZERO = DATA.normalAboveRatingZero;
 
 /** The temperature a bot's searches ask for: 1 samples among the searched moves, 0 plays the most visited. */
 export const temperatureOf = (bot: Bot): number => (bot.vary ? 1 : 0);
@@ -152,8 +143,7 @@ export function estimateMs(bot: Bot, size: number, model: string | null = null):
     const at100 = DATA.times.heuristic.msAt100[size];
     return at100 === undefined ? null : { ms: (at100 * bot.simulations) / 100, kind: "estimate" };
   }
-  const table = model === null || model === MEASURED_MODEL ? DATA.times.network.bySize : DATA.times.network.others[model]?.bySize;
-  const points = table?.[size];
+  const points = model === null || model === MEASURED_MODEL ? DATA.times.network.bySize[size] : undefined;
   if (points === undefined) return null;
   let before: readonly [number, number] = [0, 0];
   for (const point of points) {

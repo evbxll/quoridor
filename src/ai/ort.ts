@@ -52,7 +52,7 @@ export function checkInputShape(shape: InputShape, expected: InputExpectation): 
 const FETCHES = ["policy", "value"];
 
 /**
- * Opens an exported model (design doc section 6.1: input `[batch, planes, N, N]`,
+ * Opens an exported model (input `[batch, planes, N, N]`,
  * outputs `policy` and `value`) with onnxruntime-web's WebAssembly backend.
  * `expected` is the model's card: its plane count and, for fc, its board size.
  */

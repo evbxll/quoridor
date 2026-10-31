@@ -6,7 +6,7 @@ import type { GameController, SearchPort } from "./controller";
 import { shareLabel, toPercent } from "./evalBar";
 import { botOf } from "./bots";
 
-/** Analysis searches with the network at the Strong budget (design doc section 8). */
+/** Analysis searches with the network at the Strong budget. */
 export const ANALYSIS_SIMULATIONS = botOf("strong").simulations;
 
 /** How many of the most visited moves are listed. */

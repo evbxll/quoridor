@@ -1,5 +1,4 @@
-// Board geometry in SVG units. Copied once from the research app's `app/static/logic.js`
-// (same author, MIT) and typed; there is no sync obligation (design doc section 11).
+// Board geometry in SVG units (same author, MIT).
 
 import { HORIZONTAL, type Orientation, VERTICAL } from "../engine/actions";
 

@@ -1,4 +1,4 @@
-// Checks a built `dist/` before it is deployed (design doc section 9.1).
+// Checks a built `dist/` before it is deployed.
 //
 // Usage: node scripts/verify-dist.mjs [distDir]
 
@@ -95,6 +95,43 @@ function validateIndex(index) {
   return { errors, models, bots: index.bots };
 }
 
+/** The fields a shipped card may have: what the page reads, the licence and the attribution. How a model was trained, rated or exported stays out of the public site. */
+export const CARD_FIELDS = ["id", "display_name", "sizes", "sha256", "bytes", "license", "attribution", "network", "trained_size", "plane_names", "parameters", "strength"];
+
+/** A strength entry as shipped: a board size and Elo above Normal, nothing about how it was measured. */
+const isPlainStrength = (/** @type {any} */ entry) =>
+  typeof entry === "object" && entry !== null && Object.keys(entry).every((key) => key === "size" || key === "elo_vs_normal") && Number.isInteger(entry.size) && Number.isFinite(entry.elo_vs_normal);
+
+/**
+ * Words that belong to how the models were made and rated, or to the private repository, never to the public site. Each is
+ * a whole phrase, so the page's own words ("Varied openings", a model's trained size) stay allowed.
+ */
+export const FORBIDDEN_TERMS = [/\bevan bot\b/i, /\bladder\b/i, /\bbradley/i, /\blaplace\b/i, /\bfresh[ -]tree\b/i, /\bresearch\b/i, /\bprivate\b/i, /\bgeneration\b/i, /\bgen \d/i, /\bPR #\d/, /\bryzen\b/i, /how this was measured/i, /git_sha/i, /ratings?_folder/i, /self-play/i, /\banchor(ed)? (bot|at|on)\b/i];
+
+/**
+ * Finds forbidden terms in a text, as "term" strings.
+ * @param {string} text
+ * @returns {string[]}
+ */
+export function forbiddenIn(text) {
+  return FORBIDDEN_TERMS.flatMap((term) => {
+    const found = term.exec(text);
+    return found === null ? [] : [found[0]];
+  });
+}
+
+/**
+ * Checks the site's own shipped text (the page, its styles and scripts, and the model files) for forbidden terms. The
+ * third-party runtime (`ort*`) and the licence notices are not the site's words and are not read.
+ * @param {string} distDir
+ * @returns {string[]} Error messages.
+ */
+function checkPublicText(distDir) {
+  return walk(distDir)
+    .filter((file) => /\.(html|css|js|mjs|json)$/.test(file) && !/(^|[\\/])ort[^\\/]*$/.test(file))
+    .flatMap((file) => forbiddenIn(readFileSync(file, "utf8")).map((term) => `${relative(distDir, file).replaceAll("\\", "/")}: "${term}" belongs to how the models were made, not to the public site`));
+}
+
 /**
  * Checks a model's card the way the page reads it (`src/model/card.ts`): it is this model's, it states the plane
  * count of a model the page can slice an input for, and it can be played at the sizes it claims. Every field
@@ -136,6 +173,8 @@ export function checkCard(id, card, actual) {
     if (!(optional && (value === null || value === undefined)) && !(Number.isInteger(value) && value >= least)) fail(`its card's ${name} is not a whole number of at least ${least}`);
   }
   const whole = (/** @type {any} */ value) => Number.isInteger(value) && value >= 2;
+  for (const key of Object.keys(card)) if (!CARD_FIELDS.includes(key)) fail(`its card has a field the public site does not ship: ${key}`);
+  if (card.strength !== undefined && !(Array.isArray(card.strength) && card.strength.every(isPlainStrength))) fail("its card's strength must be a list of {size, elo_vs_normal}");
   if (!Array.isArray(card.sizes) || card.sizes.length === 0 || card.sizes.length > MAX_SIZES || !card.sizes.every(whole) || !whole(card.trained_size)) {
     fail("its card needs sizes (board sizes) and a trained_size");
   } else if (network.head === "fc" && (card.sizes.length !== 1 || card.sizes[0] !== card.trained_size)) {
@@ -273,6 +312,7 @@ export function verifyDist(distDir, projectDir) {
     ...checkRuntimeFiles(distDir, projectDir),
     ...checkModels(distDir),
     ...checkExternalUrls(distDir),
+    ...checkPublicText(distDir),
   ];
 }
 

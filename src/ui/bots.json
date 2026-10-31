@@ -13,11 +13,8 @@
     "network": { "default": 800, "bySize": { "11": 400 } },
     "heuristic": { "default": 1600, "bySize": {} }
   },
-  "normalAboveRatingZero": 40,
-  "normalAboveRatingZeroSource": "Model cards rate a network against the heuristic at 100 simulations with a fresh tree each move (rated 0). Normal plays the same heuristic but reuses its tree, about 40 Elo stronger (private research repo, research/2026-10-25-budget-vs-strength).",
   "times": {
     "device": "a fast desktop",
-    "deviceDetail": "Ryzen 7 7700X, Edge, 4 threads; PR #177 of the private research repo, median ms per move with tree reuse",
     "network": {
       "model": "s9-conv-paths-g105",
       "architecture": { "head": "conv", "inputPlanes": 10, "channels": 128, "blocks": 8 },
@@ -26,16 +23,9 @@
         "7": [[32, 98], [200, 425]],
         "9": [[32, 155], [200, 635], [400, 2377], [800, 3865]],
         "11": [[32, 200], [200, 848]]
-      },
-      "others": {
-        "s9-fpu-basic-g112": {
-          "source": "s9-fpu-basic-g112 (fc heads) was timed for this page in headless Edge on 9x9 with 4 threads, the median and 90th percentile over 18 to 19 of its moves against Normal with tree reuse, at 32 and 200 simulations; the machine is a 16-thread desktop, not the one above",
-          "bySize": { "9": [[32, 128], [200, 806]] }
-        }
       }
     },
     "heuristic": {
-      "source": "Derived from PR #177's Normal (100 simulations) median ms per move (9x9: 8, 14, 17 and 15 over four runs, taken as 14), assuming time grows in proportion to simulations; not measured at other budgets",
       "msAt100": { "5": 1, "7": 2, "9": 14, "11": 24 }
     }
   }

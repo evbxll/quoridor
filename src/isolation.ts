@@ -1,4 +1,4 @@
-/** Upper bound on search threads (design doc section 9.2). */
+/** Upper bound on search threads. */
 const MAX_THREADS = 4;
 
 /**

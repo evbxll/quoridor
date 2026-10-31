@@ -4,14 +4,14 @@ import { botLabel, botOf, botSummary, estimateMs, MEASURED_MODEL, modelName, pre
 import { buildModelOptions, choosableModels, describeModelStatus, disabledReason, extraModels, MAIN_MODEL, modelTitle, seatStrength } from "../../src/ui/modelInfo";
 import { cardJson, fcCardJson } from "../helpers/cards";
 
-const ladder = (elo: number): Record<string, unknown> => ({ ...(cardJson("x").strength as Record<string, unknown>[])[0], elo, interval: [elo - 37.5, elo + 37.5] });
-const conv = (id: string, generation: number, elo: number | null = 406.7): ModelCard =>
-  parseCard(cardJson(id, { source: { run: "s9-conv-paths", generation }, strength: elo === null ? [] : [ladder(elo)] }));
-const fc = parseCard({ ...fcCardJson("s9-fpu-basic-g112"), source: { run: "s9-fpu-basic", generation: 112 }, strength: [ladder(333.7)] });
+/** A card's strength entry: Elo above Normal on 9x9. */
+const rated = (elo: number): Record<string, unknown> => ({ size: 9, elo_vs_normal: elo });
+const conv = (id: string, elo: number | null = 366.7): ModelCard => parseCard(cardJson(id, { strength: elo === null ? [] : [rated(elo)] }));
+const fc = parseCard({ ...fcCardJson("s9-fpu-basic-g112"), strength: [rated(293.7)] });
 const CARDS: Record<string, ModelCard> = {
-  "s9-conv-paths-g105": conv("s9-conv-paths-g105", 105, 557.8),
-  "s9-conv-paths-g050": conv("s9-conv-paths-g050", 50),
-  "s9-conv-paths-g010": conv("s9-conv-paths-g010", 10, 211.7),
+  "s9-conv-paths-g105": conv("s9-conv-paths-g105", 517.8),
+  "s9-conv-paths-g050": conv("s9-conv-paths-g050"),
+  "s9-conv-paths-g010": conv("s9-conv-paths-g010", 171.7),
   "s9-fpu-basic-g112": fc,
 };
 const GALLERY = ["s9-conv-paths-g010", "s9-conv-paths-g050", "s9-fpu-basic-g112", "s9-conv-paths-g105"];
@@ -49,7 +49,7 @@ describe("the Model select's options", () => {
   });
 
   it("names a conv model whose card leaves out a size as not offered there", () => {
-    const narrow = parseCard(cardJson("s9-conv-paths-g050", { sizes: [9], source: { run: "s9-conv-paths", generation: 50 } }));
+    const narrow = parseCard(cardJson("s9-conv-paths-g050", { sizes: [9] }));
     expect(disabledReason(narrow, 11)).toBe("not offered at 11x11");
     expect(disabledReason(narrow, 9)).toBeNull();
     expect(disabledReason(null, 11)).toBe("loading");
@@ -80,8 +80,8 @@ describe("what a seat says about its model", () => {
   const g105 = CARDS["s9-conv-paths-g105"]!;
   const g050 = CARDS["s9-conv-paths-g050"]!;
 
-  it("gives a network bot its card's rating against Normal: moved by Normal's 40 over the cards' zero, rounded to 50", () => {
-    // g105's card: +557.8 at 25 simulations on 9x9.
+  it("gives a network bot its card's figure against Normal, rounded to 50", () => {
+    // g105's card: +518 on 9x9.
     expect(seatStrength(botOf("strong"), g105, 9)).toBe("≈ +500 Elo vs Normal");
     expect(seatStrength(botOf("max"), g105, 9)).toBe("≈ +500 Elo or more vs Normal");
     expect(seatStrength(botOf("strong"), g050, 9)).toBe("≈ +350 Elo vs Normal");
@@ -91,10 +91,10 @@ describe("what a seat says about its model", () => {
     expect(seatStrength(botOf("strong"), g105, 11)).toBe("≈ +500 Elo vs Normal (measured on 9 × 9)");
   });
 
-  it("gives none below the rated simulations, without a card, or without a rating", () => {
+  it("gives none below Strong's simulations, without a card, or without a rating", () => {
     expect(seatStrength({ ...botOf("strong"), simulations: 16 }, g105, 9)).toBe("");
     expect(seatStrength(botOf("strong"), null, 9)).toBe("");
-    expect(seatStrength(botOf("strong"), conv("x", 1, null), 9)).toBe("");
+    expect(seatStrength(botOf("strong"), conv("x", null), 9)).toBe("");
   });
 
   it("gives none for a network bot that plays otherwise than rated: Vary moves on, or Custom simulations", () => {
@@ -150,13 +150,12 @@ describe("a bot's model in its identity", () => {
 });
 
 describe("time estimates by model", () => {
-  it("reuses the measured table for a model made the same way and has its own for the fc model", () => {
+  it("reuses the measured table for a model made the same way; another make is unmeasured", () => {
     expect(timeModelOf(CARDS["s9-conv-paths-g050"]!)).toBe(MEASURED_MODEL);
     expect(timeModelOf(fc)).toBe("s9-fpu-basic-g112");
     const bot = botOf("strong");
     expect(estimateMs(bot, 9, timeModelOf(CARDS["s9-conv-paths-g050"]!))).toEqual({ ms: 155, kind: "measured" });
-    expect(estimateMs(bot, 9, "s9-fpu-basic-g112")).toEqual({ ms: 128, kind: "measured" });
-    expect(estimateMs(bot, 7, "s9-fpu-basic-g112")).toBeNull();
+    expect(estimateMs(bot, 9, timeModelOf(fc))).toBeNull();
     expect(estimateMs(bot, 9, "some-other-model")).toBeNull();
   });
 });

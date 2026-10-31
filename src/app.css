@@ -1,5 +1,4 @@
-/* The board's look follows the research app's app.css (copied once, same author).
-   Every colour on the page is a token below. The light set is the default; the dark set applies
+/* Every colour on the page is a token below. The light set is the default; the dark set applies
    under [data-theme="dark"] (the toggle) and, when the viewer has not chosen, under the system's
    dark preference. The two dark blocks must stay identical (tests/ui/contrast.test.ts checks it).
    Contrast of every pair in use is checked by scripts/contrast.mjs. */

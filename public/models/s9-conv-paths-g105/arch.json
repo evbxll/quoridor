@@ -1,5 +1,5 @@
 {
-  "description": "Network structure for the architecture diagram, generated from the PyTorch module at export. N is the board size. See docs/public-site-design.md section 15.8.",
+  "description": "Network structure for the architecture diagram, generated from the PyTorch module at export. N is the board size.",
   "version": 1,
   "head": "conv",
   "input": {

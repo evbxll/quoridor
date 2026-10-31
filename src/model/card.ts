@@ -1,19 +1,9 @@
 import { SUPPORTED_PLANES } from "../ai/encoding";
 
-/** One measured strength of a model at a board size (the ladder rating the publisher copied into the card). */
+/** A model's strength at a board size: Elo above Normal, as the publisher worked it out. */
 export interface Strength {
   readonly size: number;
-  readonly anchor: string;
-  readonly simulations: number;
-  readonly elo: number;
-  readonly interval: readonly [number, number];
-  readonly intervalLevel: number;
-  readonly intervalMethod: string;
-  readonly ladderGames: number;
-  readonly openings: string;
-  readonly settings: string;
-  readonly ratingsFolder: string;
-  readonly measured: string | null;
+  readonly eloVsNormal: number;
 }
 
 /** The structured architecture in a card. */
@@ -44,7 +34,6 @@ export interface ModelCard {
   /** Names of the input planes, `network.inputPlanes` of them. */
   readonly planeNames: readonly string[];
   readonly strength: readonly Strength[];
-  readonly source: { readonly run: string | null; readonly generation: number | null };
 }
 
 const MAX_TEXT = 400;
@@ -73,22 +62,7 @@ const orNull = <T>(value: unknown, read: (value: unknown) => T): T | null => (va
 
 function readStrength(raw: unknown): Strength {
   if (!isObject(raw)) throw new Error("not an object");
-  const interval = raw["interval"];
-  if (!Array.isArray(interval) || interval.length !== 2) throw new Error("interval is not a pair");
-  return {
-    size: count(raw["size"], "size", 2),
-    anchor: text(raw["anchor"], "anchor"),
-    simulations: count(raw["simulations"], "simulations", 1),
-    elo: real(raw["elo"], "elo"),
-    interval: [real(interval[0], "interval"), real(interval[1], "interval")],
-    intervalLevel: real(raw["interval_level"], "interval_level"),
-    intervalMethod: text(raw["interval_method"], "interval_method"),
-    ladderGames: count(raw["ladder_games"], "ladder_games"),
-    openings: text(raw["openings"], "openings"),
-    settings: text(raw["settings"], "settings"),
-    ratingsFolder: text(raw["ratings_folder"], "ratings_folder"),
-    measured: orNull(raw["measured"], (value) => text(value, "measured")),
-  };
+  return { size: count(raw["size"], "size", 2), eloVsNormal: real(raw["elo_vs_normal"], "elo_vs_normal") };
 }
 
 /**
@@ -111,7 +85,6 @@ export function parseCard(json: unknown): ModelCard {
   const sizes = json["sizes"];
   if (!Array.isArray(sizes) || sizes.length === 0 || sizes.length > MAX_ENTRIES) throw new Error("sizes is not a list of board sizes");
   const strength = Array.isArray(json["strength"]) ? (json["strength"] as unknown[]).slice(0, MAX_ENTRIES) : [];
-  const source = isObject(json["source"]) ? json["source"] : {};
   const sha256 = text(json["sha256"], "sha256");
   if (!/^[0-9a-f]{64}$/.test(sha256)) throw new Error("sha256 is not 64 lowercase hex digits");
   const card: ModelCard = {
@@ -139,7 +112,6 @@ export function parseCard(json: unknown): ModelCard {
         return [];
       }
     }),
-    source: { run: orNull(source["run"], (value) => text(value, "run")), generation: orNull(source["generation"], (value) => count(value, "generation")) },
   };
   if (head === "fc" && (card.sizes.length !== 1 || card.sizes[0] !== card.trainedSize)) throw new Error("An fc model plays its trained size only");
   return card;
