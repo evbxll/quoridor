@@ -17,42 +17,42 @@ function loaded(hash: string, players: Players): GameController {
 describe("playerName", () => {
   it("calls the one person You, two people by number, and a bot by number and level", () => {
     expect(playerName({ p1: HUMAN, p2: STRONG }, "p1")).toBe("You");
-    expect(playerName({ p1: HUMAN, p2: STRONG }, "p2")).toBe("Player 2 (Strong)");
+    expect(playerName({ p1: HUMAN, p2: STRONG }, "p2")).toBe("Player 2: Strong (neural net)");
     expect(playerName({ p1: HUMAN, p2: HUMAN }, "p2")).toBe("Player 2");
   });
 });
 
 describe("statusText", () => {
   it("says who played what and whose move it is", () => {
-    expect(statusText(loaded("#n=5&m=c2.c4", { p1: HUMAN, p2: NORMAL }), "ready")).toBe("Player 2 (Normal) played c4. Your move.");
+    expect(statusText(loaded("#n=5&m=c2.c4", { p1: HUMAN, p2: NORMAL }), "ready")).toBe("Player 2: Normal (heuristic) played c4. Your move.");
     expect(statusText(loaded("#n=5&m=c2", { p1: HUMAN, p2: HUMAN }), "ready")).toBe("Player 1 played c2. Player 2 to move.");
   });
 
-  it("says which engine the bot is thinking with", () => {
+  it("names the bot, with its engine, when it is thinking", () => {
     const heuristic = new GameController(idle, () => {});
     heuristic.newGame(5, { p1: NORMAL, p2: HUMAN });
-    expect(statusText(heuristic, "ready")).toBe("Player 1 (Normal) is thinking (heuristic search).");
+    expect(statusText(heuristic, "ready")).toBe("Player 1: Normal (heuristic) is thinking.");
     const network = new GameController(idle, () => {});
     network.setNetworkReady(true);
     network.newGame(5, { p1: STRONG, p2: HUMAN });
-    expect(statusText(network, "ready")).toBe("Player 1 (Strong) is thinking (neural network).");
+    expect(statusText(network, "ready")).toBe("Player 1: Strong (neural net) is thinking.");
   });
 
   it("says a network bot is waiting for the network, and where the network stands", () => {
     const controller = new GameController(idle, () => {});
     controller.newGame(5, { p1: STRONG, p2: HUMAN });
-    expect(statusText(controller, "downloading, 40%")).toBe("Player 1 (Strong) is waiting for the network (downloading, 40%).");
+    expect(statusText(controller, "downloading, 40%")).toBe("Player 1: Strong (neural net) is waiting for the network (downloading, 40%).");
   });
 
   it("asks for Start before two bots play, and says when they are paused", () => {
     expect(statusText(loaded("#n=5", { p1: NORMAL, p2: STRONG }), "ready")).toBe("Choose Start to watch the bots play.");
-    expect(statusText(loaded("#n=5&m=c2", { p1: NORMAL, p2: STRONG }), "ready")).toBe("Player 1 (Normal) played c2. Paused.");
+    expect(statusText(loaded("#n=5&m=c2", { p1: NORMAL, p2: STRONG }), "ready")).toBe("Player 1: Normal (heuristic) played c2. Paused.");
   });
 
   it("states the result and its reason", () => {
     expect(statusText(loaded("#n=5&m=c2.b5.c3.a5.c4.b5.c5", { p1: HUMAN, p2: NORMAL }), "ready")).toBe("You played c5. You win by reaching the goal row.");
     expect(statusText(loaded("#n=5&m=c2.c4.c1.c5.c2.c4.c1.c5", { p1: HUMAN, p2: NORMAL }), "ready")).toBe(
-      "Player 2 (Normal) played c5. Draw by threefold repetition.",
+      "Player 2: Normal (heuristic) played c5. Draw by threefold repetition.",
     );
   });
 
@@ -69,7 +69,7 @@ describe("statusText", () => {
       controller.playHuman(parseMove(controller.state, move));
     }
     await new Promise((resolve) => setImmediate(resolve));
-    expect(statusText(controller, "ready")).toBe("Player 1 (Normal) played c5. Player 1 (Normal) wins by reaching the goal row.");
+    expect(statusText(controller, "ready")).toBe("Player 1: Normal (heuristic) played c5. Player 1: Normal (heuristic) wins by reaching the goal row.");
   });
 });
 

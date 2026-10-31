@@ -2,11 +2,11 @@ import { maxPlies } from "../engine/constants";
 import { botLabel, modelName } from "./bots";
 import { type GameController, HUMAN, type Players, type Side, sideOf } from "./controller";
 
-/** A seat in words: "You" for the one person against a bot, "Player 1" for either of two people, "Player 2 (Strong)" for a bot. */
+/** A seat in words: "You" for the one person against a bot, "Player 1" for either of two people, "Player 2: Strong (neural net)" for a bot. */
 export function playerName(players: Players, side: Side): string {
   const seat = players[side];
   const number = side === "p1" ? 1 : 2;
-  if (seat !== HUMAN) return `Player ${number} (${botLabel(seat)})`;
+  if (seat !== HUMAN) return `Player ${number}: ${botLabel(seat)}`;
   return players[side === "p1" ? "p2" : "p1"] === HUMAN ? `Player ${number}` : "You";
 }
 
@@ -32,7 +32,7 @@ export function statusText(controller: GameController, network: string, subject 
   const seat = players[mover];
   if (controller.error !== null) return `${played}${name(mover)} could not move (${controller.error}). Choose Retry.`;
   if (seat === HUMAN) return `${played}${name(mover) === "You" ? "Your move." : `${name(mover)} to move.`}`;
-  if (controller.thinking) return `${played}${name(mover)} is thinking (${seat.engine === "network" ? "neural network" : "heuristic search"}).`;
+  if (controller.thinking) return `${played}${name(mover)} is thinking.`;
   if (controller.waiting) return `${played}${name(mover)} is waiting for ${subject} (${network}).`;
   if (!controller.hasHuman && !controller.running) return moves.length === 0 ? "Choose Start to watch the bots play." : `${played}Paused.`;
   return `${played}${name(mover)} moves next.`;

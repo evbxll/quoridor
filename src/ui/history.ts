@@ -65,8 +65,8 @@ export const playersOf = (record: Pick<GameRecord, "p1" | "p2">): Players => ({
 /** A seat's identity: two seats with the same key are the same player for the tally. */
 export const seatKey = (seat: Seat): string => (seat.kind === "human" ? "human" : `${seat.engine}:${seat.simulations}:${seat.vary ? "varied" : "fixed"}:${seat.model ?? "main"}`);
 
-/** A bot in words: "Strong (network, 32)", "Beginner (heuristic, 5, varied)"; a gallery model is named too, the main model is not. */
-export const botName = (bot: Bot): string => `${botLabel(bot)} (${bot.engine}, ${bot.simulations}${bot.vary ? ", varied" : ""}${bot.model === undefined ? "" : `, ${modelName(bot.model)}`})`;
+/** A bot in words: "Strong (neural net), 32", "Beginner (heuristic), 5, varied"; a gallery model is named too, the main model is not. */
+export const botName = (bot: Bot): string => `${botLabel(bot)}, ${bot.simulations}${bot.vary ? ", varied" : ""}${bot.model === undefined ? "" : `, ${modelName(bot.model)}`}`;
 
 /** The names of a game's two seats: a person is "You" against a bot, "Person" against another person. */
 export function seatNames(record: Pick<GameRecord, "p1" | "p2">): { p1: string; p2: string } {

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { Game } from "../../src/engine/game";
-import { botOf, capFor, capitalized, modelName, PRESETS, withModel } from "../../src/ui/bots";
+import { type Bot, botLabel, botOf, capFor, capitalized, modelName, PRESETS, withModel } from "../../src/ui/bots";
 import { HUMAN, type Player, type Players } from "../../src/ui/controller";
 import { keepNote, takeNote } from "../../src/ui/persistence";
 import { addressOf, isOwnAddress, keptAfterSeat, keptAfterSwap, parseSeat, personFirst, readSetup, seatCode, seatsForLink, seatsOf, type Setup, setupText } from "../../src/ui/setupLink";
@@ -34,6 +34,24 @@ describe("seat codes", () => {
     for (const bad of ["", "P", "x32", "n", "n-5", "n32 ", "n1234567", "n32vv", "n32~", "n32~../model", "n32~a/b", "h100~some-model", "n32~" + "a".repeat(81), "human", "<script>"]) {
       expect(parseSeat(bad, 9), bad).toBeNull();
     }
+  });
+});
+
+describe("a Custom bot in a link or a kept setup", () => {
+  const custom: Players = { p1: { engine: "heuristic", simulations: 200, vary: false }, p2: { engine: "network", simulations: 64, vary: true } };
+
+  it("comes back Custom, with its engine", () => {
+    const back = seatsOf(addressOf("#n=9", custom), 9)!;
+    expect(back.unreadable).toEqual([]);
+    expect(back.seats).toEqual(custom);
+    expect([back.seats.p1, back.seats.p2].map((seat) => botLabel(seat as Bot))).toEqual(["Custom (heuristic)", "Custom (neural net)"]);
+  });
+
+  it("comes back Custom from the kept setup, and a link to a preset's values comes back as the preset", () => {
+    const kept = readSetup(setupText({ size: 9, players: custom }), DEFAULTS)!;
+    expect([kept.players.p1, kept.players.p2].map((seat) => botLabel(seat as Bot))).toEqual(["Custom (heuristic)", "Custom (neural net)"]);
+    expect(botLabel(parseSeat("n32", 9) as Bot)).toBe("Strong (neural net)");
+    expect(botLabel(parseSeat("h5v", 9) as Bot)).toBe("Beginner (heuristic)");
   });
 });
 

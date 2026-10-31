@@ -6,6 +6,7 @@ import {
   botSummary,
   capFor,
   describeEstimate,
+  engineName,
   estimateMs,
   fitTo,
   formatMs,
@@ -15,6 +16,7 @@ import {
   presetOf,
   stepsFor,
   temperatureOf,
+  withModel,
 } from "../../src/ui/bots";
 
 describe("presets", () => {
@@ -33,28 +35,54 @@ describe("presets", () => {
 
   it("say what each plays with", () => {
     expect(PRESETS.map(botSummary)).toEqual([
-      "Heuristic, 5 searches a move, varied",
-      "Heuristic, 100 searches a move",
-      "Neural network, 32 searches a move",
-      "Neural network, 200 searches a move",
+      "5 searches a move, varied",
+      "100 searches a move",
+      "32 searches a move",
+      "200 searches a move",
     ]);
   });
 });
 
-describe("Custom", () => {
-  it("is a bot no preset matches, and a preset's name returns when its values do", () => {
-    const normal = botOf("normal");
-    expect(botLabel(normal)).toBe("Normal");
+describe("a bot's name", () => {
+  const normal = botOf("normal");
+  const strong = botOf("strong");
+
+  it("is its preset's level and its engine: Beginner/Normal (heuristic), Strong/Max (neural net)", () => {
+    expect(PRESETS.map(botLabel)).toEqual(["Beginner (heuristic)", "Normal (heuristic)", "Strong (neural net)", "Max (neural net)"]);
+    expect(engineName("heuristic")).toBe("heuristic");
+    expect(engineName("network")).toBe("neural net");
+  });
+
+  it("is Custom, with the engine, when engine, simulations and vary together match no preset", () => {
     expect(presetOf({ ...normal, simulations: 200 })).toBeNull();
-    expect(botLabel({ ...normal, simulations: 200 })).toBe("Custom");
-    expect(botLabel({ ...normal, vary: true })).toBe("Custom");
-    expect(botLabel({ ...normal, simulations: 5, vary: true })).toBe("Beginner");
-    expect(botLabel({ engine: "network", simulations: 1, vary: false })).toBe("Custom");
+    expect(botLabel({ ...normal, simulations: 200 })).toBe("Custom (heuristic)");
+    expect(botLabel({ ...normal, vary: true })).toBe("Custom (heuristic)");
+    expect(botLabel({ ...strong, simulations: 64 })).toBe("Custom (neural net)");
+    expect(botLabel({ ...strong, vary: true })).toBe("Custom (neural net)");
+    expect(botLabel({ engine: "network", simulations: 1, vary: false })).toBe("Custom (neural net)");
   });
 
   it("depends on the engine as well: the same simulations on the other engine are Custom", () => {
-    expect(botLabel({ engine: "network", simulations: 100, vary: false })).toBe("Custom");
-    expect(botLabel({ engine: "heuristic", simulations: 32, vary: false })).toBe("Custom");
+    expect(botLabel({ engine: "network", simulations: 100, vary: false })).toBe("Custom (neural net)");
+    expect(botLabel({ engine: "heuristic", simulations: 32, vary: false })).toBe("Custom (heuristic)");
+    expect(botLabel({ engine: "heuristic", simulations: 200, vary: false })).toBe("Custom (heuristic)");
+  });
+
+  it("does not depend on the model, which is chosen apart from the level", () => {
+    expect(botLabel(withModel(strong, "some-gallery-model"))).toBe("Strong (neural net)");
+    expect(botLabel(withModel({ ...strong, simulations: 64 }, "some-gallery-model"))).toBe("Custom (neural net)");
+  });
+
+  it("follows the slider and Vary moves: Custom while off a preset, the preset's name again when its values return", () => {
+    const names = [
+      { ...strong, simulations: 64 },
+      { ...strong, simulations: 200 },
+      { ...strong, simulations: 32 },
+      { ...strong, vary: true },
+      { ...strong, vary: false },
+    ].map(botLabel);
+    expect(names).toEqual(["Custom (neural net)", "Max (neural net)", "Strong (neural net)", "Custom (neural net)", "Strong (neural net)"]);
+    expect([5, 1, 5].map((simulations) => botLabel({ engine: "heuristic", simulations, vary: true }))).toEqual(["Beginner (heuristic)", "Custom (heuristic)", "Beginner (heuristic)"]);
   });
 });
 

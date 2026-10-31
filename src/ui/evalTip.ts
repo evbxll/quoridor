@@ -5,10 +5,10 @@ const NUMBER: Readonly<Record<Side, number>> = { p1: 1, p2: 2 };
 
 const plural = (count: number, noun: string): string => `${count} ${noun}${count === 1 ? "" : "s"}`;
 
-/** A bot in words for a blurb: "Strong, network, 32 simulations"; a gallery model is named: "Strong, network (Conv, gen 50), 32 simulations". */
+/** A bot in words for a blurb: "Strong (neural net), 32 simulations"; a gallery model is named after: "Strong (neural net), 32 simulations, Conv, gen 50". */
 export function botKind(bot: Bot): string {
-  const kind = bot.engine === "network" ? (bot.model === undefined ? "network" : `network (${modelName(bot.model)})`) : "heuristic";
-  return `${botLabel(bot)}, ${kind}, ${plural(bot.simulations, "simulation")}`;
+  const model = bot.engine === "network" && bot.model !== undefined ? `, ${modelName(bot.model)}` : "";
+  return `${botLabel(bot)}, ${plural(bot.simulations, "simulation")}${model}`;
 }
 
 /** A player 1 share in whole percent as both players' numbers: "41% for Player 2 (59% for Player 1)", the named side first. */
@@ -45,9 +45,9 @@ export function markerBlurb(input: MarkerInput): string {
   }
   const rated = `rated the position at ${bothWays(side, p1Percent)} when it searched for its move ${source.move}, before playing it`;
   const upTo = viewingPast ? " (the latest search up to the position you are viewing)" : "";
-  if (seat !== HUMAN && sameBot(seat, source.bot)) return `${who} (${botKind(source.bot)}) ${rated}${upTo}.`;
+  if (seat !== HUMAN && sameBot(seat, source.bot)) return `${who}, ${botKind(source.bot)}, ${rated}${upTo}.`;
   const now = seat === HUMAN ? "a person" : `a bot: ${botKind(seat)}`;
-  return `${who}'s previous bot (${botKind(source.bot)}) ${rated}${upTo}. ${who} is now ${now}.`;
+  return `${who}'s previous bot, ${botKind(source.bot)}, ${rated}${upTo}. ${who} is now ${now}.`;
 }
 
 /** What the eval bar itself says. */

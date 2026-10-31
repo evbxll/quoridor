@@ -65,13 +65,23 @@ const sameSettings = (a: Bot, b: Bot): boolean => a.engine === b.engine && a.sim
 /** Whether two bots are the same bot: the same settings and the same model (absent: the main model). */
 export const sameBot = (a: Bot, b: Bot): boolean => sameSettings(a, b) && (a.model ?? null) === (b.model ?? null);
 
-/** The preset whose settings the bot has, or null: the bot is then Custom. The model is a separate setting, so a preset keeps its name with any model. */
+/**
+ * The preset the bot matches, or null: the bot is then Custom. A bot matches a preset when engine, simulations
+ * and vary are all equal. The model is chosen apart from the level (the Network select), so it is not compared:
+ * a preset keeps its name with any model.
+ */
 export function presetOf(bot: Bot): Preset | null {
   return PRESETS.find((candidate) => sameSettings(candidate, bot)) ?? null;
 }
 
-/** The bot's name: its preset's, or "Custom". */
-export const botLabel = (bot: Bot): string => presetOf(bot)?.label ?? "Custom";
+/** The engine in two words for a name: "heuristic" or "neural net". */
+export const engineName = (engine: EngineKind): string => (engine === "network" ? "neural net" : "heuristic");
+
+/**
+ * The bot's name wherever the page shows one, with its engine so that it reads at a glance: "Normal (heuristic)",
+ * "Strong (neural net)", "Custom (neural net)". The level is its preset's, or Custom when it matches none.
+ */
+export const botLabel = (bot: Bot): string => `${presetOf(bot)?.label ?? "Custom"} (${engineName(bot.engine)})`;
 
 const modelLabels = new Map<string, string>();
 
@@ -86,10 +96,10 @@ export const modelName = (id: string): string => modelLabels.get(id) ?? "the cho
 /** A name at the start of a sentence. */
 export const capitalized = (text: string): string => text.charAt(0).toUpperCase() + text.slice(1);
 
-/** The bot's settings in words: "Neural network, 32 searches a move, varied"; a gallery model is named, the main model is not. */
+/** The bot's settings in words, after its name: "32 searches a move, varied"; a gallery model is named, the main model is not. */
 export function botSummary(bot: Bot): string {
   const model = bot.engine === "network" && bot.model !== undefined ? `, ${modelName(bot.model)}` : "";
-  return `${bot.engine === "network" ? "Neural network" : "Heuristic"}, ${bot.simulations} searches a move${bot.vary ? ", varied" : ""}${model}`;
+  return `${bot.simulations} searches a move${bot.vary ? ", varied" : ""}${model}`;
 }
 
 /** The bot with `model` set (absent for the main model); a heuristic bot takes none. */

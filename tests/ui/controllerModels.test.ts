@@ -108,9 +108,9 @@ describe("a seat with a gallery model", () => {
 
   it("names the model in the marker blurb, and tells a model change from the same bot", () => {
     setModelLabel(OLD, "Conv, gen 50");
-    expect(botKind(withOld)).toBe("Strong, network (Conv, gen 50), 32 simulations");
-    expect(botKind(strong)).toBe("Strong, network, 32 simulations");
+    expect(botKind(withOld)).toBe("Strong (neural net), 32 simulations, Conv, gen 50");
+    expect(botKind(strong)).toBe("Strong (neural net), 32 simulations");
     const blurb = markerBlurb({ side: "p1", seat: withModel(strong, OTHER), p1Percent: 60, source: { move: 1, bot: withOld }, viewingPast: false });
-    expect(blurb).toContain("previous bot (Strong, network (Conv, gen 50), 32 simulations)");
+    expect(blurb).toContain("previous bot, Strong (neural net), 32 simulations, Conv, gen 50,");
   });
 });

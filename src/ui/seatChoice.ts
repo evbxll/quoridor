@@ -1,7 +1,7 @@
 import { type Bot, botOf, type EngineKind, PRESETS, presetOf, withModel } from "./bots";
 import { HUMAN, type Player } from "./controller";
 
-/** The value of a seat select's Custom entry for an engine: it names a bot whose settings match no preset of that engine. */
+/** The value of a seat select's Custom entry for an engine: it names a bot whose settings match no preset of that engine. The entry exists, disabled, only while a bot is Custom. */
 export const CUSTOM: Readonly<Record<EngineKind, string>> = { heuristic: "custom-heuristic", network: "custom-network" };
 
 /** The seat select's groups, in order: the engine, and the presets it offers. */
@@ -10,7 +10,7 @@ export const ENGINE_GROUPS: readonly { readonly engine: EngineKind; readonly lab
   { engine: "network", label: "Neural network" },
 ];
 
-/** The entry the seat select shows for a player: Human, the bot's preset, or the Custom entry of the bot's engine. */
+/** The entry the seat select shows for a player: Human, the bot's preset, or the Custom entry of the bot's engine (present only while the bot is Custom). */
 export function choiceOf(player: Player): string {
   if (player === HUMAN) return HUMAN;
   return presetOf(player)?.id ?? CUSTOM[player.engine];

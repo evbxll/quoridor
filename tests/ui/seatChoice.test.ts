@@ -1,16 +1,20 @@
 import { describe, expect, it } from "vitest";
-import { botOf, PRESETS, withModel } from "../../src/ui/bots";
+import { type Bot, botLabel, botOf, PRESETS, withModel } from "../../src/ui/bots";
 import { HUMAN } from "../../src/ui/controller";
 import { choiceOf, CUSTOM, ENGINE_GROUPS, playerAfterChoice, seatAfterChoice, type SeatState } from "../../src/ui/seatChoice";
 
 const GALLERY_MODEL = "s9-fpu-basic-g112";
 
 describe("the seat select's entries", () => {
-  it("group every preset under its engine, heuristic first, each group with its Custom entry", () => {
-    expect(ENGINE_GROUPS.map((group) => [group.label, PRESETS.filter((preset) => preset.engine === group.engine).map((preset) => preset.id), CUSTOM[group.engine]])).toEqual([
-      ["Heuristic", ["beginner", "normal"], "custom-heuristic"],
-      ["Neural network", ["strong", "max"], "custom-network"],
+  it("group every preset under its engine, heuristic first", () => {
+    expect(ENGINE_GROUPS.map((group) => [group.label, PRESETS.filter((preset) => preset.engine === group.engine).map((preset) => preset.id)])).toEqual([
+      ["Heuristic", ["beginner", "normal"]],
+      ["Neural network", ["strong", "max"]],
     ]);
+  });
+
+  it("name a Custom entry for each engine, to show a bot no preset matches", () => {
+    expect(ENGINE_GROUPS.map((group) => CUSTOM[group.engine])).toEqual(["custom-heuristic", "custom-network"]);
   });
 
   it("show Human, the preset, or the Custom entry of the bot's own engine", () => {
@@ -30,6 +34,14 @@ describe("choosing an entry", () => {
     expect(playerAfterChoice(botOf("strong"), HUMAN)).toBe(HUMAN);
     expect(playerAfterChoice(HUMAN, "normal")).toEqual(botOf("normal"));
     expect(playerAfterChoice({ ...botOf("normal"), simulations: 1600, vary: true }, "beginner")).toEqual(botOf("beginner"));
+  });
+
+  it("resets a Custom bot to the preset's settings and name", () => {
+    const customNormal = { ...botOf("normal"), simulations: 400, vary: true };
+    expect(botLabel(customNormal)).toBe("Custom (heuristic)");
+    expect(botLabel(playerAfterChoice(customNormal, "normal") as Bot)).toBe("Normal (heuristic)");
+    expect(botLabel(playerAfterChoice(customNormal, "strong") as Bot)).toBe("Strong (neural net)");
+    expect(botLabel(playerAfterChoice({ ...botOf("strong"), simulations: 64 }, "strong") as Bot)).toBe("Strong (neural net)");
   });
 
   it("keeps the network model from one network level to another", () => {

@@ -9,20 +9,20 @@ const bar = (over: Partial<BarInput>): BarInput => ({ percent: 62, stale: false,
 describe("a marker's blurb", () => {
   it("names the bot, its kind and simulations, and gives both players' numbers", () => {
     expect(markerBlurb(marker({}))).toBe(
-      "Player 2 (Strong, network, 32 simulations) rated the position at 41% for Player 2 (59% for Player 1) when it searched for its move 14, before playing it.",
+      "Player 2, Strong (neural net), 32 simulations, rated the position at 41% for Player 2 (59% for Player 1) when it searched for its move 14, before playing it.",
     );
   });
 
   it("gives the named player's number first, whichever side it is", () => {
     expect(markerBlurb(marker({ side: "p1", seat: botOf("normal"), p1Percent: 75, source: { move: 13, bot: botOf("normal") } }))).toBe(
-      "Player 1 (Normal, heuristic, 100 simulations) rated the position at 75% for Player 1 (25% for Player 2) when it searched for its move 13, before playing it.",
+      "Player 1, Normal (heuristic), 100 simulations, rated the position at 75% for Player 1 (25% for Player 2) when it searched for its move 13, before playing it.",
     );
   });
 
   it("says Custom for settings no preset has, and a single simulation in the singular", () => {
     const custom: Bot = { engine: "heuristic", simulations: 1, vary: false };
-    expect(botKind(custom)).toBe("Custom, heuristic, 1 simulation");
-    expect(markerBlurb(marker({ seat: custom, source: { move: 14, bot: custom } }))).toContain("Player 2 (Custom, heuristic, 1 simulation) rated");
+    expect(botKind(custom)).toBe("Custom (heuristic), 1 simulation");
+    expect(markerBlurb(marker({ seat: custom, source: { move: 14, bot: custom } }))).toContain("Player 2, Custom (heuristic), 1 simulation, rated");
   });
 
   it("handles the extremes", () => {
@@ -40,15 +40,15 @@ describe("a marker's blurb", () => {
 
   it("names the bot that made the reading when the seat has changed hands", () => {
     expect(markerBlurb(marker({ seat: botOf("normal") }))).toBe(
-      "Player 2's previous bot (Strong, network, 32 simulations) rated the position at 41% for Player 2 (59% for Player 1) when it searched for its move 14, before playing it. Player 2 is now a bot: Normal, heuristic, 100 simulations.",
+      "Player 2's previous bot, Strong (neural net), 32 simulations, rated the position at 41% for Player 2 (59% for Player 1) when it searched for its move 14, before playing it. Player 2 is now a bot: Normal (heuristic), 100 simulations.",
     );
-    expect(markerBlurb(marker({ seat: botOf("beginner"), source: { move: 8, bot: botOf("strong") } }))).toContain("Player 2's previous bot (Strong, network, 32 simulations) rated");
+    expect(markerBlurb(marker({ seat: botOf("beginner"), source: { move: 8, bot: botOf("strong") } }))).toContain("Player 2's previous bot, Strong (neural net), 32 simulations, rated");
   });
 
   it("says a person has no reading, and credits an earlier bot's reading", () => {
     expect(markerBlurb(marker({ seat: HUMAN, p1Percent: null, source: null }))).toBe("No reading: Player 2 is a person, not a bot.");
     expect(markerBlurb(marker({ seat: HUMAN }))).toBe(
-      "Player 2's previous bot (Strong, network, 32 simulations) rated the position at 41% for Player 2 (59% for Player 1) when it searched for its move 14, before playing it. Player 2 is now a person.",
+      "Player 2's previous bot, Strong (neural net), 32 simulations, rated the position at 41% for Player 2 (59% for Player 1) when it searched for its move 14, before playing it. Player 2 is now a person.",
     );
   });
 });

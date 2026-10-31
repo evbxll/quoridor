@@ -137,11 +137,11 @@ describe("a bot's model in its identity", () => {
   it("keeps the preset's name with any model, and names the model in the summary", () => {
     const other = withModel(strong, "s9-conv-paths-g050");
     expect(presetOf(other)?.id).toBe("strong");
-    expect(botLabel(other)).toBe("Strong");
-    expect(botSummary(strong)).toBe("Neural network, 32 searches a move");
+    expect(botLabel(other)).toBe("Strong (neural net)");
+    expect(botSummary(strong)).toBe("32 searches a move");
     setModelLabel("s9-conv-paths-g050", "Conv, gen 50");
     expect(modelName("s9-conv-paths-g050")).toBe("Conv, gen 50");
-    expect(botSummary(other)).toBe("Neural network, 32 searches a move, Conv, gen 50");
+    expect(botSummary(other)).toBe("32 searches a move, Conv, gen 50");
   });
 
   it("gives a heuristic bot no model", () => {

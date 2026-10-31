@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
-import { botOf, withModel } from "../../src/ui/bots";
+import { type Bot, botLabel, botOf, withModel } from "../../src/ui/bots";
 import { HUMAN } from "../../src/ui/controller";
-import { type FinishedGame, GameHistory, HISTORY_KEY, isMirror, MAX_GAMES, MAX_SAVED_CHARS, resultText, seatKey, seatNames, type StorageLike } from "../../src/ui/history";
+import { type FinishedGame, GameHistory, HISTORY_KEY, isMirror, MAX_GAMES, MAX_SAVED_CHARS, playersOf, resultText, seatKey, seatNames, type StorageLike } from "../../src/ui/history";
 
 const [BEGINNER, STRONG, NORMAL] = [botOf("beginner"), botOf("strong"), botOf("normal")];
 
@@ -34,8 +34,8 @@ describe("seat names and keys", () => {
     history.add(game({ p1: HUMAN, p2: BEGINNER }));
     history.add(game({ p1: HUMAN, p2: HUMAN }));
     const [a, b, c] = history.games;
-    expect(seatNames(a!)).toEqual({ p1: "Beginner (heuristic, 5, varied)", p2: "Strong (network, 32)" });
-    expect(seatNames(b!)).toEqual({ p1: "You", p2: "Beginner (heuristic, 5, varied)" });
+    expect(seatNames(a!)).toEqual({ p1: "Beginner (heuristic), 5, varied", p2: "Strong (neural net), 32" });
+    expect(seatNames(b!)).toEqual({ p1: "You", p2: "Beginner (heuristic), 5, varied" });
     expect(seatNames(c!)).toEqual({ p1: "Person", p2: "Person" });
   });
 
@@ -83,8 +83,8 @@ describe("GameHistory", () => {
     history.add(game({ p1: NORMAL, p2: STRONG }));
     expect(history.games.map(isMirror)).toEqual([true, true, false]);
     expect(history.tallies().map((t) => [t.name, t.wins, t.losses])).toEqual([
-      ["Normal (heuristic, 100)", 1, 0],
-      ["Strong (network, 32)", 0, 1],
+      ["Normal (heuristic), 100", 1, 0],
+      ["Strong (neural net), 32", 0, 1],
     ]);
   });
 
@@ -92,7 +92,7 @@ describe("GameHistory", () => {
     const history = new GameHistory();
     history.add(game({ p1: HUMAN, p2: NORMAL, winner: "p2" }));
     expect(history.tallies().map((t) => [t.name, t.wins, t.losses])).toEqual([
-      ["Normal (heuristic, 100)", 1, 0],
+      ["Normal (heuristic), 100", 1, 0],
       ["You", 0, 1],
     ]);
   });
@@ -202,10 +202,10 @@ describe("models in the history", () => {
     history.add(game({ p1: STRONG, p2: MODEL }));
     history.add(game({ p1: STRONG, p2: botOf("strong") }));
     expect(history.games.map(isMirror)).toEqual([false, true]);
-    expect(seatNames(history.games[0]!)).toEqual({ p1: "Strong (network, 32)", p2: "Strong (network, 32, the chosen network)" });
+    expect(seatNames(history.games[0]!)).toEqual({ p1: "Strong (neural net), 32", p2: "Strong (neural net), 32, the chosen network" });
     expect(history.tallies().map((t) => [t.name, t.wins, t.losses])).toEqual([
-      ["Strong (network, 32, the chosen network)", 0, 1],
-      ["Strong (network, 32)", 1, 0],
+      ["Strong (neural net), 32", 1, 0],
+      ["Strong (neural net), 32, the chosen network", 0, 1],
     ]);
   });
 
@@ -218,7 +218,33 @@ describe("models in the history", () => {
     storage.items.set(HISTORY_KEY, JSON.stringify({ v: 1, games: [old] }));
     const read = new GameHistory(storage).games[0]!;
     expect(seatKey(read.p1)).toBe(seatKey({ kind: "bot", ...STRONG }));
-    expect(seatNames(read).p1).toBe("Strong (network, 32)");
+    expect(seatNames(read).p1).toBe("Strong (neural net), 32");
+  });
+
+  it("names a saved row by its settings, so rows kept before the engine was in the name get it, Custom or not", () => {
+    const row = (id: number, p1: object, p2: object) => ({ id, size: 7, p1, p2, winner: "p1", reason: "goal", moves: "d2" });
+    const storage = new MemoryStorage();
+    const custom = { kind: "bot", engine: "network", simulations: 64, vary: false };
+    const normal = { kind: "bot", engine: "heuristic", simulations: 100, vary: false };
+    storage.items.set(HISTORY_KEY, JSON.stringify({ v: 1, games: [row(1, custom, normal), row(2, { ...normal, simulations: 200 }, { kind: "human" })] }));
+    const history = new GameHistory(storage);
+    expect(seatNames(history.games[0]!)).toEqual({ p1: "Custom (neural net), 64", p2: "Normal (heuristic), 100" });
+    expect(seatNames(history.games[1]!)).toEqual({ p1: "Custom (heuristic), 200", p2: "You" });
+    expect(history.tallies().map((t) => t.name).sort()).toEqual(["Custom (heuristic), 200", "Custom (neural net), 64", "Normal (heuristic), 100", "You"]);
+  });
+
+  it("restores a Custom bot as Custom, from a saved row and after a save and reload", () => {
+    const storage = new MemoryStorage();
+    const custom = { kind: "bot", engine: "network", simulations: 64, vary: true };
+    const heuristic = { kind: "bot", engine: "heuristic", simulations: 200, vary: false };
+    storage.items.set(HISTORY_KEY, JSON.stringify({ v: 1, games: [{ id: 1, size: 7, p1: custom, p2: heuristic, winner: "p2", reason: "goal", moves: "d2" }] }));
+    const read = new GameHistory(storage).games[0]!;
+    expect(seatNames(read)).toEqual({ p1: "Custom (neural net), 64, varied", p2: "Custom (heuristic), 200" });
+    const players = playersOf(read);
+    expect([players.p1, players.p2].map((player) => botLabel(player as Bot))).toEqual(["Custom (neural net)", "Custom (heuristic)"]);
+    const again = new GameHistory(storage);
+    again.add(game({ p1: { engine: "heuristic", simulations: 1, vary: false }, p2: botOf("normal") }));
+    expect(seatNames(new GameHistory(storage).games[1]!)).toEqual({ p1: "Custom (heuristic), 1", p2: "Normal (heuristic), 100" });
   });
 
   it("drops saved rows with a model that is not plain text, or on a heuristic bot", () => {
@@ -238,8 +264,8 @@ describe("games whose seats changed, and boards of different sizes", () => {
     history.add(game({ winner: "p2" }));
     expect(history.games).toHaveLength(2);
     expect(history.tallies().map((t) => [t.name, t.wins, t.losses])).toEqual([
-      ["Beginner (heuristic, 5, varied)", 0, 1],
-      ["Strong (network, 32)", 1, 0],
+      ["Beginner (heuristic), 5, varied", 0, 1],
+      ["Strong (neural net), 32", 1, 0],
     ]);
     expect(new GameHistory(storage).games.map((g) => g.seatChanged)).toEqual([true, false]);
   });
@@ -254,12 +280,12 @@ describe("games whose seats changed, and boards of different sizes", () => {
   it("scores a bot separately on each board size, and names the size only when there is more than one", () => {
     const history = new GameHistory();
     history.add(game({ size: 7 }));
-    expect(history.tallies().map((t) => t.name).sort()).toEqual(["Beginner (heuristic, 5, varied)", "Strong (network, 32)"]);
+    expect(history.tallies().map((t) => t.name).sort()).toEqual(["Beginner (heuristic), 5, varied", "Strong (neural net), 32"]);
     history.add(game({ size: 9, winner: "p2" }));
     const rows = history.tallies().map((t) => [t.name, t.wins, t.losses]);
     expect(rows).toHaveLength(4);
-    expect(rows).toContainEqual(["Beginner (heuristic, 5, varied) on 7 × 7", 1, 0]);
-    expect(rows).toContainEqual(["Beginner (heuristic, 5, varied) on 9 × 9", 0, 1]);
+    expect(rows).toContainEqual(["Beginner (heuristic), 5, varied on 7 × 7", 1, 0]);
+    expect(rows).toContainEqual(["Beginner (heuristic), 5, varied on 9 × 9", 0, 1]);
   });
 });
 

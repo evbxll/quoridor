@@ -1,6 +1,6 @@
 import type { ModelCard } from "../model/card";
 import type { ModelState } from "../model/manager";
-import { type Bot, botLabel, botOf, botSummary, describeEstimate, estimateMs, fitTo, formatMs, PRESETS, presetOf, sameBot, stepsFor, timeModelOf, withModel } from "./bots";
+import { type Bot, botLabel, botOf, botSummary, describeEstimate, estimateMs, fitTo, formatMs, PRESETS, sameBot, stepsFor, timeModelOf, withModel } from "./bots";
 import { HUMAN, type MoveTime, type Player, type Side } from "./controller";
 import { playableModel } from "./seatModels";
 import { choiceOf, CUSTOM, ENGINE_GROUPS, seatAfterChoice } from "./seatChoice";
@@ -47,9 +47,10 @@ function setText(target: HTMLElement, text: string): void {
 
 /**
  * The controls of one seat. One select says what the player is: Human, a heuristic level (Beginner, Normal)
- * or a neural-network level (Strong, Max), each engine with a Custom entry that names settings no preset has.
- * A network bot has a Network select when more than one network is published. The simulations and "Vary
- * moves" sit in a disclosure whose one-line summary gives the budget and the time a move. The page reads the
+ * or a neural-network level (Strong, Max). A bot whose settings match no preset is shown as "Custom (engine)" in
+ * the select, as a disabled entry that is there only while it is Custom. Dragging the simulations is the way to make it so.
+ * A network bot has a Network select when more than one network is published. The simulations slider is always shown; "Vary
+ * moves" sits in a disclosure whose one-line summary gives the budget and the time a move. The page reads the
  * seat with `player`. `onEdit` is called after each change, with a sentence to announce or null when the
  * control already announces itself (the slider); the page applies the change to the game at once.
  */
@@ -58,12 +59,15 @@ export class SeatControls {
   private bot: Bot = DEFAULT_BOT;
   /** The simulations the person last chose (0: none yet), restored when a larger board's cap no longer lowers them. */
   private wanted = 0;
-  /** Whether the bot had a preset's name at the last drawing, to open the settings when it becomes Custom. */
-  private wasNamed = true;
   /** The gallery model a network bot searches with; undefined is the main model. A heuristic bot has none: choosing one clears it. */
   private model: string | undefined;
   private readonly choice: HTMLSelectElement;
+  private readonly groups: readonly HTMLOptGroupElement[];
   private readonly networkGroup: HTMLOptGroupElement;
+  /** The entry that names settings no preset has: in the select only while the bot is Custom, and never pickable. */
+  private customOption: HTMLOptionElement | null = null;
+  /** The bot's name when its settings were last committed (a pick, a released slider, a toggle), to announce a change of level. */
+  private settled = botLabel(DEFAULT_BOT);
   private readonly settings: HTMLElement;
   private readonly more: HTMLDetailsElement;
   private readonly summary: HTMLElement;
@@ -91,10 +95,10 @@ export class SeatControls {
     const groups = ENGINE_GROUPS.map(({ engine, label }) => {
       const group = make("optgroup", this.choice);
       group.label = label;
-      for (const preset of PRESETS.filter((candidate) => candidate.engine === engine)) make("option", group, { textContent: preset.label }).value = preset.id;
-      make("option", group, { textContent: "Custom" }).value = CUSTOM[engine];
+      for (const preset of PRESETS.filter((candidate) => candidate.engine === engine)) make("option", group, { textContent: botLabel(preset) }).value = preset.id;
       return group;
     });
+    this.groups = groups;
     this.networkGroup = groups[ENGINE_GROUPS.findIndex((group) => group.engine === "network")]!;
 
     // The network comes first: it is the choice that decides who the opponent is, so it is not tucked away.
@@ -114,11 +118,9 @@ export class SeatControls {
     this.strength = make("p", this.settings, { id: id("strength"), className: "seat-hint strength" });
     this.choice.setAttribute("aria-describedby", this.strength.id);
 
-    this.more = make("details", this.settings, { className: "seat-more" });
-    this.summary = make("summary", this.more);
-    const body = make("div", this.more, { className: "seat-more-body" });
-    const simulations = make("div", body, { className: "sims-row" });
-    make("label", simulations, { htmlFor: id("sims"), textContent: "Simulations" });
+    // The simulations slider is always in view, so that its label says how to customise a bot without opening anything.
+    const simulations = make("div", this.settings, { className: "sims-row" });
+    make("label", simulations, { htmlFor: id("sims"), className: "sims-label", textContent: "Simulations — drag to customise" });
     this.slider = make("input", simulations, { id: id("sims") });
     this.slider.type = "range";
     this.slider.step = "1";
@@ -127,6 +129,9 @@ export class SeatControls {
     this.value.htmlFor = this.slider.id;
     // The slider's aria-valuetext says the value; an output is a live region and would say it again.
     this.value.setAttribute("aria-hidden", "true");
+    this.more = make("details", this.settings, { className: "seat-more" });
+    this.summary = make("summary", this.more);
+    const body = make("div", this.more, { className: "seat-more-body" });
     const varyLabel = make("label", body, { className: "check" });
     this.vary = make("input", varyLabel, { id: id("vary") });
     this.vary.type = "checkbox";
@@ -140,6 +145,7 @@ export class SeatControls {
     const edit = (bot: Bot, announce: boolean, remember: boolean): void => {
       if (remember) this.wanted = bot.simulations;
       this.bot = fitTo(bot, this.context().size);
+      this.settled = botLabel(this.bot);
       this.draw();
       onEdit(announce ? this.describe() : null);
     };
@@ -165,7 +171,12 @@ export class SeatControls {
       this.bot = fitTo({ ...this.bot, simulations: step }, this.context().size);
       this.draw();
     });
-    this.slider.addEventListener("change", () => onEdit(null));
+    // The slider announces its value itself; a change of level (to Custom, or back to a preset) is said as well.
+    this.slider.addEventListener("change", () => {
+      const renamed = botLabel(this.bot) !== this.settled;
+      this.settled = botLabel(this.bot);
+      onEdit(renamed ? this.describe() : null);
+    });
     this.vary.addEventListener("change", () => edit({ ...this.bot, vary: this.vary.checked }, true, false));
     this.modelSelect.addEventListener("change", () => {
       this.model = this.modelSelect.value === MAIN_MODEL ? undefined : this.modelSelect.value;
@@ -194,6 +205,7 @@ export class SeatControls {
     if (player !== HUMAN) {
       this.wanted = player.simulations;
       this.bot = fitTo(withModel(player, undefined), this.context().size);
+      this.settled = botLabel(this.bot);
     }
     this.draw();
   }
@@ -209,19 +221,14 @@ export class SeatControls {
     this.bot = fitTo(this.wanted > 0 ? { ...this.bot, simulations: this.wanted } : this.bot, size);
     const bot = this.bot;
     const chosen = choiceOf(this.player);
+    this.drawCustom(chosen);
     for (const option of this.choice.options) {
-      // A Custom entry is shown greyed out unless it names the seat's settings; it cannot be chosen.
-      option.disabled = (option.value === CUSTOM.heuristic || option.value === CUSTOM.network) && option.value !== chosen;
-      if (option.parentElement === this.networkGroup && networkOff) option.disabled = true;
+      option.disabled = option === this.customOption || (option.parentElement === this.networkGroup && networkOff);
     }
     this.networkGroup.label = networkOff ? "Neural network (not available)" : "Neural network";
     if (this.choice.value !== chosen) this.choice.value = chosen;
     this.settings.hidden = this.human;
     if (this.human) return;
-
-    const named = presetOf(bot);
-    if (named === null && this.wasNamed) this.more.open = true;
-    this.wasNamed = named !== null;
 
     const steps = stepsFor(bot.engine, size);
     const max = String(steps.length - 1);
@@ -243,6 +250,25 @@ export class SeatControls {
     const rated = bot.engine === "network" ? (this.model ?? models.mainId) : null;
     setText(this.strength, seatStrength(bot, rated === null ? null : models.card(rated), size));
     this.drawModel(bot.engine === "network", size, models);
+  }
+
+  /** Puts the Custom entry in the select, in its engine's group, while `chosen` is one, and takes it out otherwise. */
+  private drawCustom(chosen: string): void {
+    const engine = ENGINE_GROUPS.findIndex((group) => CUSTOM[group.engine] === chosen);
+    if (engine < 0) {
+      this.customOption?.remove();
+      this.customOption = null;
+      return;
+    }
+    if (this.customOption !== null && this.customOption.value !== chosen) {
+      this.customOption.remove();
+      this.customOption = null;
+    }
+    if (this.customOption === null) {
+      this.customOption = make("option", this.groups[engine]!);
+      this.customOption.value = chosen;
+    }
+    setText(this.customOption, botLabel(this.bot));
   }
 
   /** The Network select and the notes under it; shown for a network bot when there is a network to choose. */
