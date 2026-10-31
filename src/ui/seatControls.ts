@@ -3,7 +3,7 @@ import type { ModelState } from "../model/manager";
 import { type Bot, botLabel, botOf, botSummary, describeEstimate, estimateMs, fitTo, formatMs, PRESETS, presetOf, sameBot, stepsFor, timeModelOf, withModel } from "./bots";
 import { HUMAN, type MoveTime, type Player, type Side } from "./controller";
 import { playableModel } from "./seatModels";
-import { choiceOf, CUSTOM, ENGINE_GROUPS, playerAfterChoice } from "./seatChoice";
+import { choiceOf, CUSTOM, ENGINE_GROUPS, seatAfterChoice } from "./seatChoice";
 import { describeModelStatus, FIRST_USE_NOTE, MAIN_MODEL, type ModelOption, modelTitle, offSizeNote, strengthDetail, strengthLine } from "./modelInfo";
 
 const DEFAULT_BOT: Bot = botOf("strong");
@@ -149,15 +149,14 @@ export class SeatControls {
       onEdit(announce ? this.describe() : null);
     };
     this.choice.addEventListener("change", () => {
-      const next = playerAfterChoice(this.player, this.choice.value);
+      const next = seatAfterChoice({ human: this.human, bot: this.bot, model: this.model }, this.choice.value);
       if (next === null) {
         this.draw();
         return;
       }
-      this.human = next === HUMAN;
-      if (next !== HUMAN) {
-        this.model = next.model;
-        edit(withModel(next, undefined), true, true);
+      ({ human: this.human, model: this.model } = next);
+      if (!next.human) {
+        edit(next.bot, true, true);
         return;
       }
       this.draw();

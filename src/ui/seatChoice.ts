@@ -1,4 +1,4 @@
-import { botOf, type EngineKind, PRESETS, presetOf } from "./bots";
+import { type Bot, botOf, type EngineKind, PRESETS, presetOf, withModel } from "./bots";
 import { HUMAN, type Player } from "./controller";
 
 /** The value of a seat select's Custom entry for an engine: it names a bot whose settings match no preset of that engine. */
@@ -31,4 +31,19 @@ export function playerAfterChoice(current: Player, choice: string): Player | nul
   const bot = botOf(preset.id);
   const model = current !== HUMAN && current.engine === "network" && bot.engine === "network" ? current.model : undefined;
   return model === undefined ? bot : { ...bot, model };
+}
+
+/** What a seat holds: a person or its bot, and the gallery model a network bot searches with (undefined: the main one). */
+export interface SeatState {
+  readonly human: boolean;
+  /** The bot shown when the seat is not a person, without its model. */
+  readonly bot: Bot;
+  readonly model: string | undefined;
+}
+
+/** The seat after choosing an entry of its select, or null for a Custom entry (nothing changes). A person holds no model. */
+export function seatAfterChoice(state: SeatState, choice: string): SeatState | null {
+  const next = playerAfterChoice(state.human ? HUMAN : withModel(state.bot, state.model), choice);
+  if (next === null) return null;
+  return next === HUMAN ? { human: true, bot: state.bot, model: undefined } : { human: false, bot: withModel(next, undefined), model: next.model };
 }

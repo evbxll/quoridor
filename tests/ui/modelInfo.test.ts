@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { type ModelCard, parseCard } from "../../src/model/card";
 import { botLabel, botOf, botSummary, estimateMs, MEASURED_MODEL, modelName, presetOf, sameBot, setModelLabel, timeModelOf, withModel } from "../../src/ui/bots";
-import { buildModelOptions, describeModelStatus, disabledReason, extraModels, MAIN_MODEL, modelTitle, offSizeNote, strengthDetail, strengthLine } from "../../src/ui/modelInfo";
+import { buildModelOptions, choosableModels, describeModelStatus, disabledReason, extraModels, MAIN_MODEL, modelTitle, offSizeNote, strengthDetail, strengthLine } from "../../src/ui/modelInfo";
 import { cardJson, fcCardJson } from "../helpers/cards";
 
 const ladder = (elo: number): Record<string, unknown> => ({ ...(cardJson("x").strength as Record<string, unknown>[])[0], elo, interval: [elo - 37.5, elo + 37.5] });
@@ -36,7 +36,16 @@ describe("the Model select's options", () => {
     const at7 = options(7);
     expect(at7.find((o) => o.value === "s9-fpu-basic-g112")).toEqual({ value: "s9-fpu-basic-g112", label: "Fully connected (9x9 only)", disabled: true });
     expect(at7.filter((o) => o.disabled).map((o) => o.value)).toEqual(["s9-fpu-basic-g112"]);
-    expect(options(11).find((o) => o.value === "s9-conv-paths-g050")!.disabled).toBe(false);
+    expect(options(11, GALLERY, { "s9-conv-paths-g050": CARDS["s9-conv-paths-g050"]! }).find((o) => o.value === "s9-conv-paths-g050")!.disabled).toBe(false);
+  });
+
+  it("offers one model per architecture other than the main one: the last listed, so older generations of the main network never show", () => {
+    expect(options(9).map((o) => o.value)).toEqual([MAIN_MODEL, "s9-fpu-basic-g112"]);
+    expect(options(9, ["s9-conv-paths-g010", "s9-conv-paths-g050", "s9-conv-paths-g105"])).toEqual([]);
+    const fc2 = parseCard({ ...fcCardJson("s9-fpu-basic-g200"), source: { run: "s9-fpu-basic", generation: 200 } });
+    const two = { ...CARDS, "s9-fpu-basic-g200": fc2 };
+    expect(options(9, ["s9-fpu-basic-g112", "s9-fpu-basic-g200", "s9-conv-paths-g105"], two).map((o) => o.value)).toEqual([MAIN_MODEL, "s9-fpu-basic-g200"]);
+    expect(choosableModels("s9-conv-paths-g105", ["unread", "s9-conv-paths-g050"], (id) => CARDS[id] ?? null)).toEqual(["unread"]);
   });
 
   it("names a conv model whose card leaves out a size as not offered there", () => {

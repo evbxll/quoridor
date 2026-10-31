@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { botOf, PRESETS, withModel } from "../../src/ui/bots";
 import { HUMAN } from "../../src/ui/controller";
-import { choiceOf, CUSTOM, ENGINE_GROUPS, playerAfterChoice } from "../../src/ui/seatChoice";
+import { choiceOf, CUSTOM, ENGINE_GROUPS, playerAfterChoice, seatAfterChoice, type SeatState } from "../../src/ui/seatChoice";
 
 const GALLERY_MODEL = "s9-fpu-basic-g112";
 
@@ -48,5 +48,24 @@ describe("choosing an entry", () => {
   it("changes nothing for a Custom entry, which only names the current settings", () => {
     expect(playerAfterChoice(botOf("strong"), "custom-network")).toBeNull();
     expect(playerAfterChoice(HUMAN, "custom-heuristic")).toBeNull();
+  });
+});
+
+describe("a seat's state after a choice", () => {
+  const max: SeatState = { human: false, bot: botOf("max"), model: GALLERY_MODEL };
+
+  it("drops a gallery model on the way to a heuristic or a person, so a network chosen later is the main one", () => {
+    const normal = seatAfterChoice(max, "normal")!;
+    expect(normal).toEqual({ human: false, bot: botOf("normal"), model: undefined });
+    expect(seatAfterChoice(normal, "strong")).toEqual({ human: false, bot: botOf("strong"), model: undefined });
+    const person = seatAfterChoice(max, HUMAN)!;
+    expect(person.human).toBe(true);
+    expect(person.model).toBeUndefined();
+    expect(seatAfterChoice(person, "max")!.model).toBeUndefined();
+  });
+
+  it("keeps it from one network level to another, and changes nothing for Custom", () => {
+    expect(seatAfterChoice(max, "strong")).toEqual({ human: false, bot: botOf("strong"), model: GALLERY_MODEL });
+    expect(seatAfterChoice(max, "custom-network")).toBeNull();
   });
 });

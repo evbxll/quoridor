@@ -30,8 +30,21 @@ export interface OptionInput {
   readonly cardFailed: (id: string) => boolean;
 }
 
-/** The gallery models a seat can choose besides the main bot, in the published order. */
+/** The gallery models besides the main bot, in the published order (their cards are read to name and sort them). */
 export const extraModels = (mainId: string | null, gallery: readonly string[]): string[] => gallery.filter((id) => id !== mainId);
+
+/**
+ * The gallery models a seat can choose: one per architecture other than the main model's, the last listed where the
+ * gallery lists several of one (the gallery is in publishing order, so that is the newest). A model whose card is not
+ * read yet is kept until its architecture is known.
+ */
+export function choosableModels(mainId: string | null, gallery: readonly string[], card: (id: string) => ModelCard | null): string[] {
+  const headOf = (id: string): string | null => card(id)?.network.head ?? null;
+  const mainHead = mainId === null ? null : headOf(mainId);
+  const extras = extraModels(mainId, gallery);
+  const newest = new Map(extras.flatMap((id) => (headOf(id) === null ? [] : [[headOf(id), id] as const])));
+  return extras.filter((id) => headOf(id) === null || (headOf(id) !== mainHead && newest.get(headOf(id)) === id));
+}
 
 const eloText = (elo: number): string => `${elo < 0 ? "-" : "+"}${Math.abs(Math.round(elo))}`;
 
@@ -55,12 +68,12 @@ export function disabledReason(card: ModelCard | null, size: number): string | n
 }
 
 /**
- * The entries of a seat's Network select: the main network first, then every gallery model but the main one in the published
- * order. A model that cannot play the board is disabled with the reason in its label. Fewer than two entries mean there is
+ * The entries of a seat's Network select: the main network first, then one gallery model per other architecture
+ * (`choosableModels`), in the published order. A model that cannot play the board is disabled with the reason in its label. Fewer than two entries mean there is
  * nothing to choose, so the select is not shown: the list is then empty. A gallery model is not selectable until its card is read.
  */
 export function buildModelOptions(input: OptionInput): ModelOption[] {
-  const extras = extraModels(input.mainId, input.gallery);
+  const extras = choosableModels(input.mainId, input.gallery, input.card);
   if (extras.length === 0) return [];
   const mainCard = input.mainId === null ? null : input.card(input.mainId);
   const options: ModelOption[] = [{ value: MAIN_MODEL, label: mainCard === null || input.mainId === null ? "Main network" : modelTitle(input.mainId, mainCard), disabled: false }];
