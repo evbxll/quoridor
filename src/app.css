@@ -420,3 +420,17 @@ button.theme-toggle svg { width: 20px; height: 20px; stroke-linecap: round; }
 .tick::before { content: ""; position: absolute; inset: 4px; z-index: -1; background: var(--p1); clip-path: polygon(0 0, 65% 0, 100% 50%, 65% 100%, 0 100%); }
 .tick.p2::before { background: var(--p2); }
 .eval-ticks.right .tick::before { clip-path: polygon(35% 0, 100% 0, 100% 100%, 35% 100%, 0 50%); }
+
+/* About the bots: plain words, then the network drawn top to bottom from its arch.json, with the same steps as a list. */
+.about p { margin: 0 0 8px; font-size: 14px; }
+.about h3 { margin: 12px 0 4px; font-size: 14px; font-weight: 650; }
+.arch-diagram { display: block; width: 100%; max-width: 300px; height: auto; margin: 4px auto 8px; }
+.arch-box { fill: var(--surface); stroke: var(--muted); stroke-width: 1.5; }
+.arch-box.head { stroke: var(--accent); stroke-width: 2; }
+.arch-block { fill: var(--eval-p1); stroke: var(--text); stroke-width: 1; }
+.arch-block.pooling { fill: var(--accent); }
+.arch-flow { stroke: var(--muted); stroke-width: 2; }
+.arch-label { fill: var(--text); font-size: 13px; text-anchor: middle; dominant-baseline: central; }
+.arch-label.small { fill: var(--muted); font-size: 12px; }
+.arch-steps { margin: 0 0 8px; padding-left: 20px; font-size: 14px; }
+.arch-steps li + li { margin-top: 4px; }

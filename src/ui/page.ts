@@ -26,6 +26,7 @@ import { dropUnplayable, droppedSentence, SeatModels, setSeatPlayers } from "./s
 import { supportsSize } from "../model/card";
 import { statusIsMuted, statusText } from "./status";
 import { describeTarget, findAction, moveCursor } from "./targets";
+import { showArchitecture } from "./view/about";
 import { drawAnalysis } from "./view/analysis";
 import { BoardView } from "./view/board";
 import { drawControls } from "./view/controls";
@@ -165,6 +166,14 @@ export function startPage(port: SearchPort, network: NetworkSource): GameControl
     };
   };
   /** False once the model index is read and publishes no network at any size; true while that is not known yet. */
+  /** The "About the bots" card draws the network once, the one that plays 9 × 9 (or the board on the page when none does). */
+  let architectureAsked = false;
+  const askForArchitecture = (): void => {
+    const main = models.mainIdFor(9) ?? models.mainIdFor(controller.size);
+    if (architectureAsked || main === null) return;
+    architectureAsked = true;
+    void showArchitecture(network.env, main);
+  };
   const networkPublished = (): boolean => models.publishesAny !== false;
   /** The evaluation is shown: a network is published, and either two bots play or the viewer left "Evaluation bar" on in the View menu. */
   const controlsNow = () => visibleControls(controller.players, { networkPublished: networkPublished(), showEvaluation: showEval.checked, gameOver: controller.result !== null });
@@ -293,6 +302,7 @@ export function startPage(port: SearchPort, network: NetworkSource): GameControl
     }
     controller.setNetworkReady(state.status === "ready");
     askForCards();
+    askForArchitecture();
     reconcileModels();
     syncSeatModels();
     analysis.update();

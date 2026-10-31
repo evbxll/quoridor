@@ -197,6 +197,19 @@
           </div>
         </section>
 
+        <section id="about" class="card about" aria-labelledby="about-title">
+          <h2 id="about-title">About the bots</h2>
+          <p><b>Beginner and Normal</b> search ahead using shortest-path distances: how far each pawn is from its goal row, and how walls change that.</p>
+          <p><b>Strong and Max</b> search ahead with a neural network, a <b>convolutional</b> one. It reads the position and gives every move a score, and the whole position a chance to win.</p>
+          <div id="arch" class="arch" hidden>
+            <svg id="arch-diagram" class="arch-diagram" aria-hidden="true" focusable="false"></svg>
+            <ol id="arch-steps" class="arch-steps" aria-label="The network, from input to outputs"></ol>
+            <p id="arch-size" class="hint"></p>
+          </div>
+          <h3>What is a convolutional network?</h3>
+          <p>It looks at the board through a small window, 3 × 3 squares, that slides over every square, so a pattern it knows in one corner it knows anywhere. Each layer looks at the layer before it, so deeper layers see further: a wall several squares away, or a race between the two pawns. As the window does not depend on the size of the board, one network plays every board size.</p>
+        </section>
+
         <details id="how-to-move" class="card" hidden>
           <summary>How to move</summary>
           <p id="board-help" class="hint">

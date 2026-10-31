@@ -409,7 +409,6 @@
   "parameters": 2474767,
   "notes": [
     "Parameter counts include BatchNorm; the exported ONNX folds BatchNorm into the convolutions.",
-    "The two walls-left input planes are fractions of the starting walls: the network divides them by the starting walls of the board size, GameConfig.get_wall_count (round(5x(x-1)/36) up to 9x9, x + 1 above), at the input.",
     "The residual tower holds 96% of the parameters.",
     "Size-generic: the same weights play every board size."
   ]
