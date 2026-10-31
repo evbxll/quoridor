@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { closePopoverOnEscapeOrOutside } from "../../src/ui/dom";
+import { closePopoverOnEscapeOrOutside, opensBelow, openWhereItFits } from "../../src/ui/dom";
 
 /** The few parts of a `<details>` and its document the popover handling touches. */
 function setup() {
@@ -44,5 +44,35 @@ describe("closePopoverOnEscapeOrOutside", () => {
     fire("pointerdown", { target: outside });
     expect(details.open).toBe(false);
     expect(focused()).toBe(false);
+  });
+});
+
+describe("openWhereItFits", () => {
+  /** A View menu whose summary's top is `top` px from the window's top, with a popover `height` px tall. */
+  function view(top: number, height: number) {
+    let toggle = (): void => {};
+    const classes = new Set<string>();
+    const details = {
+      open: false,
+      addEventListener: (_type: string, handler: () => void) => (toggle = handler),
+      getBoundingClientRect: () => ({ top }),
+      classList: { toggle: (name: string, on: boolean) => (on ? classes.add(name) : classes.delete(name)) },
+    };
+    openWhereItFits(details as unknown as HTMLDetailsElement, { offsetHeight: height } as HTMLElement);
+    return { details, open: () => ((details.open = true), toggle()), below: () => classes.has("below") };
+  }
+
+  it("opens upward when the popover fits above the control, and downward when it would cross the top of the window", () => {
+    const roomy = view(400, 150);
+    roomy.open();
+    expect(roomy.below()).toBe(false);
+    const cramped = view(80, 150);
+    cramped.open();
+    expect(cramped.below()).toBe(true);
+  });
+
+  it("counts the gap between the control and the popover", () => {
+    expect(opensBelow(156, 150)).toBe(false);
+    expect(opensBelow(155, 150)).toBe(true);
   });
 });

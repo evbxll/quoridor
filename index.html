@@ -63,10 +63,10 @@
           </section>
 
           <section class="card game" aria-label="Game controls">
-            <div class="row new-row" role="group" aria-label="New game">
+            <div class="row" role="group" aria-label="New game">
               <details id="view" class="view">
                 <summary>View</summary>
-                <div class="view-pop" role="group" aria-label="View options">
+                <div id="view-pop" class="view-pop" role="group" aria-label="View options">
                   <label class="check"><input id="show-eval" type="checkbox" checked aria-describedby="show-eval-note" /> Evaluation bar</label>
                   <p id="show-eval-note" class="hint"></p>
                   <label class="check"><input id="analysis-toggle" type="checkbox" aria-describedby="analysis-off" /> Best moves, under the move list</label>
@@ -111,19 +111,6 @@
         <!-- Beside the board on a wide window, under it on a narrow one: the players, then the moves. -->
         <div class="side">
           <section class="card players" aria-label="Players">
-            <div id="seat-p2" class="seat">
-              <span class="disc p2" aria-hidden="true">2</span>
-              <div class="seat-body">
-                <div class="seat-head">
-                  <label for="player-p2">Player 2</label>
-                  <span id="walls-p2" class="walls"></span>
-                </div>
-                <select id="player-p2" class="player"></select>
-                <div id="bot-p2" class="bot-settings" role="group" aria-label="Player 2 bot settings" hidden></div>
-                <p id="note-p2" class="seat-note"></p>
-              </div>
-            </div>
-            <button id="swap" class="swap quiet" type="button"><span aria-hidden="true">&#8645;</span> Swap sides</button>
             <div id="seat-p1" class="seat">
               <span class="disc p1" aria-hidden="true">1</span>
               <div class="seat-body">
@@ -134,6 +121,19 @@
                 <select id="player-p1" class="player"></select>
                 <div id="bot-p1" class="bot-settings" role="group" aria-label="Player 1 bot settings" hidden></div>
                 <p id="note-p1" class="seat-note"></p>
+              </div>
+            </div>
+            <button id="swap" class="swap quiet" type="button"><span aria-hidden="true">&#8645;</span> Swap sides</button>
+            <div id="seat-p2" class="seat">
+              <span class="disc p2" aria-hidden="true">2</span>
+              <div class="seat-body">
+                <div class="seat-head">
+                  <label for="player-p2">Player 2</label>
+                  <span id="walls-p2" class="walls"></span>
+                </div>
+                <select id="player-p2" class="player"></select>
+                <div id="bot-p2" class="bot-settings" role="group" aria-label="Player 2 bot settings" hidden></div>
+                <p id="note-p2" class="seat-note"></p>
               </div>
             </div>
           </section>

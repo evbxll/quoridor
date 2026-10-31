@@ -140,7 +140,7 @@ select {
    window's height leaves once the header, the status line and the controls are counted (--chrome), so all of them fit
    on the first screen; it never goes under 280px, so a very short window scrolls instead of shrinking the board away. */
 .layout {
-  --chrome: 320px;
+  --chrome: calc(110px + 13rem); /* 318px at 16px text; grows with the text, as the status line and controls do */
   --board-h: max(280px, calc(100vh - var(--chrome)));
   display: flex; flex-direction: column; gap: 16px;
   max-width: 1440px; margin: 0 auto; padding: 6px 16px 24px;
@@ -169,17 +169,21 @@ select {
 
 /* The game controls, right under the board: the View menu, the board size and New game, then Start, Step and Speed
    (or Undo for a person). In a narrow card Start takes a line of its own; in a wider one the three share a line. */
-.game { container-type: inline-size; display: flex; flex-direction: column; gap: 8px; padding: 10px 12px; }
+.game { container-type: inline-size; display: flex; flex-direction: column; gap: 8px; }
 .game .row { min-height: 36px; }
 .play-row { display: flex; flex-direction: column; gap: 8px; }
 .bot-controls { display: flex; flex-direction: column; gap: 8px; }
 .person-controls { align-self: start; }
 /* Start, Pause and Resume is the main control of a bot game: large, on one line, at one size whatever it says, so nothing beside or below it moves. */
 .run { width: 100%; height: 3.25rem; padding: 0 14px; font-size: 1.125rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-@container (min-width: 440px) {
-  .bot-controls { flex-direction: row; align-items: center; }
-  .run { flex: 1 1 auto; width: auto; height: 2.75rem; }
-  .step-row { flex: none; flex-wrap: nowrap; }
+/* One column: by the card's width. Two columns: only on a window wide and tall enough that the board's column always
+   has that width, so the reserved height (--chrome) knows which of the two the controls are. */
+@media (max-width: 899px), (min-width: 60em) and (min-height: 42em) {
+  @container (min-width: 27.5rem) {
+    .bot-controls { flex-direction: row; align-items: center; }
+    .run { flex: 1 1 auto; width: auto; height: 2.75rem; }
+    .step-row { flex: none; flex-wrap: nowrap; }
+  }
 }
 /* The View menu's choices open in a popover out of the page's flow, upward over the board, so opening it moves nothing and it never runs off the bottom of the window. */
 .view { position: relative; }
@@ -190,20 +194,25 @@ select {
   display: flex; flex-direction: column; gap: 2px; padding: 10px 12px;
   background: var(--card); border: 1px solid var(--line); border-radius: 12px; box-shadow: 0 6px 20px var(--shadow);
 }
+/* With no room above (the controls at the top of the window), it opens downward instead. */
+.view.below .view-pop { bottom: auto; top: calc(100% + 6px); }
 .view-pop .hint { padding-left: 24px; margin-bottom: 4px; }
 .view-pop label:has(input:disabled) { color: var(--muted); }
 
 .side { container: side / inline-size; display: flex; flex-direction: column; gap: 12px; min-width: 0; }
 /* The games and the notes on the bots share the page's full width under the game: side by side when there is room, the games wider. */
 .more { display: flex; flex-wrap: wrap; gap: 12px; align-items: flex-start; }
-.more > .games { flex: 3 1 600px; min-width: 0; }
+/* The games take at least the width their table needs (760px inside the card); the notes go beside them only when there is room for both. */
+.more > .games { flex: 3 1 794px; min-width: 0; }
 .more > .about { flex: 2 1 400px; min-width: 0; }
 
 /* A wide window: the board and its controls on the left, the players and moves beside them, the games and notes under both.
    The left column is as wide as the board, which is sized from the window's height and leaves at least 360px beside it. */
 @media (min-width: 900px) {
   .layout {
-    --chrome: 252px; /* header 60, status 46, controls 110, gaps 18, and a margin under it all */
+    /* Everything in the window but the board: the header above the column, the status line, the controls (Start on a
+       line of its own here) and a margin. Measured at 16px and 24px text: paddings and gaps stay, the rest grows with the text. */
+    --chrome: calc(40px + 16.375rem);
     --board-w: calc(100vw - 48px - 28px - 360px - 64px - 20px); /* page padding, gap, the side column's least width, the eval bar, a scroll bar */
     gap: 24px; padding: 8px 24px 32px;
   }
@@ -211,9 +220,13 @@ select {
 }
 /* ... and tall enough: the left column stays in view while the column beside it scrolls, until the games below take the
    page. It is never taller than the window (the board is sized from the window's height), so nothing in it is out of
-   reach. A short window just scrolls. */
-@media (min-width: 900px) and (min-height: 560px) {
+   reach. A short window (under 37em, 592px at 16px text) just scrolls. */
+@media (min-width: 900px) and (min-height: 37em) {
   .play { position: sticky; top: 8px; }
+}
+/* A large window: Start, Step and Speed share one line, so less height is reserved. */
+@media (min-width: 900px) and (min-width: 60em) and (min-height: 42em) {
+  .layout { --chrome: calc(124px + 7.875rem); }
 }
 
 /* Eval bar: player 1's share rises from the bottom (player 1's side of the board) in a
@@ -257,7 +270,7 @@ select {
 .card { background: var(--card); border: 1px solid var(--line); border-radius: 14px; padding: 14px 16px; }
 .card h2 { margin: 0 0 8px; font-size: 0.875rem; font-weight: 650; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); }
 
-/* Players, in board order: player 2 (top) above player 1 (bottom). The side to move is outlined in its colour. */
+/* Players, player 1 first (it moves first), then player 2. The side to move is outlined in its colour. */
 .players { display: flex; flex-direction: column; gap: 4px; }
 .seat {
   display: grid; grid-template-columns: 30px minmax(0, 1fr); gap: 12px; align-items: center;
@@ -307,7 +320,7 @@ select {
 .walls { color: var(--muted); font-size: 0.875rem; white-space: nowrap; font-variant-numeric: tabular-nums; }
 .walls b { color: var(--text); font-size: 0.9375rem; }
 .swap { align-self: center; font-size: 0.875rem; margin: -2px 0; }
-/* A wide column: the two seats side by side, Swap sides between them, so the moves come up beside the board. */
+/* A wide column: the two seats side by side, player 1 on the left, Swap sides between them, so the moves come up beside the board. */
 @container side (min-width: 600px) {
   .players { display: grid; grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr); align-items: start; gap: 4px; }
   .swap { max-width: 6.5em; margin: 12px 0 0; }
@@ -349,15 +362,16 @@ select {
 .games h2 { margin: 0; }
 .tally { margin: 0; padding-left: 18px; font-size: 0.875rem; }
 .games-table { width: 100%; border-collapse: collapse; font-size: 0.875rem; font-variant-numeric: tabular-nums; }
-.games-table th, .games-table td { padding: 4px 6px; text-align: left; vertical-align: top; border-bottom: 1px solid var(--line); overflow-wrap: anywhere; }
+.games-table th, .games-table td { padding: 4px 6px; text-align: left; vertical-align: top; border-bottom: 1px solid var(--line); }
 .games-table thead th { color: var(--muted); font-weight: 650; }
 .games-table a { display: inline-block; min-height: 24px; min-width: 24px; line-height: 24px; color: var(--text); font-weight: 600; text-decoration: underline; text-underline-offset: 3px; }
 .games-table .label { display: none; color: var(--muted); }
-@container (max-width: 640px) {
+/* The table only where its columns fit without breaking a word; under that, each game is a block of lines that may break anywhere. */
+@container (max-width: 759px) {
   .games-table thead { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
   .games-table tbody, .games-table tr { display: block; }
   .games-table tr { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 0 8px; padding: 6px 0; border-bottom: 1px solid var(--line); }
-  .games-table th, .games-table td { display: block; padding: 0; border: none; grid-column: 1; }
+  .games-table th, .games-table td { display: block; padding: 0; border: none; grid-column: 1; overflow-wrap: anywhere; }
   .games-table th[scope="row"] { font-weight: 650; }
   .games-table td.open { grid-column: 2; grid-row: 1; }
   .games-table .label { display: inline; }

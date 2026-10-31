@@ -31,3 +31,19 @@ export function closePopoverOnEscapeOrOutside(details: HTMLDetailsElement, doc: 
     if (details.open && target !== null && !details.contains(target)) details.open = false;
   });
 }
+
+/** The room between a popover and the control it opens from, in px (as in the stylesheet). */
+const POP_GAP = 6;
+
+/** Whether a popover `height` px tall, opening upward from a control whose top is `top` px from the window's top, would cross the top of the window. */
+export const opensBelow = (top: number, height: number): boolean => top - POP_GAP - height < 0;
+
+/**
+ * Lets a `<details>` popover that opens upward open downward instead (the class "below") when there is no room
+ * above it in the window. The choice is made each time it opens, from where it then is.
+ */
+export function openWhereItFits(details: HTMLDetailsElement, pop: HTMLElement): void {
+  details.addEventListener("toggle", () => {
+    if (details.open) details.classList.toggle("below", opensBelow(details.getBoundingClientRect().top, pop.offsetHeight));
+  });
+}

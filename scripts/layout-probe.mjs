@@ -9,8 +9,11 @@
 // steps two Beginners through their first moves and checks that neither the controls nor the move list
 // and the cards after it move as the moves come in, and plays two Beginners with auto-play on and checks
 // the controls during the countdown to the next game.
-// Where the board's column stays in view (a wide, tall window), it last scrolls the column beside the
-// board from top to bottom and fails if the board or its controls leave the window at any step.
+// Where the board's column stays in view (a wide, tall window), it scrolls the column beside the
+// board from top to bottom and fails if the board or its controls leave the window at any step. It
+// opens the View menu with the controls at the top and at the bottom of the window and fails if the
+// menu crosses an edge of the window. Last, in the light theme, it loads the page with 12 games kept
+// and fails if any word on the page is broken across two lines or a games cell is narrower than its text.
 //
 // Usage:
 //   npm run build && npx vite preview --port 4318 --strictPort   (in another terminal)
@@ -114,7 +117,9 @@ class Page {
 /** Starts the browser and opens one page target. */
 async function launch() {
   const profile = mkdtempSync(join(tmpdir(), "layout-probe-"));
-  const browser = spawn(browserPath, ["--headless=new", `--remote-debugging-port=${port}`, `--user-data-dir=${profile}`, "--no-first-run", "--no-default-browser-check", "about:blank"], { stdio: "ignore" });
+  // No scroll bar takes room: a whole-page screenshot lays the page out for a moment without one, and a measurement
+  // taken just after it would see the page a scroll bar wider.
+  const browser = spawn(browserPath, ["--headless=new", `--remote-debugging-port=${port}`, `--user-data-dir=${profile}`, "--no-first-run", "--no-default-browser-check", "--hide-scrollbars", "about:blank"], { stdio: "ignore" });
   let target = null;
   for (let tries = 0; tries < 100 && target === null; tries++) {
     await sleep(100);
@@ -325,6 +330,65 @@ const SCROLL = `(async () => {
   return { window: innerHeight, steps };
 })()`;
 
+/** The View menu opened with its control at the top of the window, then at the bottom: where the menu lands each time. */
+const VIEW_MENU = `(async () => {
+  ${IN_PAGE}
+  const view = document.getElementById("view");
+  const pop = document.getElementById("view-pop");
+  const places = [];
+  for (const block of ["start", "end"]) {
+    view.scrollIntoView({ block });
+    await settle();
+    view.querySelector("summary").click();
+    await settle();
+    const r = pop.getBoundingClientRect();
+    places.push({ block, top: Math.round(r.top), bottom: Math.round(r.bottom), inView: r.top >= 0 && r.bottom <= innerHeight });
+    view.querySelector("summary").click();
+    await settle();
+  }
+  scrollTo(0, 0);
+  await settle();
+  return places;
+})()`;
+
+/** Games kept for the text check: enough that the Games card shows its first page of rows, with the longest names. */
+const KEPT_GAMES = JSON.stringify({
+  v: 1,
+  games: Array.from({ length: 12 }, (_, i) => ({
+    id: i + 1,
+    size: [9, 7, 11][i % 3],
+    p1: i % 4 === 0 ? { kind: "human" } : { kind: "bot", engine: "heuristic", simulations: 1600, vary: true },
+    p2: { kind: "bot", engine: "network", simulations: 32, vary: false },
+    winner: i % 2 ? "p1" : "p2",
+    reason: "goal",
+    moves: "e2.e8.e3.e7",
+    seatChanged: i === 5,
+  })),
+});
+
+/** Words broken across two lines anywhere on the page, and games cells narrower than their text. */
+const TEXT_CHECK = `(() => {
+  const broken = [];
+  const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
+  for (let node = walker.nextNode(); node !== null; node = walker.nextNode()) {
+    const parent = node.parentElement;
+    if (parent === null || parent.closest("svg, script, style, .sr-only") !== null || parent.getClientRects().length === 0) continue;
+    // The table's header row, kept for screen readers in a 1px box while the games are blocks.
+    const head = parent.closest("thead");
+    if (head !== null && getComputedStyle(head).position === "absolute") continue;
+    for (const word of node.textContent.matchAll(/[^\\s\\-\\u2013\\u2014/]{2,}/g)) {
+      const range = document.createRange();
+      range.setStart(node, word.index);
+      range.setEnd(node, word.index + word[0].length);
+      const lines = new Set([...range.getClientRects()].filter((r) => r.width > 0).map((r) => Math.round(r.bottom)));
+      if (lines.size > 1) broken.push(word[0] + " (" + (parent.id || parent.className || parent.tagName) + ")");
+    }
+  }
+  const shownHead = (el) => el.closest("thead") === null || getComputedStyle(el.closest("thead")).position !== "absolute";
+  const cells = [...document.querySelectorAll("#games th, #games td, #games a")].filter((el) => el.getClientRects().length > 0 && shownHead(el) && el.scrollWidth > el.clientWidth + 1).map((el) => el.textContent.trim().slice(0, 30));
+  return { broken, cells, games: document.querySelectorAll("#games-rows tr").length, table: getComputedStyle(document.querySelector(".games-table thead")).position !== "absolute" };
+})()`;
+
 /**
  * Loads the page fresh at a width and theme, waiting for the service worker's one reload and the first drawing.
  * @param {Page} page
@@ -398,7 +462,6 @@ async function main() {
           const at = await page.evaluate("window.probeAt").catch(() => "?");
           throw new Error(`${tag}: ${error.message}, after "${at}"`);
         });
-        // The edits leave every seat disclosure open.
         await shoot(page, `${tag}-settings-open`);
         /** @type {{before: Rects, after: {moves: number, at: Rects}[]}} */
         const first = await page.evaluate(FIRST_MOVES);
@@ -429,6 +492,20 @@ async function main() {
           const steps = scroll.steps.map((step) => `${step.scrollY}: board ${step.board.join("-")}, column ${step.column.join("-")}`).join("; ");
           console.log(`${tag}: scrolling the ${scroll.window}px window, ${out.length === 0 ? "the board and its controls stayed in view" : `${out.length} steps left them out of view`} (${steps})`);
           failures += out.length;
+        }
+        /** @type {{block: string, top: number, bottom: number, inView: boolean}[]} */
+        const menu = await page.evaluate(VIEW_MENU);
+        const offScreen = menu.filter((place) => !place.inView);
+        console.log(`${tag}: the View menu ${offScreen.length === 0 ? "opened inside the window" : "crossed an edge of the window"} (${menu.map((place) => `controls at the ${place.block}: ${place.top} to ${place.bottom}`).join("; ")})`);
+        failures += offScreen.length;
+        if (theme === "light") {
+          await page.evaluate(`localStorage.setItem("quoridor.history.v1", ${JSON.stringify(KEPT_GAMES)})`);
+          await load(page, size, theme);
+          /** @type {{broken: string[], cells: string[], games: number, table: boolean}} */
+          const text = await page.evaluate(TEXT_CHECK);
+          await shoot(page, `${tag}-games`);
+          console.log(`${tag}: ${text.games} games shown ${text.table ? "as a table" : "as blocks"}; ${text.broken.length === 0 ? "no word broken across lines" : `broken words ${JSON.stringify(text.broken.slice(0, 8))}`}; ${text.cells.length === 0 ? "no cell narrower than its text" : `cells narrower than their text ${JSON.stringify(text.cells.slice(0, 8))}`}`);
+          failures += (text.games >= 10 ? 0 : 1) + text.broken.length + text.cells.length;
         }
       }
     }

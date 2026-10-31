@@ -37,6 +37,11 @@ describe("page order", () => {
     }
   });
 
+  it("puts player 1 first among the players, then Swap sides, then player 2", () => {
+    expect(at('id="seat-p1"')).toBeLessThan(at('id="swap"'));
+    expect(at('id="swap"')).toBeLessThan(at('id="seat-p2"'));
+  });
+
   it("puts the games and the notes on the bots under the game, across the page", () => {
     const side = at('class="side"');
     const more = at('class="more"');
@@ -48,7 +53,7 @@ describe("page order", () => {
 describe("the board's column", () => {
   it("stays in view while the page scrolls only on a wide and tall window", () => {
     expect(css.match(/position: sticky/g)).toHaveLength(1);
-    expect(css).toMatch(/@media \(min-width: 900px\) and \(min-height: 560px\) \{\s*\.play \{ position: sticky; top: 8px; \}/);
+    expect(css).toMatch(/@media \(min-width: 900px\) and \(min-height: 37em\) \{\s*\.play \{ position: sticky; top: 8px; \}/);
   });
 
   it("sizes the board from the window's height as well as the column's width, so the column fits the window", () => {

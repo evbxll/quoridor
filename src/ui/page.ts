@@ -4,7 +4,7 @@ import { Analysis } from "./analysis";
 import { copyLink, openRecordAt, syncAddress } from "./address";
 import { liveAnnouncer } from "./announce";
 import { botLabel, botOf, capFor, capitalized, modelName, setModelLabel } from "./bots";
-import { closePopoverOnEscapeOrOutside, element, onPress } from "./dom";
+import { closePopoverOnEscapeOrOutside, element, onPress, openWhereItFits } from "./dom";
 import { AutoControls } from "./autoControls";
 import { type AutoHost, AutoPlay } from "./autoplay";
 import { GamesCard } from "./gamesCard";
@@ -68,6 +68,7 @@ export function startPage(port: SearchPort, network: NetworkSource): GameControl
   showEval.checked = savedShowEval();
   closePopoverOnEscapeOrOutside(element("network", HTMLDetailsElement), document);
   closePopoverOnEscapeOrOutside(element("view", HTMLDetailsElement), document);
+  openWhereItFits(element("view", HTMLDetailsElement), element("view-pop", HTMLElement));
   const tooltips = new Tooltips(document);
 
   const preview = new WallPreview();
