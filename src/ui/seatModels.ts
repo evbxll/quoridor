@@ -1,7 +1,7 @@
 import type { ModelState } from "../model/manager";
 import type { Players, Side } from "./controller";
 import { HUMAN } from "./controller";
-import { withModel } from "./bots";
+import { capitalized, withModel } from "./bots";
 
 /** Whether the gallery offers a model at a board size. */
 export type Offered = (id: string, size: number) => boolean;
@@ -32,7 +32,7 @@ export function dropUnplayable(players: Players, offered: Offered, size: number)
 /** One sentence for every seat that lost its model, or null if none did. */
 export function droppedSentence(dropped: readonly Dropped[], size: number, nameOf: (id: string) => string): string | null {
   if (dropped.length === 0) return null;
-  const parts = dropped.map(({ side, model }) => `${nameOf(model)} is not offered on ${size} × ${size}, so player ${side === "p1" ? 1 : 2} plays the main network`);
+  const parts = dropped.map(({ side, model }) => `${capitalized(nameOf(model))} is not offered on ${size} × ${size}, so player ${side === "p1" ? 1 : 2} plays the main network`);
   return `${parts.join("; ")}.`;
 }
 

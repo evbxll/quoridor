@@ -79,3 +79,24 @@ export function readSetup(text: string | null, fallback: Players): Setup | null 
   if (linked === null) return null;
   return { size, players: { p1: linked.seats.p1 ?? fallback.p1, p2: linked.seats.p2 ?? fallback.p2 } };
 }
+
+/** The person takes the first move: a lone person seated second, against a bot, is moved to the first seat. */
+export const personFirst = (players: Players): Players => (players.p1 !== HUMAN && players.p2 === HUMAN ? { p1: HUMAN, p2: players.p1 } : players);
+
+/**
+ * The seats a link sets, with `defaults`' seat for each it could not read. On a position with no moves yet the person
+ * takes the first move (`personFirst`); a game in progress keeps its seats as the link has them.
+ */
+export function seatsForLink(linked: LinkSeats, defaults: Players, moves: number): Players {
+  const players = { p1: linked.seats.p1 ?? defaults.p1, p2: linked.seats.p2 ?? defaults.p2 };
+  return moves === 0 ? personFirst(players) : players;
+}
+
+/** Whether the address bar already shows the game and seats on the page, so a change of address needs no opening. */
+export const isOwnAddress = (hash: string, gameHash: string, players: Players): boolean => hash === addressOf(gameHash, players);
+
+/** The kept setup after the person sets one seat. Only the person's own changes reach it: never a link, never a seat the page swapped in itself. */
+export const keptAfterSeat = (kept: Setup, side: Side, player: Player): Setup => ({ size: kept.size, players: { ...kept.players, [side]: player } });
+
+/** The kept setup after the person swaps the sides. */
+export const keptAfterSwap = (kept: Setup): Setup => ({ size: kept.size, players: { p1: kept.players.p2, p2: kept.players.p1 } });

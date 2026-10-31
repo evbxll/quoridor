@@ -46,3 +46,37 @@ export function savedStorage(): StorageLike | null {
     return null;
   }
 }
+
+const NOTE_KEY = "quoridor.note";
+/** How long a kept note is still worth saying: the page's one reload for cross-origin isolation takes well under this. */
+const NOTE_MS = 15_000;
+
+/** The tab's sessionStorage, or null where it is blocked. */
+export function sessionStore(): Pick<Storage, "getItem" | "setItem" | "removeItem"> | null {
+  try {
+    return sessionStorage;
+  } catch {
+    return null;
+  }
+}
+
+/** Keeps a sentence for the page that follows a reload, so it is said there too. */
+export function keepNote(text: string, now: number, store = sessionStore()): void {
+  try {
+    store?.setItem(NOTE_KEY, JSON.stringify({ text, at: now }));
+  } catch {
+    // The sentence was said once already.
+  }
+}
+
+/** The sentence kept before a reload, if it is recent; it is taken, so it is said once. */
+export function takeNote(now: number, store = sessionStore()): string | null {
+  try {
+    const raw = store?.getItem(NOTE_KEY) ?? null;
+    store?.removeItem(NOTE_KEY);
+    const note = raw === null ? null : (JSON.parse(raw) as { text?: unknown; at?: unknown });
+    return note !== null && typeof note.text === "string" && typeof note.at === "number" && now - note.at >= 0 && now - note.at < NOTE_MS ? note.text : null;
+  } catch {
+    return null;
+  }
+}

@@ -202,9 +202,9 @@ describe("models in the history", () => {
     history.add(game({ p1: STRONG, p2: MODEL }));
     history.add(game({ p1: STRONG, p2: botOf("strong") }));
     expect(history.games.map(isMirror)).toEqual([false, true]);
-    expect(seatNames(history.games[0]!)).toEqual({ p1: "Strong (network, 32)", p2: "Strong (network, 32, fc-9x9-a)" });
+    expect(seatNames(history.games[0]!)).toEqual({ p1: "Strong (network, 32)", p2: "Strong (network, 32, the chosen network)" });
     expect(history.tallies().map((t) => [t.name, t.wins, t.losses])).toEqual([
-      ["Strong (network, 32, fc-9x9-a)", 0, 1],
+      ["Strong (network, 32, the chosen network)", 0, 1],
       ["Strong (network, 32)", 1, 0],
     ]);
   });

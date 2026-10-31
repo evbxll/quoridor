@@ -89,8 +89,11 @@ export function setModelLabel(id: string, label: string): void {
   modelLabels.set(id, label);
 }
 
-/** A model's name in words: its label if the page has one, else its id. */
-export const modelName = (id: string): string => modelLabels.get(id) ?? id;
+/** A model's name in words: its label if the page has one. A model whose card the page has not read is "the chosen network": an id is never shown or said. */
+export const modelName = (id: string): string => modelLabels.get(id) ?? "the chosen network";
+
+/** A name at the start of a sentence. */
+export const capitalized = (text: string): string => text.charAt(0).toUpperCase() + text.slice(1);
 
 /** The bot's settings in words: "Neural network, 32 searches a move, varied"; a gallery model is named, the main model is not. */
 export function botSummary(bot: Bot): string {

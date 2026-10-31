@@ -3,7 +3,7 @@ import { Game } from "../engine/game";
 import { Analysis } from "./analysis";
 import { copyLink, recordHash, syncAddress } from "./address";
 import { liveAnnouncer } from "./announce";
-import { type Bot, botLabel, botOf, capFor, modelName, setModelLabel, withModel } from "./bots";
+import { type Bot, botLabel, botOf, capFor, capitalized, modelName, setModelLabel, withModel } from "./bots";
 import { closePopoverOnEscapeOrOutside, element, onPress } from "./dom";
 import { AutoControls } from "./autoControls";
 import { type AutoHost, AutoPlay } from "./autoplay";
@@ -15,8 +15,8 @@ import type { ModelEnv } from "../model/store";
 import { GameController, HUMAN, isOfferedSize, type Player, type Players, samePlayer, type SearchPort, type Side, type Speed } from "./controller";
 import { buildModelOptions, extraModels, modelTitle } from "./modelInfo";
 import { describeNetwork } from "./networkText";
-import { saveSetupText, saveShowEval, savedSetupText, savedShowEval, savedStorage } from "./persistence";
-import { addressOf, readSetup, seatsOf, setupText } from "./setupLink";
+import { keepNote, saveSetupText, saveShowEval, savedSetupText, savedShowEval, savedStorage, takeNote } from "./persistence";
+import { addressOf, isOwnAddress, keptAfterSeat, keptAfterSwap, personFirst, readSetup, seatsForLink, seatsOf, type Setup, setupText } from "./setupLink";
 import { cellAt, wallAt } from "./geometry";
 import { WallPreview } from "./pointer";
 import { Tooltips } from "./tooltip";
@@ -47,6 +47,8 @@ const NORMAL = botOf("normal");
 /** A visitor plays player 1 against Strong, the network at 32 searches, unless they choose otherwise. */
 const DEFAULT_PLAYERS: Players = { p1: HUMAN, p2: botOf("strong") };
 const describePlayer = (player: Player): string => (player === HUMAN ? "a person" : botLabel(player));
+/** The page may be about to reload once: it is not cross-origin isolated yet, and the service worker that makes it so reloads it. */
+const reloadPending = (): boolean => !window.crossOriginIsolated && "serviceWorker" in navigator;
 
 /** Wires the controller to the page: draws the position, the players and the eval bar, and turns clicks and keys into moves. */
 export function startPage(port: SearchPort, network: NetworkSource): GameController {
@@ -74,8 +76,13 @@ export function startPage(port: SearchPort, network: NetworkSource): GameControl
   const movesView = new MovesView();
   /** Whether the viewer has picked a seat, or opened a link that did: until then the seats are the site's default, which follows the network. */
   let seatsChosen = false;
-  /** The setup last kept for the next visit, so it is written only when it changes. */
-  let keptSetup = "";
+  /** The setup the person last chose here, read at the start; null until they choose one. Links and seats the page swaps in itself never change it. */
+  const saved = readSetup(savedSetupText(), DEFAULT_PLAYERS);
+  let kept: Setup = saved ?? { size: 9, players: DEFAULT_PLAYERS };
+  const keep = (next: Setup): void => {
+    kept = next;
+    saveSetupText(setupText(next));
+  };
   /** The game whose end was last put in the history, so a finished game is listed once, and not one that was only opened. */
   let recordedHash = "";
   /** The game whose end was last announced, so a finished game of two bots is announced once. */
@@ -116,8 +123,9 @@ export function startPage(port: SearchPort, network: NetworkSource): GameControl
     return seat !== HUMAN && seat.model !== undefined ? [seat.model] : [];
   });
   const modelStatusSaid = (id: string, state: ModelState): void => {
-    const title = modelName(id);
-    const why = state.status === "failed" || state.status === "unavailable" ? (state.message ?? "") : "";
+    const title = capitalized(modelName(id));
+    // The loader's messages name the model by its id, which is never said.
+    const why = state.status === "failed" || state.status === "unavailable" ? (state.message ?? "").replaceAll(id, "this network") : "";
     announce(state.status === "ready" ? `${title} is ready.` : `${title} could not be loaded. ${why}`.trim());
   };
   const seatModels = new SeatModels(models, modelStatusSaid);
@@ -215,13 +223,13 @@ export function startPage(port: SearchPort, network: NetworkSource): GameControl
     const hash = recordHash(record);
     const seat = record.p2.kind === "bot" ? record.p2 : record.p1.kind === "bot" ? record.p1 : null;
     carriedBot = seat === null ? null : botOfSeat(seat);
-    if (location.hash !== hash) {
+    if (controller.hash !== hash) {
       location.hash = hash;
       return;
     }
-    // The game is already on the board, so the address will not change: open it here, which ends auto-play and gives a person a seat.
+    // The game is already on the board: open it here, which ends auto-play and gives a person a seat.
     const wasAuto = autoplay.active;
-    openHash();
+    openHash(hash);
     announce(`${wasAuto ? "Auto-play stopped. " : ""}Game ${record.id} is on the board; you play it.`);
   }
 
@@ -239,6 +247,7 @@ export function startPage(port: SearchPort, network: NetworkSource): GameControl
     // The sentence below says it; the status line stays quiet for this change, so a toggle is read once.
     quietForSeatChange();
     setSeatPlayers(controller, { ...controller.players, [side]: controls[side].player }, syncSeatModels);
+    keep(keptAfterSeat(kept, side, controls[side].player));
     render();
     if (hadHuman !== controller.hasHuman) announce(controller.hasHuman ? `${announcement ?? ""} Undo and How to move are shown; Start is hidden.`.trim() : "Both players are bots: press Start to watch.");
     else if (announcement !== null) announce(announcement);
@@ -344,13 +353,7 @@ export function startPage(port: SearchPort, network: NetworkSource): GameControl
     evalView.draw(controller, analysis, evalVisible(), analysisToggle.checked, tooltips);
     drawAnalysis(controller, analysis, analysisOpen(), announce);
     drawNetwork(modelState(), controller.size);
-    const address = addressOf(controller.hash, controller.players);
-    syncAddress(address);
-    const setup = setupText({ size: controller.size, players: controller.players });
-    if (setup !== keptSetup) {
-      keptSetup = setup;
-      saveSetupText(setup);
-    }
+    syncAddress(addressOf(controller.hash, controller.players));
   }
 
   /** The cell or groove under the pointer. */
@@ -477,13 +480,13 @@ export function startPage(port: SearchPort, network: NetworkSource): GameControl
   }
 
   /** Opens the game in the address bar's hash if it is one the site offers; otherwise says so. Returns whether it did. */
-  function openHash(): boolean {
+  function openHash(hash = location.hash): boolean {
     try {
-      const game = Game.fromHash(location.hash);
+      const game = Game.fromHash(hash);
       // Before anything changes: a link may name a size the engine reads and the site does not offer.
       if (!isOfferedSize(game.size)) throw new RangeError(`The site has no ${game.size}x${game.size} board`);
-      const linked = seatsOf(location.hash, game.size);
-      const seats = linked === null ? seatsForOlderLink(game) : { p1: linked.seats.p1 ?? DEFAULT_PLAYERS.p1, p2: linked.seats.p2 ?? DEFAULT_PLAYERS.p2 };
+      const linked = seatsOf(hash, game.size);
+      const seats = linked === null ? seatsForOlderLink(game) : seatsForLink(linked, DEFAULT_PLAYERS, game.moves.length);
       carriedBot = null;
       autoplay.interrupt();
       // A game that is already over is shown, not played, so it is not listed again.
@@ -502,7 +505,10 @@ export function startPage(port: SearchPort, network: NetworkSource): GameControl
       void models.select(controller.size);
       if (linked !== null && linked.unreadable.length > 0) {
         const parts = linked.unreadable.map((side) => `player ${side === "p1" ? 1 : 2} plays ${describePlayer(DEFAULT_PLAYERS[side])}`);
-        announce(`Part of the link could not be read, so ${parts.join(" and ")}.`);
+        const sentence = `Part of the link could not be read, so ${parts.join(" and ")}.`;
+        announce(sentence);
+        // The address is put right at once; if the page is about to reload for cross-origin isolation, the sentence is said again there.
+        if (reloadPending()) keepNote(sentence, Date.now());
       }
       return true;
     } catch {
@@ -524,7 +530,10 @@ export function startPage(port: SearchPort, network: NetworkSource): GameControl
     return human === "p1" ? { p1: HUMAN, p2: bot } : { p1: bot, p2: HUMAN };
   }
 
-  newButton.addEventListener("click", newGame);
+  newButton.addEventListener("click", () => {
+    newGame();
+    keep({ size: controller.size, players: kept.players });
+  });
   sizeSelect.addEventListener("change", () => {
     render();
     const size = Number(sizeSelect.value);
@@ -542,6 +551,7 @@ export function startPage(port: SearchPort, network: NetworkSource): GameControl
     seatsChosen = true;
     quietForSeatChange();
     setSeatPlayers(controller, { p1: p2, p2: p1 }, syncSeatModels);
+    keep(keptAfterSwap(kept));
     render();
     announce("Sides swapped.");
   });
@@ -576,17 +586,19 @@ export function startPage(port: SearchPort, network: NetworkSource): GameControl
     copyLink(announce);
   });
   window.addEventListener("hashchange", () => {
-    if (location.hash !== addressOf(controller.hash, controller.players)) openHash();
+    if (!isOwnAddress(location.hash, controller.hash, controller.players)) openHash();
     else carriedBot = null;
   });
 
-  // Without a link the page starts from the setup last used here, if any; a link wins.
-  const kept = readSetup(savedSetupText(), DEFAULT_PLAYERS);
-  showPlayers(kept?.players ?? DEFAULT_PLAYERS);
-  if (kept !== null) {
-    sizeSelect.value = String(kept.size);
+  // Without a link the page starts from the setup the person last chose here, if any, the person moving first; a link wins.
+  // A sentence kept by the page before its reload for isolation; taken first, so this page keeps its own for the next one.
+  const carried = takeNote(Date.now());
+  showPlayers(personFirst(kept.players));
+  if (saved !== null) {
+    sizeSelect.value = String(saved.size);
     seatsChosen = true;
   }
   if (location.hash.length <= 1 || !openHash()) newGame();
+  if (carried !== null) setTimeout(() => announce(carried), 1000);
   return controller;
 }
