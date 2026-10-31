@@ -57,48 +57,32 @@
           </div>
           <svg id="board" class="board" tabindex="0" role="application" aria-describedby="board-help"></svg>
         </div>
-        <label id="eval-toggle" class="eval-toggle off"><input id="show-eval" type="checkbox" checked /> Show evaluation</label>
+        <div class="view-row">
+          <details id="view" class="view">
+            <summary>View</summary>
+            <div class="view-pop" role="group" aria-label="View options">
+              <label class="check"><input id="show-eval" type="checkbox" checked aria-describedby="show-eval-note" /> Evaluation bar</label>
+              <p id="show-eval-note" class="hint"></p>
+              <label class="check"><input id="analysis-toggle" type="checkbox" aria-describedby="analysis-off" /> Best moves, under the move list</label>
+              <p id="analysis-off" class="hint" hidden>Best moves need the network.</p>
+            </div>
+          </details>
+        </div>
         <p id="status" class="status" role="status" tabindex="-1"></p>
       </section>
 
       <aside class="panel">
-        <section class="card row" role="group" aria-label="New game">
-          <label class="inline">Board
-            <select id="size">
-              <option value="5">5 × 5</option>
-              <option value="7">7 × 7</option>
-              <option value="9" selected>9 × 9</option>
-              <option value="11">11 × 11</option>
-            </select>
-          </label>
-          <button id="new" type="button">New game</button>
-        </section>
-
-        <section class="card players" aria-label="Players">
-          <div id="seat-p2" class="seat">
-            <span class="disc p2" aria-hidden="true">2</span>
-            <div class="seat-body">
-              <div class="seat-head">
-                <label for="player-p2">Player 2</label>
-                <span id="walls-p2" class="walls"></span>
-              </div>
-              <select id="player-p2" class="player"></select>
-              <div id="bot-p2" class="bot-settings" role="group" aria-label="Player 2 bot settings" hidden></div>
-              <p id="note-p2" class="seat-note"></p>
-            </div>
-          </div>
-          <button id="swap" class="swap quiet" type="button"><span aria-hidden="true">&#8645;</span> Swap sides</button>
-          <div id="seat-p1" class="seat">
-            <span class="disc p1" aria-hidden="true">1</span>
-            <div class="seat-body">
-              <div class="seat-head">
-                <label for="player-p1">Player 1</label>
-                <span id="walls-p1" class="walls"></span>
-              </div>
-              <select id="player-p1" class="player"></select>
-              <div id="bot-p1" class="bot-settings" role="group" aria-label="Player 1 bot settings" hidden></div>
-              <p id="note-p1" class="seat-note"></p>
-            </div>
+        <section class="card game" aria-label="Game controls">
+          <div class="row" role="group" aria-label="New game">
+            <label class="inline">Board
+              <select id="size">
+                <option value="5">5 × 5</option>
+                <option value="7">7 × 7</option>
+                <option value="9" selected>9 × 9</option>
+                <option value="11">11 × 11</option>
+              </select>
+            </label>
+            <button id="new" type="button">New game</button>
           </div>
           <div id="bot-controls" class="bot-controls" role="group" aria-label="Bot game controls">
             <button id="toggle" class="primary run" type="button">Start</button>
@@ -132,6 +116,34 @@
           <div id="retry-row" class="row" hidden>
             <button id="retry" type="button">Retry</button>
           </div>
+        </section>
+
+        <section class="card players" aria-label="Players">
+          <div id="seat-p2" class="seat">
+            <span class="disc p2" aria-hidden="true">2</span>
+            <div class="seat-body">
+              <div class="seat-head">
+                <label for="player-p2">Player 2</label>
+                <span id="walls-p2" class="walls"></span>
+              </div>
+              <select id="player-p2" class="player"></select>
+              <div id="bot-p2" class="bot-settings" role="group" aria-label="Player 2 bot settings" hidden></div>
+              <p id="note-p2" class="seat-note"></p>
+            </div>
+          </div>
+          <button id="swap" class="swap quiet" type="button"><span aria-hidden="true">&#8645;</span> Swap sides</button>
+          <div id="seat-p1" class="seat">
+            <span class="disc p1" aria-hidden="true">1</span>
+            <div class="seat-body">
+              <div class="seat-head">
+                <label for="player-p1">Player 1</label>
+                <span id="walls-p1" class="walls"></span>
+              </div>
+              <select id="player-p1" class="player"></select>
+              <div id="bot-p1" class="bot-settings" role="group" aria-label="Player 1 bot settings" hidden></div>
+              <p id="note-p1" class="seat-note"></p>
+            </div>
+          </div>
           <details class="sources">
             <summary>Where the times come from</summary>
             <p id="time-sources" class="hint"></p>
@@ -141,8 +153,6 @@
         <section class="card review" aria-labelledby="moves-title">
           <div class="review-head">
             <h2 id="moves-title">Moves &amp; analysis</h2>
-            <label id="analysis-label" class="inline"><input id="analysis-toggle" type="checkbox" /> Analysis</label>
-            <span id="analysis-off" class="hint" hidden>Analysis needs the network.</span>
           </div>
           <div class="review-nav">
             <div class="row" role="group" aria-label="Step through the game">

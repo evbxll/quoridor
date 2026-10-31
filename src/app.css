@@ -145,8 +145,17 @@ select {
 .stage { display: flex; flex-direction: column; align-items: center; gap: 8px; min-width: 0; }
 .stage { --board-max: calc(100vh - 140px); }
 .board-row { display: flex; gap: 8px; width: 100%; max-width: calc(var(--board-max) + 56px); }
-.eval-toggle { display: flex; align-items: center; min-height: 24px; width: 100%; max-width: calc(var(--board-max) + 56px); padding-left: 56px; color: var(--muted); font-size: 13px; }
-.eval-toggle.off { visibility: hidden; }
+/* The View menu sits under the board's left edge. Its choices open in a popover out of the page's flow, so opening it moves nothing. */
+.view-row { position: relative; display: flex; align-items: center; min-height: 28px; width: 100%; max-width: calc(var(--board-max) + 56px); padding-left: 56px; }
+.view > summary { cursor: pointer; padding: 2px 8px; border: 1px solid var(--line); border-radius: 999px; background: var(--card); color: var(--muted); font-size: 13px; }
+.view[open] > summary, .view > summary:hover { color: var(--text); }
+.view-pop {
+  position: absolute; left: 56px; top: calc(100% + 4px); z-index: 2; width: min(300px, calc(100vw - 32px));
+  display: flex; flex-direction: column; gap: 2px; padding: 10px 12px;
+  background: var(--card); border: 1px solid var(--line); border-radius: 12px; box-shadow: 0 6px 20px var(--shadow);
+}
+.view-pop .hint { padding-left: 24px; margin-bottom: 4px; }
+.view-pop label:has(input:disabled) { color: var(--muted); }
 .board { flex: 1 1 0; min-width: 0; aspect-ratio: 1; user-select: none; touch-action: manipulation; }
 .board:focus-visible { outline: 3px solid var(--focus); outline-offset: 3px; border-radius: 10px; }
 .board:focus:not(:focus-visible) { outline: none; } /* a click focuses the board too; only keyboard focus is outlined */
@@ -253,12 +262,13 @@ select {
 .walls { color: var(--muted); font-size: 13px; white-space: nowrap; font-variant-numeric: tabular-nums; }
 .walls b { color: var(--text); font-size: 15px; }
 .swap { align-self: center; font-size: 13px; margin: -2px 0; }
-.players .row { min-height: 36px; }
+/* The game card is first in the panel, so its controls stay put whatever the Players card below them does. */
+.game { display: flex; flex-direction: column; gap: 10px; }
+.game .row { min-height: 36px; }
 /* Start, Pause and Resume is the main control of a bot game: large, and the same size under each label. */
-.bot-controls { display: flex; flex-direction: column; gap: 8px; margin-top: 8px; }
-.person-controls { margin-top: 8px; padding: 0 2px; align-self: start; }
+.bot-controls { display: flex; flex-direction: column; gap: 8px; }
+.person-controls { align-self: start; }
 .run { width: 100%; padding: 12px 14px; font-size: 18px; }
-.players .row { margin-top: 8px; padding: 0 2px; }
 
 /* A fixed height, so the card keeps its size as the game goes on; the list scrolls inside. */
 .moves-box { position: relative; height: 168px; }
@@ -356,7 +366,8 @@ button.theme-toggle svg { width: 20px; height: 20px; stroke-linecap: round; }
   .network-pop { right: 16px; }
   .layout { grid-template-columns: minmax(0, 1fr); gap: 16px; padding: 6px 16px 24px; }
   .stage { --board-max: 100vw; }
-  .status { font-size: 15px; }
+  /* Three lines of room: the game controls follow the status line here, so a longer status must not push them down. */
+  .status { font-size: 15px; min-height: 4.35em; }
 }
 
 /* Very narrow phones: the title and the theme button share the first line, the chip and Copy link the second. */

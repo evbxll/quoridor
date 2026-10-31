@@ -62,6 +62,7 @@ export function startPage(port: SearchPort, network: NetworkSource): GameControl
   const newButton = element("new", HTMLButtonElement);
   showEval.checked = savedShowEval();
   closePopoverOnEscapeOrOutside(element("network", HTMLDetailsElement), document);
+  closePopoverOnEscapeOrOutside(element("view", HTMLDetailsElement), document);
   const tooltips = new Tooltips(document);
 
   const preview = new WallPreview();
@@ -155,7 +156,7 @@ export function startPage(port: SearchPort, network: NetworkSource): GameControl
   };
   /** False once the model index is read and publishes no network at any size; true while that is not known yet. */
   const networkPublished = (): boolean => models.publishesAny !== false;
-  /** The evaluation is shown: a network is published, and either two bots play or the viewer left "Show evaluation" on. */
+  /** The evaluation is shown: a network is published, and either two bots play or the viewer left "Evaluation bar" on in the View menu. */
   const controlsNow = () => visibleControls(controller.players, { networkPublished: networkPublished(), showEvaluation: showEval.checked, gameOver: controller.result !== null });
   const evalVisible = (): boolean => controlsNow().evalBar;
   const analysisOpen = (): boolean => networkPublished() && analysisToggle.checked;

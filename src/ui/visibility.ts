@@ -4,7 +4,7 @@ import { HUMAN, type Players } from "./controller";
 export interface VisibilityState {
   /** A network is published (or not yet known not to be). */
   readonly networkPublished: boolean;
-  /** The viewer left "Show evaluation" on. */
+  /** The viewer left the View menu's "Evaluation bar" on. */
   readonly showEvaluation: boolean;
   /** The game on the board has ended. */
   readonly gameOver: boolean;
@@ -20,11 +20,11 @@ export interface Visible {
   readonly botControls: boolean;
   /** Start cannot begin or continue a game that has ended. */
   readonly startBlocked: boolean;
-  /** The "Show evaluation" checkbox: only a person has a reason to hide the bar; two bots always show it. */
+  /** The View menu's "Evaluation bar" choice can be changed: only a person has a reason to hide the bar; two bots always show it. */
   readonly evaluationToggle: boolean;
   /** The evaluation bar beside the board. */
   readonly evalBar: boolean;
-  /** The Analysis checkbox; without a network a note takes its place. */
+  /** The View menu's "Best moves" choice can be changed; without a network it is greyed out with a note. */
   readonly analysis: boolean;
 }
 

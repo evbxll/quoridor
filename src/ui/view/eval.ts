@@ -23,7 +23,7 @@ export class EvalView {
     this.shownPercent = null;
   }
 
-  /** `visible` says whether the bar is shown at all; `analysisChecked` is the Analysis checkbox. */
+  /** `visible` says whether the bar is shown at all; `analysisChecked` is the View menu's "Best moves" choice. */
   draw(controller: GameController, analysis: Analysis, visible: boolean, analysisChecked: boolean, tooltips: Tooltips): void {
     const container = element("eval", HTMLElement);
     const meter = element("eval-meter", HTMLElement);

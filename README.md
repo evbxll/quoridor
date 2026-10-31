@@ -23,6 +23,7 @@ npm test             # vitest
 npm run build        # writes dist/
 npm run verify-dist  # checks dist/ before deploy
 npm run bench -- <model.onnx> [threads]   # times the network and the search in Node
+node scripts/layout-probe.mjs <url> [--shots DIR]   # with the site served at <url>: fails if a seat change moves Start, Step, the board or the eval bar (needs Edge or Chrome)
 ```
 
 Tests that need a model skip without one. To run them, set `QUORIDOR_TEST_MODEL_DIR` to a folder holding `model.onnx` and `golden.json` (or put them in `test-data/model/`, which git ignores). Never commit a model outside `public/models/`.
