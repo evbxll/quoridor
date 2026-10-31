@@ -24,8 +24,8 @@ export interface Preset extends Bot {
   readonly label: string;
 }
 
-/** Measured per move: simulations, median ms, 90th percentile ms. */
-type Points = readonly (readonly [number, number, number])[];
+/** Measured per move: simulations, median ms. */
+type Points = readonly (readonly [number, number])[];
 type PerEngine<T> = Readonly<Record<EngineKind, T>>;
 
 interface BotsData {
@@ -153,7 +153,7 @@ export function estimateMs(bot: Bot, size: number, model: string | null = null):
   const table = model === null || model === MEASURED_MODEL ? DATA.times.network.bySize : DATA.times.network.others[model]?.bySize;
   const points = table?.[size];
   if (points === undefined) return null;
-  let before: readonly [number, number, number] = [0, 0, 0];
+  let before: readonly [number, number] = [0, 0];
   for (const point of points) {
     if (bot.simulations === point[0]) return { ms: point[1], kind: "measured" };
     if (bot.simulations < point[0]) {

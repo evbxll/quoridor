@@ -99,19 +99,21 @@ const HEURISTIC_STRENGTH: Partial<Record<PresetId, string>> = {
  *
  * A network bot's comes from its card: "≈ +500 Elo vs Normal". The card's rating at the board size (or the size it was
  * rated on, which is then named) is moved from the card's zero to Normal (`NORMAL_ABOVE_RATING_ZERO`) and rounded to
- * 50. The card rates the network at fewer simulations than Strong and Max play, without reusing its tree, so for
- * them the figure is if anything low; a bot with fewer simulations than were rated gets no line.
+ * 50. Only the presets it holds for get a line: Strong ("≈ +500 Elo vs Normal"; the card rates the network at fewer
+ * simulations, without reusing its tree) and Max ("≈ +500 Elo or more", as it searches far more). A network bot with
+ * Vary moves or other Custom settings plays differently from what was rated, so it gets none.
  */
 export function seatStrength(bot: Bot, card: ModelCard | null, size: number): string {
   if (bot.engine === "heuristic") {
     const preset = presetOf(bot);
     return preset === null ? "" : (HEURISTIC_STRENGTH[preset.id] ?? "");
   }
+  const preset = presetOf(bot)?.id;
   const entry = card === null ? null : (ladder(card, size) ?? card.strength[0] ?? null);
-  if (entry === null || bot.simulations < entry.simulations) return "";
+  if (entry === null || (preset !== "strong" && preset !== "max")) return "";
   const elo = Math.round((entry.elo - NORMAL_ABOVE_RATING_ZERO) / ELO_ROUNDING) * ELO_ROUNDING;
   const where = entry.size === size ? "" : ` (measured on ${entry.size} × ${entry.size})`;
-  return `≈ ${eloText(elo)} Elo vs Normal${where}`;
+  return `≈ ${eloText(elo)} Elo${preset === "max" ? " or more" : ""} vs Normal${where}`;
 }
 
 /** Where a seat's model stands, in words, and how far a download is (null when unknown or not downloading). */

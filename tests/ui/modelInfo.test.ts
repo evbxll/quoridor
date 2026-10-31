@@ -83,7 +83,7 @@ describe("what a seat says about its model", () => {
   it("gives a network bot its card's rating against Normal: moved by Normal's 40 over the cards' zero, rounded to 50", () => {
     // g105's card: +557.8 at 25 simulations on 9x9.
     expect(seatStrength(botOf("strong"), g105, 9)).toBe("≈ +500 Elo vs Normal");
-    expect(seatStrength(botOf("max"), g105, 9)).toBe("≈ +500 Elo vs Normal");
+    expect(seatStrength(botOf("max"), g105, 9)).toBe("≈ +500 Elo or more vs Normal");
     expect(seatStrength(botOf("strong"), g050, 9)).toBe("≈ +350 Elo vs Normal");
   });
 
@@ -95,6 +95,13 @@ describe("what a seat says about its model", () => {
     expect(seatStrength({ ...botOf("strong"), simulations: 16 }, g105, 9)).toBe("");
     expect(seatStrength(botOf("strong"), null, 9)).toBe("");
     expect(seatStrength(botOf("strong"), conv("x", 1, null), 9)).toBe("");
+  });
+
+  it("gives none for a network bot that plays otherwise than rated: Vary moves on, or Custom simulations", () => {
+    expect(seatStrength({ ...botOf("strong"), vary: true }, g105, 9)).toBe("");
+    expect(seatStrength({ ...botOf("max"), vary: true }, g105, 9)).toBe("");
+    expect(seatStrength({ ...botOf("max"), simulations: 800 }, g105, 9)).toBe("");
+    expect(seatStrength({ ...botOf("strong"), simulations: 64 }, g105, 9)).toBe("");
   });
 
   it("says what Beginner and Normal are, and nothing for custom heuristic settings", () => {
