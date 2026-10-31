@@ -32,8 +32,6 @@ interface BotsData {
   readonly presets: readonly Preset[];
   readonly steps: PerEngine<readonly number[]>;
   readonly caps: PerEngine<{ readonly default: number; readonly bySize: Readonly<Record<string, number>> }>;
-  readonly capReasons: PerEngine<{ readonly default: string; readonly bySize: Readonly<Record<string, string>> }>;
-  readonly calibration: { readonly engine: EngineKind; readonly simulations: number; readonly size: number; readonly holds: string; readonly otherwise: string; readonly network: string };
   /** Scores of a model off its trained size, against the fresh-tree Evan bot, by model id and board size. */
   readonly offSize: Readonly<Record<string, Readonly<Record<string, { readonly simulations: number; readonly score: number; readonly interval: readonly [number, number]; readonly games: number | null }>>>>;
   readonly times: {
@@ -111,9 +109,6 @@ export function botOf(id: PresetId): Bot {
 /** The largest number of simulations offered for an engine on a board size. */
 export const capFor = (engine: EngineKind, size: number): number => DATA.caps[engine].bySize[size] ?? DATA.caps[engine].default;
 
-/** Why the cap is where it is, in words. */
-export const capReason = (engine: EngineKind, size: number): string => DATA.capReasons[engine].bySize[size] ?? DATA.capReasons[engine].default;
-
 /** The simulation counts offered for an engine on a board size, smallest first, up to the cap. */
 export const stepsFor = (engine: EngineKind, size: number): readonly number[] => DATA.steps[engine].filter((step) => step <= capFor(engine, size));
 
@@ -182,13 +177,6 @@ export function describeEstimate(bot: Bot, size: number, model: string | null = 
   if (found === null) return `Time a move: unmeasured on ${size} × ${size}.`;
   const tail = found.p90 !== null && found.p90 > SLOW_TAIL * found.ms ? ` 1 move in 10 takes over ${formatMs(found.p90)}.` : "";
   return `About ${formatMs(found.ms)} a move on ${MEASURED_ON} (${found.kind}).${tail}`;
-}
-
-/** What to say about Normal's calibration to a human average for a heuristic bot on a board size; for a network, which presets use it. */
-export function calibrationNote(bot: Bot, size: number): string {
-  const { engine, simulations, size: calibrated, holds, otherwise } = DATA.calibration;
-  if (bot.engine !== engine) return DATA.calibration.network;
-  return bot.simulations === simulations && size === calibrated ? holds : otherwise;
 }
 
 /**

@@ -25,18 +25,16 @@ describe("the Model select's options", () => {
     expect(extraModels("s9-conv-paths-g105", ["s9-conv-paths-g105"])).toEqual([]);
   });
 
-  it("lists the main bot first, then the gallery in its published order, with labels from the cards", () => {
-    expect(options(9).map((o) => [o.value, o.label, o.disabled])).toEqual([
-      [MAIN_MODEL, "Conv, gen 105 (main, +558 Elo)", false],
-      ["s9-conv-paths-g010", "Conv, gen 10 (+212 Elo)", false],
-      ["s9-conv-paths-g050", "Conv, gen 50 (+407 Elo)", false],
-      ["s9-fpu-basic-g112", "FC, gen 112 (+334 Elo)", false],
+  it("lists the main network first, then the gallery in its published order, each named by its architecture alone", () => {
+    expect(options(9, ["s9-fpu-basic-g112", "s9-conv-paths-g105"]).map((o) => [o.value, o.label, o.disabled])).toEqual([
+      [MAIN_MODEL, "Convolutional", false],
+      ["s9-fpu-basic-g112", "Fully connected", false],
     ]);
   });
 
   it("disables a model that cannot play the size and says why in the label; a conv model's trained size is not a reason", () => {
     const at7 = options(7);
-    expect(at7.find((o) => o.value === "s9-fpu-basic-g112")).toEqual({ value: "s9-fpu-basic-g112", label: "FC, gen 112 (9x9 only)", disabled: true });
+    expect(at7.find((o) => o.value === "s9-fpu-basic-g112")).toEqual({ value: "s9-fpu-basic-g112", label: "Fully connected (9x9 only)", disabled: true });
     expect(at7.filter((o) => o.disabled).map((o) => o.value)).toEqual(["s9-fpu-basic-g112"]);
     expect(options(11).find((o) => o.value === "s9-conv-paths-g050")!.disabled).toBe(false);
   });
@@ -48,15 +46,11 @@ describe("the Model select's options", () => {
     expect(disabledReason(null, 11)).toBe("loading");
   });
 
-  it("drops the rating when the card has none", () => {
-    const some = { ...CARDS, "s9-conv-paths-g010": conv("s9-conv-paths-g010", 10, null) };
-    expect(options(9, GALLERY, some).find((o) => o.value === "s9-conv-paths-g010")!.label).toBe("Conv, gen 10");
-  });
 
   it("does not let a gallery model be picked before its card is read, whatever the size", () => {
     const some = { "s9-conv-paths-g050": CARDS["s9-conv-paths-g050"]! };
     const built = options(7, GALLERY, some);
-    expect(built[0]).toEqual({ value: MAIN_MODEL, label: "Main bot", disabled: false });
+    expect(built[0]).toEqual({ value: MAIN_MODEL, label: "Main network", disabled: false });
     expect(built.find((o) => o.value === "s9-conv-paths-g050")!.disabled).toBe(false);
     expect(built.find((o) => o.value === "s9-fpu-basic-g112")).toEqual({ value: "s9-fpu-basic-g112", label: "s9-fpu-basic-g112 (loading)", disabled: true });
   });
@@ -66,8 +60,10 @@ describe("the Model select's options", () => {
     expect(built.find((o) => o.value === "s9-fpu-basic-g112")).toMatchObject({ label: "s9-fpu-basic-g112 (card could not be read)", disabled: true });
   });
 
-  it("takes the generation from the id when the card has none", () => {
-    expect(modelTitle("s9-conv-paths-g050", parseCard(cardJson("s9-conv-paths-g050", { source: {} })))).toBe("Conv, gen 50");
+  it("names a model by its architecture, with no generation, and by its id until its card is read", () => {
+    expect(modelTitle("s9-conv-paths-g050", CARDS["s9-conv-paths-g050"]!)).toBe("Convolutional");
+    expect(modelTitle("s9-fpu-basic-g112", fc)).toBe("Fully connected");
+    expect(modelTitle("s9-fpu-basic-g112", null)).toBe("s9-fpu-basic-g112");
   });
 });
 

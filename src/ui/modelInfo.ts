@@ -2,13 +2,13 @@ import { type ModelCard, supportsSize } from "../model/card";
 import type { ModelState } from "../model/manager";
 import { offSizeMeasure } from "./bots";
 
-/** The value of the Model select's first option: the main model, whichever the index names for the board. */
+/** The value of the Network select's first option: the main model, whichever the index names for the board. */
 export const MAIN_MODEL = "";
 
 /** What the seat says before a model is picked: the download is large. */
 export const FIRST_USE_NOTE = "A model other than the main bot downloads about 10 MB the first time you pick it.";
 
-/** One entry of a seat's Model select. */
+/** One entry of a seat's Network select. */
 export interface ModelOption {
   /** `MAIN_MODEL` for the main bot, else the model id. */
   readonly value: string;
@@ -35,18 +35,13 @@ export const extraModels = (mainId: string | null, gallery: readonly string[]): 
 
 const eloText = (elo: number): string => `${elo < 0 ? "-" : "+"}${Math.abs(Math.round(elo))}`;
 
-/** The generation in a model's id (`...-g050`), for a card that does not say. */
-const idGeneration = (id: string): number | null => {
-  const found = /-g(\d+)$/.exec(id);
-  return found === null ? null : Number(found[1]);
-};
-
-/** A model in words from its card: "Conv, gen 50". Without a card, its id. */
+/**
+ * A model in words from its card: its architecture, "Convolutional" or "Fully connected". The gallery holds one model
+ * per architecture, the latest, so the architecture names it. Without a card, its id.
+ */
 export function modelTitle(id: string, card: ModelCard | null): string {
   if (card === null) return id;
-  const head = card.network.head === "fc" ? "FC" : "Conv";
-  const generation = card.source.generation ?? idGeneration(id);
-  return generation === null ? `${head}, ${card.displayName}` : `${head}, gen ${generation}`;
+  return card.network.head === "fc" ? "Fully connected" : "Convolutional";
 }
 
 /** The 9x9 ladder rating in the card, if it has one. */
@@ -60,31 +55,19 @@ export function disabledReason(card: ModelCard | null, size: number): string | n
 }
 
 /**
- * The entries of a seat's Model select: the main bot first, then every gallery model but the main one in the published
+ * The entries of a seat's Network select: the main network first, then every gallery model but the main one in the published
  * order. A model that cannot play the board is disabled with the reason in its label. Fewer than two entries mean there is
  * nothing to choose, so the select is not shown: the list is then empty. A gallery model is not selectable until its card is read.
  */
 export function buildModelOptions(input: OptionInput): ModelOption[] {
   const extras = extraModels(input.mainId, input.gallery);
   if (extras.length === 0) return [];
-  const rated = (card: ModelCard | null): string => {
-    const found = card === null ? null : ladder(card, 9);
-    return found === null ? "" : `${eloText(found.elo)} Elo`;
-  };
-  const options: ModelOption[] = [];
   const mainCard = input.mainId === null ? null : input.card(input.mainId);
-  const mainRating = rated(mainCard);
-  options.push({
-    value: MAIN_MODEL,
-    label: mainCard === null || input.mainId === null ? "Main bot" : `${modelTitle(input.mainId, mainCard)} (${mainRating === "" ? "main" : `main, ${mainRating}`})`,
-    disabled: false,
-  });
+  const options: ModelOption[] = [{ value: MAIN_MODEL, label: mainCard === null || input.mainId === null ? "Main network" : modelTitle(input.mainId, mainCard), disabled: false }];
   for (const id of extras) {
     const card = input.card(id);
     const reason = card === null && input.cardFailed(id) ? "card could not be read" : disabledReason(card, input.size);
-    const rating = rated(card);
-    const detail = reason !== null ? reason : rating;
-    options.push({ value: id, label: detail === "" ? modelTitle(id, card) : `${modelTitle(id, card)} (${detail})`, disabled: reason !== null });
+    options.push({ value: id, label: reason === null ? modelTitle(id, card) : `${modelTitle(id, card)} (${reason})`, disabled: reason !== null });
   }
   return options;
 }

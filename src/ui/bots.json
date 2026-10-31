@@ -13,29 +13,6 @@
     "network": { "default": 800, "bySize": { "11": 400 } },
     "heuristic": { "default": 1600, "bySize": {} }
   },
-  "capReasons": {
-    "network": {
-      "default": "the most simulations offered.",
-      "bySize": {
-        "5": "nothing above 800 is measured; the slowest moves take about 3 s at 800.",
-        "7": "times above 200 are unmeasured here; weaker devices are slower.",
-        "9": "about 4 s a move at 800 on a fast desktop; weaker devices are slower.",
-        "11": "200 already take about 0.8 s a move on a fast desktop; 400 would be much slower."
-      }
-    },
-    "heuristic": {
-      "default": "the largest budget with a measured strength; its browser time is unmeasured.",
-      "bySize": {}
-    }
-  },
-  "calibration": {
-    "engine": "heuristic",
-    "simulations": 100,
-    "size": 9,
-    "holds": "Normal, the Evan bot: about even with its author.",
-    "otherwise": "Normal's calibration to a human average holds only at 100 simulations on 9 × 9.",
-    "network": "Strong and Max are this network at 32 and 200 simulations."
-  },
   "offSize": {
     "s9-conv-paths-g105": {
       "7": { "simulations": 32, "score": 0.948, "interval": [0.895, 0.989], "games": null },

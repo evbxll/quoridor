@@ -4,9 +4,7 @@ import {
   botLabel,
   botOf,
   botSummary,
-  calibrationNote,
   capFor,
-  capReason,
   describeEstimate,
   estimateMs,
   fitTo,
@@ -73,11 +71,6 @@ describe("simulation steps and caps", () => {
       expect(stepsFor("heuristic", size)).toEqual([1, 5, 25, 50, 100, 200, 400, 800, 1600]);
       expect(capFor("heuristic", size)).toBe(1600);
     }
-  });
-
-  it("give a reason for every cap", () => {
-    for (const engine of ["network", "heuristic"] as const) for (const size of [5, 7, 9, 11]) expect(capReason(engine, size)).not.toBe("");
-    expect(capReason("network", 11)).not.toBe(capReason("network", 9));
   });
 
   it("move a setting to the nearest step, the lower on a tie", () => {
@@ -162,18 +155,5 @@ describe("time estimates", () => {
 
   it("format as ms below a tenth of a second, seconds with a decimal below ten, whole seconds above", () => {
     expect([1, 50, 99.6, 155, 635, 3865, 9949, 14200].map(formatMs)).toEqual(["1 ms", "50 ms", "100 ms", "0.2 s", "0.6 s", "3.9 s", "9.9 s", "14 s"]);
-  });
-});
-
-describe("Normal's calibration note", () => {
-  it("says it holds at 100 simulations on 9 x 9 and only there", () => {
-    const normal = botOf("normal");
-    expect(calibrationNote(normal, 9)).toContain("Normal, the Evan bot");
-    expect(calibrationNote(normal, 7)).toContain("holds only at 100 simulations on 9 × 9");
-    expect(calibrationNote({ ...normal, simulations: 200 }, 9)).toContain("holds only at 100 simulations on 9 × 9");
-  });
-
-  it("says which presets use the network for a network bot", () => {
-    expect(calibrationNote(botOf("strong"), 9)).toContain("Strong and Max");
   });
 });

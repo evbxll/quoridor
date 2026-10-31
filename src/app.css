@@ -228,25 +228,22 @@ select {
 .seat-body select { width: 100%; }
 .seat-note { margin: 0; min-height: 1.45em; color: var(--muted); font-size: 13px; }
 .seat.thinking .seat-note { color: var(--text); font-weight: 600; }
-/* A bot's settings. Each line has room for its longest text, so changing the engine, the preset or the board size moves nothing. */
+/* A bot's settings: one summary line, and in it the simulations, Vary moves and the time a move. The time keeps two lines of room, so dragging the slider moves nothing. */
 .bot-settings { display: flex; flex-direction: column; gap: 6px; }
-.pick { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 8px; }
-.pick.solo { grid-template-columns: minmax(0, 1fr); }
+.seat-body select.player { font-weight: 600; }
 .seat-more > summary { cursor: pointer; padding: 3px 2px; font-size: 13px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-variant-numeric: tabular-nums; }
 .seat-more[open] > summary { color: var(--text); }
-.seat-more-body { display: flex; flex-direction: column; gap: 6px; padding: 4px 0 2px; }
+.seat-more-body { display: flex; flex-direction: column; gap: 4px; padding: 4px 0 2px; }
 .field { display: flex; flex-direction: column; gap: 2px; font-size: 13px; color: var(--muted); }
 .field select { color: var(--text); font-size: 14px; width: 100%; }
-.sims-row { display: flex; align-items: center; gap: 10px; min-height: 32px; }
+.sims-row { display: flex; align-items: center; gap: 10px; min-height: 32px; font-size: 14px; }
 .sims-row input[type="range"] { flex: 1 1 auto; min-width: 0; height: 24px; margin: 0; accent-color: var(--accent); }
 .sims-row output { flex: none; width: 4.2ch; text-align: right; color: var(--text); font-size: 15px; font-weight: 650; font-variant-numeric: tabular-nums; }
 .check { display: flex; align-items: center; gap: 6px; min-height: 28px; font-size: 14px; }
 .check input { width: 18px; height: 18px; margin: 0; }
+.check .seat-hint { margin-left: 4px; }
 .seat-hint { margin: 0; color: var(--muted); font-size: 13px; line-height: 1.35; font-variant-numeric: tabular-nums; }
-.seat-hint.limit { min-height: 4.05em; }
-.seat-hint.estimate { min-height: 4.05em; }
-.seat-hint.vary { min-height: 2.7em; }
-.seat-hint.calibration { min-height: 4.05em; }
+.seat-hint.estimate { min-height: 2.7em; }
 /* The Model select appears only when more than one model is published; its notes take the room they need, and the Players card grows to hold them. */
 .model-box { display: flex; flex-direction: column; gap: 4px; }
 /* The text keeps the height of its longest wording (four lines of the narrow card) and the progress bar and Retry keep their line when hidden, so nothing below moves while a model loads. */

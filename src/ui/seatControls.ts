@@ -1,16 +1,16 @@
 import type { ModelCard } from "../model/card";
 import type { ModelState } from "../model/manager";
-import { type Bot, botLabel, botOf, botSummary, calibrationNote, capFor, capReason, describeEstimate, type EngineKind, estimateMs, fitTo, formatMs, PRESETS, presetOf, sameBot, stepsFor, timeModelOf, withModel } from "./bots";
+import { type Bot, botLabel, botOf, botSummary, describeEstimate, estimateMs, fitTo, formatMs, PRESETS, presetOf, sameBot, stepsFor, timeModelOf, withModel } from "./bots";
 import { HUMAN, type MoveTime, type Player, type Side } from "./controller";
 import { playableModel } from "./seatModels";
+import { choiceOf, CUSTOM, ENGINE_GROUPS, playerAfterChoice } from "./seatChoice";
 import { describeModelStatus, FIRST_USE_NOTE, MAIN_MODEL, type ModelOption, modelTitle, offSizeNote, strengthDetail, strengthLine } from "./modelInfo";
 
-const CUSTOM = "custom";
 const DEFAULT_BOT: Bot = botOf("strong");
 
 /** What the seats know about the published models. */
 export interface ModelsView {
-  /** The entries of the Model select for the board; empty when there is only one model, and the select is then not shown. */
+  /** The entries of the Network select for the board; empty when there is only one network, and the select is then not shown. */
   readonly options: readonly ModelOption[];
   /** The model that plays the board as the main bot, or null before it is known. */
   readonly mainId: string | null;
@@ -46,34 +46,31 @@ function setText(target: HTMLElement, text: string): void {
 }
 
 /**
- * The controls of one seat: Human or Bot, and for a bot its preset, engine,
- * stepped simulations, "Vary moves", the limit and the time estimate. The page
- * reads the seat with `player`. `onEdit` is called after each change, with a
- * sentence to announce or null when the control already announces itself (the
- * slider); the page applies the change to the game at once.
+ * The controls of one seat. One select says what the player is: Human, a heuristic level (Beginner, Normal)
+ * or a neural-network level (Strong, Max), each engine with a Custom entry that names settings no preset has.
+ * A network bot has a Network select when more than one network is published. The simulations and "Vary
+ * moves" sit in a disclosure whose one-line summary gives the budget and the time a move. The page reads the
+ * seat with `player`. `onEdit` is called after each change, with a sentence to announce or null when the
+ * control already announces itself (the slider); the page applies the change to the game at once.
  */
 export class SeatControls {
   private human = true;
   private bot: Bot = DEFAULT_BOT;
-  /** The simulations the person last chose per engine (0: none yet), restored when a larger board's cap no longer lowers them. */
-  private readonly wanted: Record<EngineKind, number> = { heuristic: 0, network: 0 };
+  /** The simulations the person last chose (0: none yet), restored when a larger board's cap no longer lowers them. */
+  private wanted = 0;
   /** Whether the bot had a preset's name at the last drawing, to open the settings when it becomes Custom. */
   private wasNamed = true;
-  /** The gallery model the bot searches with; undefined is the main model. It is a setting apart from the preset and kept when the preset changes. */
+  /** The gallery model a network bot searches with; undefined is the main model. A heuristic bot has none: choosing one clears it. */
   private model: string | undefined;
-  private readonly pick: HTMLElement;
+  private readonly choice: HTMLSelectElement;
+  private readonly networkGroup: HTMLOptGroupElement;
+  private readonly settings: HTMLElement;
   private readonly more: HTMLDetailsElement;
   private readonly summary: HTMLElement;
-  private readonly type: HTMLSelectElement;
-  private readonly settings: HTMLElement;
-  private readonly preset: HTMLSelectElement;
-  private readonly engine: HTMLSelectElement;
   private readonly slider: HTMLInputElement;
   private readonly value: HTMLOutputElement;
-  private readonly limit: HTMLElement;
   private readonly estimate: HTMLElement;
   private readonly vary: HTMLInputElement;
-  private readonly calibration: HTMLElement;
   private readonly modelBox: HTMLElement;
   private readonly modelSelect: HTMLSelectElement;
   private readonly modelStatus: HTMLElement;
@@ -91,30 +88,28 @@ export class SeatControls {
     onRetry: (model: string) => void,
   ) {
     const id = (name: string): string => `${name}-${side}`;
-    this.type = document.getElementById(id("player")) as HTMLSelectElement;
+    this.choice = document.getElementById(id("player")) as HTMLSelectElement;
     this.settings = document.getElementById(id("bot"))!;
-    for (const [value, label] of [[HUMAN, "Human"], ["bot", "Bot"]] as const) make("option", this.type, { textContent: label }).value = value;
+    make("option", this.choice, { textContent: "Human" }).value = HUMAN;
+    const groups = ENGINE_GROUPS.map(({ engine, label }) => {
+      const group = make("optgroup", this.choice);
+      group.label = label;
+      for (const preset of PRESETS.filter((candidate) => candidate.engine === engine)) make("option", group, { textContent: preset.label }).value = preset.id;
+      make("option", group, { textContent: "Custom" }).value = CUSTOM[engine];
+      return group;
+    });
+    this.networkGroup = groups[ENGINE_GROUPS.findIndex((group) => group.engine === "network")]!;
 
-    // Human or Bot and the preset share a row; the rest of a bot's settings sit in a disclosure under it.
-    this.pick = document.createElement("div");
-    this.pick.className = "pick";
-    this.type.before(this.pick);
-    this.pick.append(this.type);
-    this.preset = make("select", this.pick, { id: id("preset") });
-    this.preset.setAttribute("aria-label", `Player ${side === "p1" ? 1 : 2} preset`);
-    for (const preset of PRESETS) make("option", this.preset, { textContent: preset.label }).value = preset.id;
-    make("option", this.preset, { textContent: "Custom" }).value = CUSTOM;
-
-    // The model comes before the disclosure: it is the choice that decides who the opponent is, so it is not tucked away.
+    // The network comes first: it is the choice that decides who the opponent is, so it is not tucked away.
     this.modelBox = make("div", this.settings, { className: "model-box" });
     this.modelBox.hidden = true;
-    const modelField = make("label", this.modelBox, { className: "field", textContent: "Model" });
+    const modelField = make("label", this.modelBox, { className: "field", textContent: "Network" });
     this.modelSelect = make("select", modelField, { id: id("model") });
     const statusRow = make("div", this.modelBox, { className: "model-status-row" });
     this.modelStatus = make("p", statusRow, { id: id("model-status"), className: "seat-hint model-status" });
     const actions = make("div", statusRow, { className: "model-actions" });
     this.modelProgress = make("progress", actions, { className: "model-progress" });
-    this.modelProgress.setAttribute("aria-label", `Player ${side === "p1" ? 1 : 2} model download`);
+    this.modelProgress.setAttribute("aria-label", `Player ${side === "p1" ? 1 : 2} network download`);
     this.modelRetry = make("button", actions, { className: "model-retry", textContent: "Retry download" });
     this.modelRetry.type = "button";
     this.modelOffSize = make("p", this.modelBox, { id: id("model-offsize"), className: "seat-hint model-offsize" });
@@ -127,59 +122,52 @@ export class SeatControls {
     this.more = make("details", this.settings, { className: "seat-more" });
     this.summary = make("summary", this.more);
     const body = make("div", this.more, { className: "seat-more-body" });
-
-    const engineField = make("label", body, { className: "field", textContent: "Engine" });
-    this.engine = make("select", engineField, { id: id("engine") });
-    for (const [value, label] of [["heuristic", "Heuristic"], ["network", "Network"]] as const) make("option", this.engine, { textContent: label }).value = value;
-
-    const simulations = make("div", body, { className: "field" });
+    const simulations = make("div", body, { className: "sims-row" });
     make("label", simulations, { htmlFor: id("sims"), textContent: "Simulations" });
-    const row = make("div", simulations, { className: "sims-row" });
-    this.slider = make("input", row, { id: id("sims") });
+    this.slider = make("input", simulations, { id: id("sims") });
     this.slider.type = "range";
     this.slider.step = "1";
     this.slider.min = "0";
-    this.value = make("output", row, { id: id("sims-value") });
+    this.value = make("output", simulations, { id: id("sims-value") });
     this.value.htmlFor = this.slider.id;
     // The slider's aria-valuetext says the value; an output is a live region and would say it again.
     this.value.setAttribute("aria-hidden", "true");
-    this.limit = make("p", body, { id: id("limit"), className: "seat-hint limit" });
-    this.estimate = make("p", body, { id: id("estimate"), className: "seat-hint estimate" });
-    this.slider.setAttribute("aria-describedby", `${this.limit.id} ${this.estimate.id}`);
-
     const varyLabel = make("label", body, { className: "check" });
     this.vary = make("input", varyLabel, { id: id("vary") });
     this.vary.type = "checkbox";
     varyLabel.append(" Vary moves");
-    const varyNote = make("p", body, { id: id("vary-note"), className: "seat-hint vary", textContent: "Off: the bot plays the same move whenever it meets the same game." });
+    const varyNote = make("span", varyLabel, { id: id("vary-note"), className: "seat-hint", textContent: "so games differ" });
     this.vary.setAttribute("aria-describedby", varyNote.id);
-    this.calibration = make("p", body, { id: id("calibration"), className: "seat-hint calibration" });
+    this.estimate = make("p", body, { id: id("estimate"), className: "seat-hint estimate" });
+    this.slider.setAttribute("aria-describedby", this.estimate.id);
 
-    /** Applies a change; `remember` keeps its simulations as the person's choice for the engine. */
+    /** Applies a change to the bot; `remember` keeps its simulations as the person's choice. */
     const edit = (bot: Bot, announce: boolean, remember: boolean): void => {
-      if (remember) this.wanted[bot.engine] = bot.simulations;
+      if (remember) this.wanted = bot.simulations;
       this.bot = fitTo(bot, this.context().size);
       this.draw();
       onEdit(announce ? this.describe() : null);
     };
-    this.type.addEventListener("change", () => {
-      this.human = this.type.value === HUMAN;
+    this.choice.addEventListener("change", () => {
+      const next = playerAfterChoice(this.player, this.choice.value);
+      if (next === null) {
+        this.draw();
+        return;
+      }
+      this.human = next === HUMAN;
+      if (next !== HUMAN) {
+        this.model = next.model;
+        edit(withModel(next, undefined), true, true);
+        return;
+      }
       this.draw();
       onEdit(this.describe());
-    });
-    this.preset.addEventListener("change", () => {
-      if (this.preset.value !== CUSTOM) edit(botOf(this.preset.value as Parameters<typeof botOf>[0]), true, true);
-      else this.draw();
-    });
-    this.engine.addEventListener("change", () => {
-      const engine = this.engine.value as EngineKind;
-      edit({ ...this.bot, engine, simulations: this.wanted[engine] || this.bot.simulations }, true, true);
     });
     // Dragging only previews the value (label, estimate); the game gets it when the slider is released or a key step is made.
     this.slider.addEventListener("input", () => {
       const step = stepsFor(this.bot.engine, this.context().size)[Number(this.slider.value)];
       if (step === undefined) return;
-      this.wanted[this.bot.engine] = step;
+      this.wanted = step;
       this.bot = fitTo({ ...this.bot, simulations: step }, this.context().size);
       this.draw();
     });
@@ -202,17 +190,16 @@ export class SeatControls {
   /** Who a game on a board of `size` seats here: the bot as last chosen, fitted to that board. */
   playerFor(size: number): Player {
     if (this.human) return HUMAN;
-    const wanted = this.wanted[this.bot.engine];
-    return withModel(fitTo(wanted > 0 ? { ...this.bot, simulations: wanted } : this.bot, size), playableModel(this.model, this.context().models.offered, size));
+    return withModel(fitTo(this.wanted > 0 ? { ...this.bot, simulations: this.wanted } : this.bot, size), playableModel(this.model, this.context().models.offered, size));
   }
 
-  /** Shows `player`; a person keeps the bot last chosen for when Bot is picked again. */
+  /** Shows `player`. A heuristic bot or a person clears the network model, as choosing one does. */
   set(player: Player): void {
     this.human = player === HUMAN;
+    this.model = player === HUMAN ? undefined : player.model;
     if (player !== HUMAN) {
-      this.wanted[player.engine] = player.simulations;
+      this.wanted = player.simulations;
       this.bot = fitTo(withModel(player, undefined), this.context().size);
-      if (player.engine === "network") this.model = player.model;
     }
     this.draw();
   }
@@ -225,32 +212,22 @@ export class SeatControls {
   /** Brings every control in line with the settings and the page: caps for the board size, choices that need the network, the estimate. */
   draw(): void {
     const { size, networkOff, model: mainModel, moveTime, models } = this.context();
-    // The bot a person's seat keeps for later cannot be one that needs a network none is offered for.
-    if (this.human && networkOff && this.bot.engine === "network") this.bot = botOf("normal");
-    const wanted = this.wanted[this.bot.engine];
-    this.bot = fitTo(wanted > 0 ? { ...this.bot, simulations: wanted } : this.bot, size);
+    this.bot = fitTo(this.wanted > 0 ? { ...this.bot, simulations: this.wanted } : this.bot, size);
     const bot = this.bot;
-    if (this.type.value !== (this.human ? HUMAN : "bot")) this.type.value = this.human ? HUMAN : "bot";
+    const chosen = choiceOf(this.player);
+    for (const option of this.choice.options) {
+      // A Custom entry is shown greyed out unless it names the seat's settings; it cannot be chosen.
+      option.disabled = (option.value === CUSTOM.heuristic || option.value === CUSTOM.network) && option.value !== chosen;
+      if (option.parentElement === this.networkGroup && networkOff) option.disabled = true;
+    }
+    this.networkGroup.label = networkOff ? "Neural network (not available)" : "Neural network";
+    if (this.choice.value !== chosen) this.choice.value = chosen;
     this.settings.hidden = this.human;
-    this.preset.hidden = this.human;
-    this.pick.classList.toggle("solo", this.human);
     if (this.human) return;
 
     const named = presetOf(bot);
     if (named === null && this.wasNamed) this.more.open = true;
     this.wasNamed = named !== null;
-    this.preset.value = named?.id ?? CUSTOM;
-    for (const option of this.preset.options) {
-      const preset = PRESETS.find((candidate) => candidate.id === option.value);
-      const off = networkOff && preset?.engine === "network";
-      option.disabled = off || (option.value === CUSTOM && named !== null);
-      setText(option, preset ? (off ? `${preset.label} (no network)` : preset.label) : "Custom");
-    }
-    this.engine.value = bot.engine;
-    for (const option of this.engine.options) {
-      option.disabled = networkOff && option.value === "network";
-      setText(option, option.value === "network" ? (networkOff ? "Network (none)" : "Network") : "Heuristic");
-    }
 
     const steps = stepsFor(bot.engine, size);
     const max = String(steps.length - 1);
@@ -259,22 +236,20 @@ export class SeatControls {
     if (this.slider.value !== index) this.slider.value = index;
     this.slider.setAttribute("aria-valuetext", `${bot.simulations.toLocaleString("en-US")} simulations`);
     setText(this.value, bot.simulations.toLocaleString("en-US"));
-    setText(this.limit, `Limit ${capFor(bot.engine, size).toLocaleString("en-US")}: ${capReason(bot.engine, size)}`);
 
-    const chosen = this.model === undefined ? null : models.card(this.model);
+    const card = this.model === undefined ? null : models.card(this.model);
     // The time table belongs to a make of network: a gallery model of the same make as the measured one uses it, another is unmeasured.
-    const model = this.model === undefined ? mainModel : chosen === null ? this.model : timeModelOf(chosen);
-    const full = withModel(bot, this.model);
-    const found = estimateMs(bot, size, bot.engine === "network" ? model : null);
-    setText(this.summary, `Settings: ${bot.simulations.toLocaleString("en-US")} simulations, ${found === null ? "time unmeasured" : `about ${formatMs(found.ms)}${found.kind === "estimate" ? " (estimate)" : ""}`}`);
-    const here = moveTime !== null && moveTime.size === size && sameBot(moveTime.bot, full) ? ` On this device: ${formatMs(moveTime.ms)}.` : "";
-    setText(this.estimate, describeEstimate(bot, size, bot.engine === "network" ? model : null) + here);
+    const model = bot.engine !== "network" ? null : this.model === undefined ? mainModel : card === null ? this.model : timeModelOf(card);
+    const found = estimateMs(bot, size, model);
+    const time = found === null ? "time unmeasured" : `≈ ${formatMs(found.ms)} a move`;
+    setText(this.summary, `${bot.simulations.toLocaleString("en-US")} simulations · ${time}${bot.vary ? " · varied" : ""}`);
+    const here = moveTime !== null && moveTime.size === size && sameBot(moveTime.bot, withModel(bot, this.model)) ? ` On this device: ${formatMs(moveTime.ms)}.` : "";
+    setText(this.estimate, describeEstimate(bot, size, model) + here);
     if (this.vary.checked !== bot.vary) this.vary.checked = bot.vary;
-    setText(this.calibration, calibrationNote(bot, size));
     this.drawModel(bot.engine === "network", size, models);
   }
 
-  /** The Model select and the notes under it; shown for a network bot when there is a model to choose. */
+  /** The Network select and the notes under it; shown for a network bot when there is a network to choose. */
   private drawModel(network: boolean, size: number, models: ModelsView): void {
     const show = network && models.options.length > 0;
     this.modelBox.hidden = !show;
