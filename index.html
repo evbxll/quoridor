@@ -173,19 +173,17 @@
 
         <section id="games" class="card games" aria-labelledby="games-title" hidden>
           <h2 id="games-title">Games</h2>
-          <div class="games-tally-box">
-            <ul id="games-tally" class="tally" aria-label="Record per player"></ul>
-            <p class="hint">Score = wins + half the draws. Small samples: differences under about 20 games are noise. Mirror matches (the same player on both sides) and games in which a seat was changed part-way are listed but not counted. Scores are per board size. Only the last 200 games are kept and counted.</p>
-          </div>
-          <div id="games-scroll" class="games-scroll" tabindex="0" role="region" aria-labelledby="games-title">
-            <table class="games-table">
-              <caption class="sr-only">Games finished, oldest first. Open replaces the game on the board.</caption>
-              <thead>
-                <tr><th scope="col">#</th><th scope="col">Player 1</th><th scope="col">Player 2</th><th scope="col">Result</th><th scope="col">Moves</th><th scope="col"><span class="sr-only">Link</span></th></tr>
+          <ul id="games-tally" class="tally" aria-label="Record per player"></ul>
+          <p class="hint">Score = wins + half the draws, per board size. Under about 20 games, differences are noise. Games with the same player on both sides, or with a seat changed part-way, are listed but not counted. The last 200 games are kept.</p>
+          <!-- Roles kept explicitly: a narrow card lays the rows out as blocks, which some browsers would otherwise stop reading as a table. -->
+          <table class="games-table" role="table">
+            <caption class="sr-only">Games finished, newest first. Open replaces the game on the board.</caption>
+            <thead role="rowgroup">
+              <tr role="row"><th scope="col" role="columnheader">Game</th><th scope="col" role="columnheader">Player 1</th><th scope="col" role="columnheader">Player 2</th><th scope="col" role="columnheader">Result</th><th scope="col" role="columnheader">Moves</th><th scope="col" role="columnheader"><span class="sr-only">Link</span></th></tr>
               </thead>
-              <tbody id="games-rows"></tbody>
-            </table>
-          </div>
+            <tbody id="games-rows" role="rowgroup"></tbody>
+          </table>
+          <button id="games-more" class="quiet games-more" type="button" aria-controls="games-rows" aria-expanded="false" hidden></button>
           <div id="games-ask" class="games-ask off" role="group" aria-label="Replace the current game?">
             <span id="games-ask-text"></span>
             <button id="games-yes" type="button">Yes, open</button>

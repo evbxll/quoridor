@@ -93,7 +93,7 @@ body {
   margin: 0;
   background: var(--surface);
   color: var(--text);
-  font: 15px/1.45 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  font: 0.9375rem/1.45 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
 }
 button, select { font: inherit; color: inherit; }
 button {
@@ -123,7 +123,7 @@ select {
   position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0; overflow: hidden;
   clip: rect(0 0 0 0); white-space: nowrap; border: 0;
 }
-.hint { margin: 0; color: var(--muted); font-size: 13px; }
+.hint { margin: 0; color: var(--muted); font-size: 0.875rem; }
 .inline { display: inline-flex; gap: 6px; align-items: center; min-height: 24px; }
 .row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
 
@@ -131,7 +131,7 @@ select {
   display: flex; align-items: center; justify-content: space-between;
   max-width: 1180px; margin: 0 auto; padding: 12px 24px 4px;
 }
-.topbar h1 { margin: 0; font-size: 19px; font-weight: 650; letter-spacing: .01em; }
+.topbar h1 { margin: 0; font-size: 1.1875rem; font-weight: 650; letter-spacing: .01em; }
 .topbar { position: relative; }
 .topbar-end { display: flex; align-items: center; gap: 8px; min-height: 36px; }
 
@@ -142,13 +142,13 @@ select {
 }
 .stage { display: flex; flex-direction: column; align-items: center; gap: 8px; min-width: 0; }
 .stage { --board-max: calc(100vh - 140px); }
-.board-row { display: flex; gap: 8px; width: 100%; max-width: calc(var(--board-max) + 56px); }
+.board-row { display: flex; gap: 8px; width: 100%; max-width: calc(var(--board-max) + 64px); }
 /* The View menu sits under the board's left edge. Its choices open in a popover out of the page's flow, so opening it moves nothing. */
-.view-row { position: relative; display: flex; align-items: center; min-height: 28px; width: 100%; max-width: calc(var(--board-max) + 56px); padding-left: 56px; }
-.view > summary { cursor: pointer; padding: 2px 8px; border: 1px solid var(--line); border-radius: 999px; background: var(--card); color: var(--muted); font-size: 13px; }
+.view-row { position: relative; display: flex; align-items: center; min-height: 28px; width: 100%; max-width: calc(var(--board-max) + 64px); padding-left: 64px; }
+.view > summary { cursor: pointer; padding: 2px 8px; border: 1px solid var(--line); border-radius: 999px; background: var(--card); color: var(--muted); font-size: 0.875rem; }
 .view[open] > summary, .view > summary:hover { color: var(--text); }
 .view-pop {
-  position: absolute; left: 56px; top: calc(100% + 4px); z-index: 2; width: min(300px, calc(100vw - 32px));
+  position: absolute; left: 64px; top: calc(100% + 4px); z-index: 2; width: min(300px, calc(100vw - 32px));
   display: flex; flex-direction: column; gap: 2px; padding: 10px 12px;
   background: var(--card); border: 1px solid var(--line); border-radius: 12px; box-shadow: 0 6px 20px var(--shadow);
 }
@@ -160,19 +160,19 @@ select {
 .board.can-click { cursor: pointer; }
 /* Focus lands here when Retry goes away; it is not a control, so it draws no ring. */
 .status:focus { outline: none; }
-.status { margin: 4px 0 0; width: 100%; min-height: 2.9em; max-width: 60ch; font-size: 16px; font-weight: 600; text-align: center; }
+.status { margin: 4px 0 0; width: 100%; min-height: 2.9em; max-width: 60ch; font-size: 1rem; font-weight: 600; text-align: center; }
 
 /* Eval bar: player 1's share rises from the bottom (player 1's side of the board) in a
    soft blue over player 2's soft red. Its rows line up with the board's edges (set from
    the board's geometry); the shares are printed at each end. The numbered tabs are each
    bot's own estimate: player 1's on the left, player 2's on the right, so they never overlap. */
-.eval { flex: none; width: 48px; display: grid; grid-template-rows: minmax(0, 1fr) minmax(0, 12fr) minmax(0, 1fr); }
+.eval { flex: none; width: 56px; display: grid; grid-template-rows: minmax(0, 1fr) minmax(0, 12fr) minmax(0, 1fr); }
 .eval-end {
   display: flex; align-items: center; justify-content: center; gap: 2px;
-  font-size: 12px; line-height: 1; font-variant-numeric: tabular-nums;
+  font-size: 0.875rem; line-height: 1; font-variant-numeric: tabular-nums;
 }
 .eval-end b { font-weight: 700; min-width: 4ch; text-align: center; }
-.eval-end span { color: var(--muted); font-size: 10px; }
+.eval-end span { color: var(--muted); font-size: 0.875rem; }
 .eval-end:first-child b { color: var(--p2); }
 .eval-end:last-child b { color: var(--p1); }
 .eval-main { display: flex; justify-content: center; min-height: 0; }
@@ -202,7 +202,7 @@ select {
 
 .panel { display: flex; flex-direction: column; gap: 12px; min-width: 0; }
 .card { background: var(--card); border: 1px solid var(--line); border-radius: 14px; padding: 14px 16px; }
-.card h2 { margin: 0 0 8px; font-size: 13px; font-weight: 650; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); }
+.card h2 { margin: 0 0 8px; font-size: 0.875rem; font-weight: 650; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); }
 
 /* Players, in board order: player 2 (top) above player 1 (bottom). The side to move is outlined in its colour. */
 .players { display: flex; flex-direction: column; gap: 4px; }
@@ -222,25 +222,25 @@ select {
 .disc.p2 { background: var(--p2); }
 .seat-body { display: flex; flex-direction: column; gap: 5px; min-width: 0; }
 .seat-head { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
-.seat-head label { font-weight: 650; font-size: 14px; }
+.seat-head label { font-weight: 650; font-size: 0.875rem; }
 .seat-body select { width: 100%; }
-.seat-note { margin: 0; min-height: 1.45em; color: var(--muted); font-size: 13px; }
+.seat-note { margin: 0; min-height: 1.45em; color: var(--muted); font-size: 0.875rem; }
 .seat.thinking .seat-note { color: var(--text); font-weight: 600; }
 /* A bot's settings: one summary line, and in it the simulations, Vary moves and the time a move. The time keeps two lines of room, so dragging the slider moves nothing. */
 .bot-settings { display: flex; flex-direction: column; gap: 6px; }
 .seat-body select.player { font-weight: 600; }
-.seat-more > summary { cursor: pointer; padding: 3px 2px; font-size: 13px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-variant-numeric: tabular-nums; }
+.seat-more > summary { cursor: pointer; padding: 3px 2px; font-size: 0.875rem; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-variant-numeric: tabular-nums; }
 .seat-more[open] > summary { color: var(--text); }
 .seat-more-body { display: flex; flex-direction: column; gap: 4px; padding: 4px 0 2px; }
-.field { display: flex; flex-direction: column; gap: 2px; font-size: 13px; color: var(--muted); }
-.field select { color: var(--text); font-size: 14px; width: 100%; }
-.sims-row { display: flex; align-items: center; gap: 10px; min-height: 32px; font-size: 14px; }
+.field { display: flex; flex-direction: column; gap: 2px; font-size: 0.875rem; color: var(--muted); }
+.field select { color: var(--text); font-size: 0.875rem; width: 100%; }
+.sims-row { display: flex; align-items: center; gap: 10px; min-height: 32px; font-size: 0.875rem; }
 .sims-row input[type="range"] { flex: 1 1 auto; min-width: 0; height: 24px; margin: 0; accent-color: var(--accent); }
-.sims-row output { flex: none; width: 4.2ch; text-align: right; color: var(--text); font-size: 15px; font-weight: 650; font-variant-numeric: tabular-nums; }
-.check { display: flex; align-items: center; gap: 6px; min-height: 28px; font-size: 14px; }
+.sims-row output { flex: none; width: 4.2ch; text-align: right; color: var(--text); font-size: 0.9375rem; font-weight: 650; font-variant-numeric: tabular-nums; }
+.check { display: flex; align-items: center; gap: 6px; min-height: 28px; font-size: 0.875rem; }
 .check input { width: 18px; height: 18px; margin: 0; }
 .check .seat-hint { margin-left: 4px; }
-.seat-hint { margin: 0; color: var(--muted); font-size: 13px; line-height: 1.35; font-variant-numeric: tabular-nums; }
+.seat-hint { margin: 0; color: var(--muted); font-size: 0.875rem; line-height: 1.35; font-variant-numeric: tabular-nums; }
 .seat-hint.estimate { min-height: 2.7em; }
 .seat-hint.strength { min-height: 1.35em; }
 /* The Model select appears only when more than one model is published; its notes take the room they need, and the Players card grows to hold them. */
@@ -250,17 +250,17 @@ select {
 .model-status-row .seat-hint { min-height: 5.4em; }
 .model-actions { display: flex; align-items: center; gap: 8px; min-height: 30px; }
 .model-progress { width: 64px; accent-color: var(--accent); }
-.model-retry { padding: 2px 10px; font-size: 13px; }
-.walls { color: var(--muted); font-size: 13px; white-space: nowrap; font-variant-numeric: tabular-nums; }
-.walls b { color: var(--text); font-size: 15px; }
-.swap { align-self: center; font-size: 13px; margin: -2px 0; }
+.model-retry { padding: 2px 10px; font-size: 0.875rem; }
+.walls { color: var(--muted); font-size: 0.875rem; white-space: nowrap; font-variant-numeric: tabular-nums; }
+.walls b { color: var(--text); font-size: 0.9375rem; }
+.swap { align-self: center; font-size: 0.875rem; margin: -2px 0; }
 /* The game card is first in the panel, so its controls stay put whatever the Players card below them does. */
 .game { display: flex; flex-direction: column; gap: 10px; }
 .game .row { min-height: 36px; }
 /* Start, Pause and Resume is the main control of a bot game: large, and the same size under each label. */
 .bot-controls { display: flex; flex-direction: column; gap: 8px; }
 .person-controls { align-self: start; }
-.run { width: 100%; padding: 12px 14px; font-size: 18px; }
+.run { width: 100%; padding: 12px 14px; font-size: 1.125rem; }
 
 /* A fixed height, so the card keeps its size as the game goes on; the list scrolls inside. */
 .moves-box { position: relative; height: 168px; }
@@ -279,25 +279,36 @@ select {
 .auto { display: flex; flex-direction: column; gap: 4px; border-top: 1px solid var(--line); padding-top: 8px; }
 .auto-options { display: flex; flex-wrap: wrap; gap: 0 16px; padding-left: 24px; }
 .auto-status { display: flex; align-items: center; justify-content: space-between; gap: 8px; min-height: 36px; }
-.auto-line { font-size: 14px; font-weight: 600; font-variant-numeric: tabular-nums; }
+.auto-line { font-size: 0.875rem; font-weight: 600; font-variant-numeric: tabular-nums; }
 .auto-status button { min-height: 28px; }
 .auto-status button.off { visibility: hidden; }
 
-/* The Games card has a fixed height, so rows arriving change nothing around it; the tally and the table scroll inside. */
-.games { display: flex; flex-direction: column; gap: 8px; height: 440px; }
+/* The Games card grows with its rows: no box scrolls inside it. It sits below the game controls, so nothing that matters moves.
+   The latest games show first; the rest are a button away. In a narrow card each game is a short block of lines;
+   in a wide one the table has its columns. */
+.games { display: flex; flex-direction: column; gap: 8px; container-type: inline-size; }
 .games h2 { margin: 0; }
-.games-tally-box { flex: none; max-height: 7.5rem; overflow-y: auto; }
-.tally { margin: 0 0 6px; padding-left: 18px; font-size: 13px; }
-.games-scroll { flex: 1 1 0; min-height: 0; overflow: auto; border: 1px solid var(--line); border-radius: 8px; }
-.games-table { width: 100%; border-collapse: collapse; font-size: 12px; font-variant-numeric: tabular-nums; }
-.games-table th, .games-table td { padding: 3px 6px; text-align: left; vertical-align: top; border-bottom: 1px solid var(--line); }
-.games-table thead th { position: sticky; top: 0; background: var(--card); color: var(--muted); font-weight: 650; }
+.tally { margin: 0; padding-left: 18px; font-size: 0.875rem; }
+.games-table { width: 100%; border-collapse: collapse; font-size: 0.875rem; font-variant-numeric: tabular-nums; }
+.games-table th, .games-table td { padding: 4px 6px; text-align: left; vertical-align: top; border-bottom: 1px solid var(--line); overflow-wrap: anywhere; }
+.games-table thead th { color: var(--muted); font-weight: 650; }
 .games-table a { display: inline-block; min-height: 24px; min-width: 24px; line-height: 24px; color: var(--text); font-weight: 600; text-decoration: underline; text-underline-offset: 3px; }
-.games-ask { flex: none; display: flex; flex-wrap: wrap; align-items: center; gap: 6px 8px; min-height: 64px; font-size: 13px; font-weight: 600; }
+.games-table .label { display: none; color: var(--muted); }
+@container (max-width: 560px) {
+  .games-table thead { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+  .games-table tbody, .games-table tr { display: block; }
+  .games-table tr { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 0 8px; padding: 6px 0; border-bottom: 1px solid var(--line); }
+  .games-table th, .games-table td { display: block; padding: 0; border: none; grid-column: 1; }
+  .games-table th[scope="row"] { font-weight: 650; }
+  .games-table td.open { grid-column: 2; grid-row: 1; }
+  .games-table .label { display: inline; }
+}
+.games-ask { flex: none; display: flex; flex-wrap: wrap; align-items: center; gap: 6px 8px; min-height: 64px; font-size: 0.875rem; font-weight: 600; }
 .games-ask.off { visibility: hidden; }
 .games-ask button { min-height: 28px; }
-.games-foot { flex: none; justify-content: space-between; flex-wrap: nowrap; }
+.games-foot { flex: none; justify-content: space-between; flex-wrap: wrap; }
 .games-foot button { min-height: 28px; white-space: nowrap; }
+.games-more { align-self: start; }
 .games-foot button.armed { color: var(--text); border: 2px solid var(--text); font-weight: 650; }
 
 details.card > summary { cursor: pointer; font-weight: 650; padding: 2px 0; }
@@ -311,27 +322,27 @@ details.card > :not(summary) + * { margin-top: 10px; }
 button.icon { width: 36px; height: 32px; padding: 0; display: grid; place-items: center; }
 button.icon svg { width: 16px; height: 16px; fill: currentColor; stroke: currentColor; stroke-width: 2; stroke-linejoin: round; }
 button.theme-toggle svg { width: 20px; height: 20px; stroke-linecap: round; }
-.viewing { margin: 6px 0 8px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; padding: 3px 8px; min-height: 2em; border-radius: 8px; font-size: 13px; font-variant-numeric: tabular-nums; }
+.viewing { margin: 6px 0 8px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; padding: 3px 8px; min-height: 2em; border-radius: 8px; font-size: 0.875rem; font-variant-numeric: tabular-nums; }
 .viewing.past { background: var(--surface); box-shadow: inset 3px 0 0 var(--accent); font-weight: 600; }
 .review-nav .quiet.live { visibility: hidden; }
 .analysis-box { margin-top: 12px; padding-top: 10px; border-top: 1px solid var(--line); }
-.analysis-box h3 { margin: 0 0 6px; font-size: 13px; font-weight: 650; }
+.analysis-box h3 { margin: 0 0 6px; font-size: 0.875rem; font-weight: 650; }
 .analysis-box h3 .hint { font-weight: 400; }
 .analysis-box > * + * { margin-top: 8px; }
 .analysis-box > .hint { min-height: 2.9em; }
 .lines { list-style: none; margin: 0; padding: 0; height: 90px; display: flex; flex-direction: column; gap: 4px; } /* three rows */
 .lines li { height: 26px; display: grid; grid-template-columns: 1.2em 3.4em minmax(0, 1fr) 3em; gap: 8px; align-items: center; font-variant-numeric: tabular-nums; }
-.lines .rank { color: var(--muted); font-size: 13px; }
+.lines .rank { color: var(--muted); font-size: 0.875rem; }
 .lines .move { font-weight: 650; }
 .lines .share { height: 10px; border-radius: 5px; background: var(--surface); box-shadow: inset 0 0 0 1px var(--line); overflow: hidden; }
 .lines .share > span { display: block; height: 100%; background: var(--muted); }
-.lines .percent { text-align: right; font-size: 13px; }
+.lines .percent { text-align: right; font-size: 0.875rem; }
 .lines li.best .move, .lines li.best .percent { font-weight: 800; }
 .lines li.best .share > span { background: var(--accent); }
 .lines li.blank { visibility: hidden; }
 
 /* The network's status chip in the top bar: the dot and a few words, with the detail in a popover beneath it. */
-.network { font-size: 13px; color: var(--muted); }
+.network { font-size: 0.875rem; color: var(--muted); }
 .network summary { display: flex; align-items: center; gap: 7px; width: 13.5em; padding: 4px 10px; border: 1px solid var(--line); border-radius: 999px; background: var(--card); cursor: pointer; }
 .network summary > span:last-of-type { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .network progress { width: 48px; accent-color: var(--accent); }
@@ -358,7 +369,7 @@ button.theme-toggle svg { width: 20px; height: 20px; stroke-linecap: round; }
   .layout { grid-template-columns: minmax(0, 1fr); gap: 16px; padding: 6px 16px 24px; }
   .stage { --board-max: 100vw; }
   /* Three lines of room: the game controls follow the status line here, so a longer status must not push them down. */
-  .status { font-size: 15px; min-height: 4.35em; }
+  .status { font-size: 0.9375rem; min-height: 4.35em; }
 }
 
 /* Very narrow phones: the title and the theme button share the first line, the chip and Copy link the second. */
@@ -410,7 +421,7 @@ button.theme-toggle svg { width: 20px; height: 20px; stroke-linecap: round; }
   width: max-content; max-width: min(19rem, calc(100vw - 16px));
   padding: 8px 10px; border-radius: 8px; border: 1px solid var(--tip-line);
   background: var(--tip-bg); color: var(--tip-text);
-  font-size: 13px; font-weight: 500; line-height: 1.4; box-shadow: 0 2px 8px var(--shadow);
+  font-size: 0.875rem; font-weight: 500; line-height: 1.4; box-shadow: 0 2px 8px var(--shadow);
 }
 /* The markers keep their 16px look; a 24px box around each is the hit area. */
 .eval-main[data-tip], .eval-end[data-tip] { cursor: help; }
@@ -422,8 +433,8 @@ button.theme-toggle svg { width: 20px; height: 20px; stroke-linecap: round; }
 .eval-ticks.right .tick::before { clip-path: polygon(35% 0, 100% 0, 100% 100%, 35% 100%, 0 50%); }
 
 /* About the bots: plain words, then the network drawn top to bottom from its arch.json, with the same steps as a list. */
-.about p { margin: 0 0 8px; font-size: 14px; }
-.about h3 { margin: 12px 0 4px; font-size: 14px; font-weight: 650; }
+.about p { margin: 0 0 8px; font-size: 0.875rem; }
+.about h3 { margin: 12px 0 4px; font-size: 0.875rem; font-weight: 650; }
 .arch-diagram { display: block; width: 100%; max-width: 300px; height: auto; margin: 4px auto 8px; }
 .arch-box { fill: var(--surface); stroke: var(--muted); stroke-width: 1.5; }
 .arch-box.head { stroke: var(--accent); stroke-width: 2; }
@@ -432,5 +443,14 @@ button.theme-toggle svg { width: 20px; height: 20px; stroke-linecap: round; }
 .arch-flow { stroke: var(--muted); stroke-width: 2; }
 .arch-label { fill: var(--text); font-size: 13px; text-anchor: middle; dominant-baseline: central; }
 .arch-label.small { fill: var(--muted); font-size: 12px; }
-.arch-steps { margin: 0 0 8px; padding-left: 20px; font-size: 14px; }
+.arch-steps { margin: 0 0 8px; padding-left: 20px; font-size: 0.875rem; }
 .arch-steps li + li { margin-top: 4px; }
+
+/* Forced colours (Windows contrast themes): the system colours take over, but the eval bar, its markers and the network's dot
+   keep theirs, as they carry the reading itself; the side to move and the main button keep an outline. */
+@media (forced-colors: active) {
+  .eval-track, .eval-fill, .tick::before, .net-dot, .lines .share > span { forced-color-adjust: none; }
+  .seat.to-move { outline: 2px solid Highlight; }
+  button.primary { border: 2px solid ButtonText; }
+  .view > summary, .network summary { border: 1px solid ButtonText; }
+}

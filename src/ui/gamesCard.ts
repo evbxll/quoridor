@@ -6,10 +6,21 @@ import { type GameHistory, type GameRecord, isMirror, resultText, seatNames } fr
 /** How long "Clear history" waits for its second press, in milliseconds. */
 const ARMED_MS = 5000;
 
-const cell = (tag: "td" | "th", text: string, scope?: "row" | "col"): HTMLTableCellElement => {
+/** How many games the card lists until "Show all" is pressed: the latest ones. */
+const LATEST = 10;
+
+/**
+ * A cell of a game's row. `label` names it in a narrow card, where the row is a block of lines and the column
+ * headers are not shown; a wide card hides the label and shows the headers. Roles are explicit for the same reason.
+ */
+const cell = (tag: "td" | "th", text: string, label: string): HTMLTableCellElement => {
   const node = document.createElement(tag);
-  node.textContent = text;
-  if (scope !== undefined) node.scope = scope;
+  node.setAttribute("role", tag === "th" ? "rowheader" : "cell");
+  if (tag === "th") node.scope = "row";
+  const tagged = document.createElement("span");
+  tagged.className = "label";
+  tagged.textContent = label;
+  node.append(tagged, text);
   return node;
 };
 
@@ -24,12 +35,13 @@ const notes = (game: GameRecord): string => (game.seatChanged ? " (seat changed)
 
 const percent = (share: number): string => `${Math.round(share * 100)}%`;
 
-/** The "Games" card: the tally per player, then a table of the games finished this visit. Shown once there is one. Built with text nodes only. */
+/** The "Games" card: the tally per player, then the latest games finished, newest first, with all of them a button away. Shown once there is one. Built with text nodes only. */
 export class GamesCard {
   private readonly card = element("games", HTMLElement);
   private readonly tally = element("games-tally", HTMLUListElement);
   private readonly body = element("games-rows", HTMLTableSectionElement);
-  private readonly scroller = element("games-scroll", HTMLElement);
+  private readonly more = element("games-more", HTMLButtonElement);
+  private showAll = false;
   private readonly clearButton = element("games-clear", HTMLButtonElement);
   private drawn = "";
   private armed = false;
@@ -66,6 +78,10 @@ export class GamesCard {
     this.ask.addEventListener("focusout", (event) => {
       if (!(event.relatedTarget instanceof Node && this.ask.contains(event.relatedTarget))) this.confirm.cancel();
     });
+    this.more.addEventListener("click", () => {
+      this.showAll = !this.showAll;
+      this.draw();
+    });
     this.clearButton.addEventListener("click", () => this.press());
     this.clearButton.addEventListener("blur", () => this.setArmed(false));
   }
@@ -74,7 +90,7 @@ export class GamesCard {
   draw(): void {
     const games = this.history.games;
     this.card.hidden = games.length === 0;
-    const signature = drawSignature(games);
+    const signature = `${drawSignature(games)}|${this.showAll}`;
     if (signature === this.drawn) return;
     this.drawn = signature;
     this.tally.replaceChildren(
@@ -84,23 +100,35 @@ export class GamesCard {
         return item;
       }),
     );
+    const newest = [...games].reverse();
     this.body.replaceChildren(
-      ...games.map((game) => {
+      ...(this.showAll ? newest : newest.slice(0, LATEST)).map((game) => {
         const names = seatNames(game);
         const row = document.createElement("tr");
+        row.setAttribute("role", "row");
         const link = document.createElement("a");
         link.href = `#n=${game.size}&m=${game.moves}`;
         link.dataset["game"] = String(game.id);
         link.textContent = "Open";
         link.setAttribute("aria-label", `Open game ${game.id}, on a ${game.size} by ${game.size} board`);
         const open = document.createElement("td");
+        open.className = "open";
+        open.setAttribute("role", "cell");
         open.append(link);
-        row.append(cell("th", String(game.id), "row"), cell("td", names.p1), cell("td", names.p2), cell("td", resultText(game.winner, game.reason) + notes(game)), cell("td", String(game.moves.split(".").length)), open);
+        row.append(
+          cell("th", String(game.id), "Game "),
+          cell("td", names.p1, "Player 1: "),
+          cell("td", names.p2, "Player 2: "),
+          cell("td", resultText(game.winner, game.reason) + notes(game), "Result: "),
+          cell("td", String(game.moves.split(".").length), "Moves: "),
+          open,
+        );
         return row;
       }),
     );
-    // The newest game is in view.
-    this.scroller.scrollTop = this.scroller.scrollHeight;
+    this.more.hidden = games.length <= LATEST;
+    this.more.setAttribute("aria-expanded", String(this.showAll));
+    this.more.textContent = this.showAll ? `Show the latest ${LATEST} only` : `Show all ${games.length} games`;
   }
 
   /** Hands the game to the page to put on the board, and lets the keyboard go to the page. */
