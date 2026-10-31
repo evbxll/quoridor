@@ -103,33 +103,94 @@ const isPlainStrength = (/** @type {any} */ entry) =>
   typeof entry === "object" && entry !== null && Object.keys(entry).every((key) => key === "size" || key === "elo_vs_normal") && Number.isInteger(entry.size) && Number.isFinite(entry.elo_vs_normal);
 
 /**
- * Words that belong to how the models were made and rated, or to the private repository, never to the public site. Each is
- * a whole phrase, so the page's own words ("Varied openings", a model's trained size) stay allowed.
+ * Words that belong to how the models were made and rated, or to the private repository, never to the public site.
+ * They are matched on normalised text (`normalise`): lower case, any run of spaces, no-break spaces, hyphens or
+ * underscores as one space, so "Self-play", "self_play" and "SELF PLAY" are one form. Plurals are included.
+ *
+ * Allowed on purpose: "openings" (the page's "Varied openings"), the site's own address "evanbell.site", "anchor" (a
+ * word of the page's tooltips and styles), and a published model's id, which holds its run and generation but is a file
+ * name; ids are taken out of the text before matching, so the run name is caught only where it is shown as words.
  */
-export const FORBIDDEN_TERMS = [/\bevan bot\b/i, /\bladder\b/i, /\bbradley/i, /\blaplace\b/i, /\bfresh[ -]tree\b/i, /\bresearch\b/i, /\bprivate\b/i, /\bgeneration\b/i, /\bgen \d/i, /\bPR #\d/, /\bryzen\b/i, /how this was measured/i, /git_sha/i, /ratings?_folder/i, /self-play/i, /\banchor(ed)? (bot|at|on)\b/i];
+export const FORBIDDEN_TERMS = [
+  /\bevan(?:'s)? bot\b/,
+  /\bladders?\b/,
+  /\bbradley\b/,
+  /\bterry\b/,
+  /\blaplace\b/,
+  /\bfresh trees?\b/,
+  /\bbootstrap(?:s|ped|ping)?\b/,
+  /\bself play(?:s|ed|ing)?\b/,
+  /\bprivate (?:repo|repos|repository|repositories|research)\b/,
+  /\bresearch(?:es|ed)?\b/,
+  /\bgen ?\d+\b/,
+  /\bgenerations?\b/,
+  /\bs9 conv paths\b/,
+  /\bpr #\d/,
+  /\bryzen\b/,
+  /\bhow this was measured\b/,
+  /\bgit sha\b/,
+  /\bratings? folders?\b/,
+];
+
+/** A git commit id: 40 hex digits on their own (a sha256, 64 of them, is not one). */
+const GIT_SHA = /(?<![0-9a-f])[0-9a-f]{40}(?![0-9a-f])/i;
 
 /**
- * Finds forbidden terms in a text, as "term" strings.
+ * The text as the terms are matched against it.
  * @param {string} text
+ * @returns {string}
+ */
+export const normalise = (text) => text.toLowerCase().replace(/[‘’]/g, "'").replace(/[\s _-]+/g, " ");
+
+/**
+ * Finds forbidden terms in a text, as the normalised forms found, with "git commit id" for a commit id.
+ * @param {string} text
+ * @param {readonly string[]} [ids] Published model ids, which are file names and taken out first.
  * @returns {string[]}
  */
-export function forbiddenIn(text) {
-  return FORBIDDEN_TERMS.flatMap((term) => {
-    const found = term.exec(text);
-    return found === null ? [] : [found[0]];
+export function forbiddenIn(text, ids = []) {
+  const plain = ids.reduce((rest, id) => rest.replaceAll(id, "model"), text);
+  const words = normalise(plain);
+  const found = FORBIDDEN_TERMS.flatMap((term) => {
+    const match = term.exec(words);
+    return match === null ? [] : [match[0]];
   });
+  return GIT_SHA.test(plain) ? [...found, "git commit id"] : found;
 }
 
 /**
- * Checks the site's own shipped text (the page, its styles and scripts, and the model files) for forbidden terms. The
- * third-party runtime (`ort*`) and the licence notices are not the site's words and are not read.
+ * The files that are not the site's own words: the vendored onnxruntime-web runtime that Vite copies in (by its exact
+ * file names, plus the build's 8-character hash), the vendored service worker and the licence notices. Everything
+ * else that is text is checked, the site's own `ort-<hash>.js` chunk included.
+ */
+const VENDORED = [/^assets\/ort-wasm-simd-threaded-[\w-]{8}\.(?:js|mjs)$/, /^assets\/ort\.wasm\.bundle\.min-[\w-]{8}\.js$/, /^coi-serviceworker\.js$/, /^THIRD-PARTY-NOTICES\.txt$/];
+const TEXT = /\.(?:html|css|js|mjs|json|txt|svg|webmanifest)$/;
+
+/**
+ * Checks every shipped text file but the vendored ones for forbidden terms.
  * @param {string} distDir
+ * @param {readonly string[]} ids Published model ids.
  * @returns {string[]} Error messages.
  */
-function checkPublicText(distDir) {
+function checkPublicText(distDir, ids) {
   return walk(distDir)
-    .filter((file) => /\.(html|css|js|mjs|json)$/.test(file) && !/(^|[\\/])ort[^\\/]*$/.test(file))
-    .flatMap((file) => forbiddenIn(readFileSync(file, "utf8")).map((term) => `${relative(distDir, file).replaceAll("\\", "/")}: "${term}" belongs to how the models were made, not to the public site`));
+    .map((file) => relative(distDir, file).replaceAll("\\", "/"))
+    .filter((path) => TEXT.test(path) && !VENDORED.some((vendored) => vendored.test(path)))
+    .flatMap((path) => forbiddenIn(readFileSync(join(distDir, path), "utf8"), ids).map((term) => `${path}: "${term}" belongs to how the models were made, not to the public site`));
+}
+
+/**
+ * The published model ids, from the index if there is a readable one.
+ * @param {string} distDir
+ * @returns {string[]}
+ */
+function publishedIds(distDir) {
+  try {
+    const index = JSON.parse(readFileSync(join(distDir, "models", "index.json"), "utf8"));
+    return Array.isArray(index.models) ? index.models.flatMap((/** @type {any} */ model) => (typeof model?.id === "string" ? [model.id] : [])) : [];
+  } catch {
+    return [];
+  }
 }
 
 /**
@@ -312,7 +373,7 @@ export function verifyDist(distDir, projectDir) {
     ...checkRuntimeFiles(distDir, projectDir),
     ...checkModels(distDir),
     ...checkExternalUrls(distDir),
-    ...checkPublicText(distDir),
+    ...checkPublicText(distDir, publishedIds(distDir)),
   ];
 }
 

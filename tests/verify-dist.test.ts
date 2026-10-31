@@ -2,7 +2,7 @@ import { createHash } from "node:crypto";
 import { readdirSync, readFileSync, statSync } from "node:fs";
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { join, relative } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { checkCard, forbiddenIn, SUPPORTED_PLANES as SCRIPT_PLANES, verifyDist } from "../scripts/verify-dist.mjs";
 import { SUPPORTED_PLANES } from "../src/ai/encoding";
@@ -249,18 +249,62 @@ describe("verifyDist", () => {
 });
 
 describe("only public words in what the site ships", () => {
-  it("refuses a page, script or model file that says how the models were made or rated", () => {
-    write("assets/a.js", 'const note = "rated against the Evan bot on the ladder";');
-    write("assets/ort-wasm.js", "private research");
-    expect(verifyDist(dist, root)).toEqual([
-      'assets/a.js: "Evan bot" belongs to how the models were made, not to the public site',
-      'assets/a.js: "ladder" belongs to how the models were made, not to the public site',
-    ]);
+  const files = (dir: string): string[] => readdirSync(dir).flatMap((name) => (statSync(join(dir, name)).isDirectory() ? files(join(dir, name)) : [join(dir, name)]));
+  /** A dist made of the repo's real shipped text: the page, the bot data as a script, and every published model file. */
+  const shipped = (): void => {
+    write("index.html", readFileSync("index.html", "utf8"));
+    write("assets/index-AbCd1234.js", `const data = ${readFileSync("src/ui/bots.json", "utf8")};`);
+    for (const file of files("public/models").filter((path) => path.endsWith(".json"))) write(relative("public", file).replaceAll("\\", "/"), readFileSync(file, "utf8"));
+  };
+
+  it("passes the site as it is", () => {
+    shipped();
+    expect(verifyDist(dist, root).filter((error) => error.includes("belongs to"))).toEqual([]);
   });
 
-  it("allows the page's own words", () => {
-    expect(forbiddenIn("Varied openings. Trained on 9 × 9. ≈ +500 Elo vs Normal. evanbell.site. Max plays 200 simulations.")).toEqual([]);
-    expect(forbiddenIn("fresh tree, Bradley-Terry, gen 105, PR #177, private_git_sha, ratings_folder")).toEqual(["Bradley", "fresh tree", "gen 1", "PR #1", "git_sha", "ratings_folder"]);
+  it.each([
+    ["the reference bot", "rated against the Evan bot"],
+    ["its other spelling", "Evan’s bot"],
+    ["a ladder, in the plural", "two Ladders"],
+    ["the fit", "Bradley-Terry"],
+    ["the interval method", "a Laplace interval"],
+    ["a fresh tree, hyphenated", "fresh-tree search"],
+    ["a bootstrap", "bootstrapped"],
+    ["self-play, with an underscore", "self_play games"],
+    ["the private repo", "the private  repo"],
+    ["research", "Research notes"],
+    ["a generation number", "gen_105"],
+    ["a generation number, run together", "gen105"],
+    ["a generation", "generation 105"],
+    ["the run name as words", "s9 conv paths"],
+    ["a pull request of the private repo", "PR #177"],
+    ["the measuring machine", "Ryzen 7"],
+    ["the old disclosure", "How this was measured"],
+    ["a commit field", "private_git_sha"],
+    ["a ratings folder", "ratings_folder"],
+    ["a git commit id", "ec23805c5cc030885812c9a980ea2f65e10d0ddf"],
+    ["a no-break space", "fresh\u00a0tree"],
+  ])("refuses %s in a shipped script", (_name, words) => {
+    shipped();
+    write("assets/ort-AbCd1234.js", `const note = ${JSON.stringify(words)};`);
+    expect(verifyDist(dist, root).some((error) => error.startsWith("assets/ort-AbCd1234.js: "))).toBe(true);
+  });
+
+  it("refuses them in the page, a model file, a stylesheet and an svg too, and skips only the vendored runtime by its exact names", () => {
+    write("index.html", "<p>the ladder</p>");
+    write("models/m/arch.json", '{"note": "research"}');
+    write("assets/a.css", "/* fresh tree */");
+    write("icon.svg", "<svg><title>gen 105</title></svg>");
+    write("assets/ort-wasm-simd-threaded-AbCd1234.mjs", "research bootstrap generation");
+    write("assets/ort.wasm.bundle.min-AbCd1234.js", "research bootstrap generation");
+    write("assets/ort-wasm.js", "research");
+    expect(verifyDist(dist, root).map((error) => error.split(":")[0]).sort()).toEqual(["assets/a.css", "assets/ort-wasm.js", "icon.svg", "index.html", "models/m/arch.json"]);
+  });
+
+  it("allows the page's own words and a published model's id", () => {
+    expect(forbiddenIn("Varied openings. Trained on 9 × 9. ≈ +500 Elo vs Normal. evanbell.site. An anchor. Max plays 200 simulations. sha256 " + "a".repeat(64))).toEqual([]);
+    expect(forbiddenIn("models/s9-conv-paths-g105/model.onnx", ["s9-conv-paths-g105"])).toEqual([]);
+    expect(forbiddenIn("models/s9-conv-paths-g105/model.onnx")).toEqual(["s9 conv paths"]);
   });
 
   it("refuses a card field the public site does not ship, and a strength entry that says more than a number", () => {
@@ -270,8 +314,7 @@ describe("only public words in what the site ships", () => {
   });
 
   it("finds none in the repo's own public files: the README, the page, the bot data and the published models", () => {
-    const files = (dir: string): string[] => readdirSync(dir).flatMap((name) => (statSync(join(dir, name)).isDirectory() ? files(join(dir, name)) : [join(dir, name)]));
-    const shipped = ["README.md", "index.html", "src/ui/bots.json", ...files("public/models").filter((file) => file.endsWith(".json"))];
-    for (const file of shipped) expect(forbiddenIn(readFileSync(file, "utf8")), file).toEqual([]);
+    const ids = ["s9-conv-paths-g105"];
+    for (const file of ["README.md", "index.html", "src/ui/bots.json", ...files("public/models").filter((path) => path.endsWith(".json"))]) expect(forbiddenIn(readFileSync(file, "utf8"), ids), file).toEqual([]);
   });
 });
