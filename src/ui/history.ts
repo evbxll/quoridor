@@ -1,6 +1,6 @@
 import type { Reason, Winner } from "../engine/game";
 import { type Bot, botLabel, type EngineKind, modelName } from "./bots";
-import { HUMAN, type Player } from "./controller";
+import { HUMAN, type Player, type Players } from "./controller";
 
 /** Most games kept; the oldest is dropped first, and the tallies count the kept games only. */
 export const MAX_GAMES = 200;
@@ -51,10 +51,16 @@ export const seatOf = (player: Player): Seat =>
     : { kind: "bot", engine: player.engine, simulations: player.simulations, vary: player.vary, ...(player.model === undefined ? {} : { model: player.model }) };
 
 /** The bot a seat held (a person's seat holds none). */
-export const botOfSeat = (seat: Seat & { kind: "bot" }): Bot => {
+const botOfSeat = (seat: Seat & { kind: "bot" }): Bot => {
   const { kind: _kind, ...bot } = seat;
   return bot;
 };
+
+/** The players of a recorded game, both seats as they were when it began: Open puts these back at the board. */
+export const playersOf = (record: Pick<GameRecord, "p1" | "p2">): Players => ({
+  p1: record.p1.kind === "human" ? HUMAN : botOfSeat(record.p1),
+  p2: record.p2.kind === "human" ? HUMAN : botOfSeat(record.p2),
+});
 
 /** A seat's identity: two seats with the same key are the same player for the tally. */
 export const seatKey = (seat: Seat): string => (seat.kind === "human" ? "human" : `${seat.engine}:${seat.simulations}:${seat.vary ? "varied" : "fixed"}:${seat.model ?? "main"}`);

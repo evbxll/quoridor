@@ -54,3 +54,20 @@ describe("drawSignature", () => {
     expect(drawSignature(history.games)).not.toBe(before);
   });
 });
+
+describe("the game SeatWatch hands to the history", () => {
+  const CUSTOM_32 = { engine: "network", simulations: 32, vary: true } as const;
+  const ended = (players: { p1: typeof A | typeof HUMAN; p2: typeof A | typeof HUMAN }) => ({ size: 9, players, result: { winner: "p2", reason: "goal" } as const, moves: ["e2", "e8"] });
+
+  it("has the seats the game began with, not the ones at its end, and says a seat changed", () => {
+    const watch = new SeatWatch();
+    watch.observe({ p1: B, p2: CUSTOM_32 }, 0);
+    watch.observe({ p1: B, p2: CUSTOM_32 }, 1);
+    watch.observe({ p1: HUMAN, p2: { ...CUSTOM_32, simulations: 16 } }, 2);
+    expect(watch.finished(ended({ p1: HUMAN, p2: { ...CUSTOM_32, simulations: 16 } }))).toEqual({ size: 9, p1: B, p2: CUSTOM_32, winner: "p2", reason: "goal", moves: ["e2", "e8"], seatChanged: true });
+  });
+
+  it("has the seats at the end when it saw no start, unchanged", () => {
+    expect(new SeatWatch().finished(ended({ p1: B, p2: CUSTOM_32 }))).toEqual({ size: 9, p1: B, p2: CUSTOM_32, winner: "p2", reason: "goal", moves: ["e2", "e8"], seatChanged: false });
+  });
+});

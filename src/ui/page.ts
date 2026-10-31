@@ -1,15 +1,15 @@
 import type { GlobalAction } from "../engine/actions";
 import { Game } from "../engine/game";
 import { Analysis } from "./analysis";
-import { copyLink, recordHash, syncAddress } from "./address";
+import { copyLink, openRecordAt, syncAddress } from "./address";
 import { liveAnnouncer } from "./announce";
-import { type Bot, botLabel, botOf, capFor, capitalized, modelName, setModelLabel, withModel } from "./bots";
+import { botLabel, botOf, capFor, capitalized, modelName, setModelLabel } from "./bots";
 import { closePopoverOnEscapeOrOutside, element, onPress } from "./dom";
 import { AutoControls } from "./autoControls";
 import { type AutoHost, AutoPlay } from "./autoplay";
 import { GamesCard } from "./gamesCard";
 import { SeatWatch } from "./seatWatch";
-import { botOfSeat, type GameRecord, GameHistory } from "./history";
+import { type GameRecord, GameHistory } from "./history";
 import { ModelManager, type ModelState, type StartInfo } from "../model/manager";
 import type { ModelEnv } from "../model/store";
 import { GameController, HUMAN, isOfferedSize, type Player, type Players, samePlayer, type SearchPort, type Side, type Speed } from "./controller";
@@ -220,26 +220,11 @@ export function startPage(port: SearchPort, network: NetworkSource): GameControl
   const autoplay = new AutoPlay(autoHost, Math.random, () => render());
   const autoControls = new AutoControls(autoplay, () => toggleButton.focus());
 
-  /** The bot a game opened from the history was played by, kept until the address change opens it. */
-  let carriedBot: Bot | null = null;
-  /** The bot fitted to the board it will play: simulations within the board's cap, and its model only if that model plays there. */
-  const fitCarried = (bot: Bot, size: number): Bot => {
-    const model = bot.model !== undefined && modelsView().offered(bot.model, size) ? bot.model : undefined;
-    return withModel({ ...bot, simulations: Math.min(bot.simulations, capFor(bot.engine, size)) }, model);
-  };
-  /** Opens a game from the Games card as a link would, with the bot that played it (the person takes the other side). */
+  /** Opens a game from the Games card as its link would: both players as they were, at its end, with nothing playing. */
   function openRecord(record: GameRecord): void {
-    const hash = recordHash(record);
-    const seat = record.p2.kind === "bot" ? record.p2 : record.p1.kind === "bot" ? record.p1 : null;
-    carriedBot = seat === null ? null : botOfSeat(seat);
-    if (controller.hash !== hash) {
-      location.hash = hash;
-      return;
-    }
-    // The game is already on the board: open it here, which ends auto-play and gives a person a seat.
     const wasAuto = autoplay.active;
-    openHash(hash);
-    announce(`${wasAuto ? "Auto-play stopped. " : ""}Game ${record.id} is on the board; you play it.`);
+    const navigation = { hash: location.hash, push: (hash: string) => window.history.pushState(null, "", hash) };
+    if (openRecordAt(record, navigation, openHash)) announce(`${wasAuto ? "Auto-play stopped. " : ""}Game ${record.id} is on the board as it ended, with its players.`);
   }
 
   /** A person may move: it is a person's turn, and the position on the board is the latest. */
@@ -342,8 +327,7 @@ export function startPage(port: SearchPort, network: NetworkSource): GameControl
       announcedEnd = "";
     } else if (recordedHash !== controller.hash) {
       recordedHash = controller.hash;
-      const seats = seatWatch.seats ?? controller.players;
-      gameLog.add({ size: controller.size, p1: seats.p1, p2: seats.p2, winner: result.winner, reason: result.reason, moves: controller.moves, seatChanged: seatWatch.changed });
+      gameLog.add(seatWatch.finished({ size: controller.size, players: controller.players, result, moves: controller.moves }));
     }
     autoplay.update();
     // The end of a game and the countdown that follows it are one sentence, read once.
@@ -497,7 +481,6 @@ export function startPage(port: SearchPort, network: NetworkSource): GameControl
       if (!isOfferedSize(game.size)) throw new RangeError(`The site has no ${game.size}x${game.size} board`);
       const linked = seatsOf(hash, game.size);
       const seats = linked === null ? seatsForOlderLink(game) : seatsForLink(linked, DEFAULT_PLAYERS, game.moves.length);
-      carriedBot = null;
       autoplay.interrupt();
       // A game that is already over is shown, not played, so it is not listed again.
       if (game.result !== null) recordedHash = game.toHash();
@@ -530,12 +513,12 @@ export function startPage(port: SearchPort, network: NetworkSource): GameControl
   }
 
   /**
-   * The seats for a link that names none (an older link, or one from the Games card): the person plays the side to
-   * move, or player 1 if the game is over, against the bot that played it (from the Games card) or the one chosen.
+   * The seats for an older link, which names none: the person plays the side to move, or player 1 if the game is
+   * over, against the bot chosen.
    */
   function seatsForOlderLink(game: Game): Players {
     const chosen: Players = { p1: controls.p1.playerFor(game.size), p2: controls.p2.playerFor(game.size) };
-    const bot = carriedBot !== null ? fitCarried(carriedBot, game.size) : chosen.p1 !== HUMAN ? chosen.p1 : chosen.p2 !== HUMAN ? chosen.p2 : DEFAULT_PLAYERS.p2;
+    const bot = chosen.p1 !== HUMAN ? chosen.p1 : chosen.p2 !== HUMAN ? chosen.p2 : DEFAULT_PLAYERS.p2;
     const human: Side = game.result === null && !game.state.p1Turn ? "p2" : "p1";
     return human === "p1" ? { p1: HUMAN, p2: bot } : { p1: bot, p2: HUMAN };
   }
@@ -597,7 +580,6 @@ export function startPage(port: SearchPort, network: NetworkSource): GameControl
   });
   window.addEventListener("hashchange", () => {
     if (!isOwnAddress(location.hash, controller.hash, controller.players)) openHash();
-    else carriedBot = null;
   });
 
   // Without a link the page starts from the setup the person last chose here, if any, the person moving first; a link wins.

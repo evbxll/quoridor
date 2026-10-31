@@ -1,3 +1,4 @@
+import { recordHash } from "./address";
 import { element } from "./dom";
 import { OpenConfirm } from "./confirmOpen";
 import { modelName } from "./bots";
@@ -35,6 +36,12 @@ export function drawSignature(games: readonly GameRecord[]): string {
   const modelIds = new Set(games.flatMap((game) => [game.p1, game.p2].flatMap((seat) => (seat.kind === "bot" && seat.model !== undefined ? [seat.model] : []))));
   return `${games.length}|${games[games.length - 1]?.id ?? 0}|${[...modelIds].map(modelName).join(",")}`;
 }
+
+/** A row's Open link: its address names both players, so a game opened in a new tab has the same players as one opened here. */
+export const openLink = (game: GameRecord): { href: string; label: string } => ({
+  href: recordHash(game),
+  label: `Open game ${game.id}, on a ${game.size} by ${game.size} board`,
+});
 
 /** Why a game is listed but not counted, in words after the result. */
 const notes = (game: GameRecord): string => (game.seatChanged ? " (seat changed)" : "") + (isMirror(game) ? " (mirror match)" : "");
@@ -112,10 +119,11 @@ export class GamesCard {
         const row = document.createElement("tr");
         row.setAttribute("role", "row");
         const link = document.createElement("a");
-        link.href = `#n=${game.size}&m=${game.moves}`;
+        const target = openLink(game);
+        link.href = target.href;
         link.dataset["game"] = String(game.id);
         link.textContent = "Open";
-        link.setAttribute("aria-label", `Open game ${game.id}, on a ${game.size} by ${game.size} board`);
+        link.setAttribute("aria-label", target.label);
         const open = document.createElement("td");
         open.className = "open";
         open.setAttribute("role", "cell");

@@ -1,8 +1,26 @@
-import type { GameRecord } from "./history";
+import { type GameRecord, playersOf } from "./history";
+import { addressOf } from "./setupLink";
 
-/** The address that opens a recorded game: its board size and moves. */
+/** The address that opens a recorded game: its board size, both of its players as they were, and its moves. */
 export function recordHash(record: GameRecord): string {
-  return `#n=${record.size}&m=${record.moves}`;
+  return addressOf(`#n=${record.size}&m=${record.moves}`, playersOf(record));
+}
+
+/** The part of the browser that opening a recorded game uses: the address's hash, and adding an entry to the session history. */
+export interface Navigation {
+  readonly hash: string;
+  push(hash: string): void;
+}
+
+/**
+ * Opens a recorded game in place with `open`, and returns what it returns. Its address gets its own history entry
+ * first, so Back returns to the game before; the page does not wait for a change of address, which it could rewrite
+ * before reading it.
+ */
+export function openRecordAt(record: GameRecord, navigation: Navigation, open: (hash: string) => boolean): boolean {
+  const hash = recordHash(record);
+  if (navigation.hash !== hash) navigation.push(hash);
+  return open(hash);
 }
 
 /** Rewrites the address bar to `hash` if it differs. Some browsers throw if the address is rewritten too often, and a progress bar needs no new address. */

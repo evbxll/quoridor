@@ -293,3 +293,67 @@ describe("GameHistory reading ids and size from storage", () => {
     expect(new GameHistory(storage).games).toHaveLength(30);
   });
 });
+
+/**
+ * The loader as main shipped it before both players were restored (207663a), copied so that it stays fixed while
+ * history.ts changes: a page rolled back to it, or a stale cached copy of it, must read what this page saves.
+ */
+function shippedLoad(text: string | null): unknown[] {
+  const ENGINES = ["heuristic", "network"];
+  const readSeat = (value: unknown): object | null => {
+    if (typeof value !== "object" || value === null) return null;
+    const seat = value as Record<string, unknown>;
+    if (seat["kind"] === "human") return { kind: "human" };
+    const { engine, simulations, vary } = seat;
+    if (seat["kind"] !== "bot" || !ENGINES.includes(engine as string) || typeof vary !== "boolean") return null;
+    if (typeof simulations !== "number" || !Number.isInteger(simulations) || simulations < 1 || simulations > 100_000) return null;
+    const model = seat["model"];
+    if (model === undefined) return { kind: "bot", engine, simulations, vary };
+    if (engine !== "network" || typeof model !== "string" || !/^[A-Za-z0-9][A-Za-z0-9._-]{0,79}$/.test(model)) return null;
+    return { kind: "bot", engine: "network", simulations, vary, model };
+  };
+  const readRecord = (value: unknown): { id: number } | null => {
+    if (typeof value !== "object" || value === null) return null;
+    const row = value as Record<string, unknown>;
+    const { id, size, winner, reason, moves } = row;
+    const p1 = readSeat(row["p1"]);
+    const p2 = readSeat(row["p2"]);
+    if (p1 === null || p2 === null) return null;
+    if (typeof id !== "number" || !Number.isSafeInteger(id) || id < 1 || id > 1_000_000_000) return null;
+    const changed = row["seatChanged"];
+    if (changed !== undefined && typeof changed !== "boolean") return null;
+    if (typeof size !== "number" || !Number.isInteger(size) || size < 3 || size > 13) return null;
+    if (!["p1", "p2", "draw"].includes(winner as string) || !["goal", "repetition", "cap"].includes(reason as string)) return null;
+    if ((winner === "draw") === (reason === "goal")) return null;
+    if (typeof moves !== "string" || moves.length > 20_000 || !/^[a-z0-9]+(\.[a-z0-9]+)*$/.test(moves)) return null;
+    return { id, size, p1, p2, winner, reason, moves, seatChanged: changed === true } as { id: number };
+  };
+  if (typeof text !== "string" || text.length > MAX_SAVED_CHARS) return [];
+  const data: unknown = JSON.parse(text);
+  if (typeof data !== "object" || data === null || (data as { v?: unknown }).v !== 1) return [];
+  const rows = (data as { games?: unknown }).games;
+  if (!Array.isArray(rows)) return [];
+  const kept: { id: number }[] = [];
+  const seen = new Set<number>();
+  for (const row of rows) {
+    const record = readRecord(row);
+    if (record === null || seen.has(record.id)) continue;
+    seen.add(record.id);
+    kept.push(record);
+  }
+  return kept.slice(-MAX_GAMES);
+}
+
+describe("a rollback keeps the history", () => {
+  it("saves what the loader main shipped reads in full, every game and seat intact", () => {
+    const storage = new MemoryStorage();
+    const history = new GameHistory(storage);
+    history.add(game({ size: 9, p1: NORMAL, p2: { engine: "network", simulations: 32, vary: true } }));
+    history.add(game({ p1: HUMAN, p2: withModel(STRONG, "fc-9x9-a"), winner: "draw", reason: "repetition" }));
+    history.add(game({ p1: HUMAN, p2: HUMAN, seatChanged: true }));
+    const text = storage.items.get(HISTORY_KEY)!;
+    expect(JSON.parse(text).v).toBe(1);
+    expect(shippedLoad(text)).toEqual(history.games);
+    expect(new GameHistory(storage).games).toEqual(history.games);
+  });
+});
