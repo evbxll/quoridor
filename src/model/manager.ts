@@ -1,6 +1,6 @@
 import { inputOf, type ModelCard, supportsSize } from "./card";
 import { botFor, type ModelEntry, type ModelIndex, networkWithheld } from "./index";
-import { type FailureKind, loadCard, loadIndex, loadModel, type ModelEnv, ModelError } from "./store";
+import { type FailureKind, loadCard, loadIndex, loadModel, type ModelEnv, ModelError, pruneCache } from "./store";
 
 /** Where one network stands. */
 export type ModelState =
@@ -168,6 +168,7 @@ export class ModelManager {
     this.reading ??= loadIndex(this.env)
       .then((index) => {
         this.index = index;
+        if (index !== null) void pruneCache(this.env, index);
       })
       .catch((error: unknown) => {
         this.indexFailure = error instanceof ModelError ? error : new ModelError("network", "The network could not be looked up.");

@@ -24,7 +24,7 @@ export function drawControls(shown: Visible, controller: GameController, countdo
   newButton.classList.toggle("pending", pending);
   newButton.title = pending ? "The board size you chose starts when you press New game" : "";
   toggleButton.classList.toggle("blocked", shown.startBlocked);
-  toggleButton.textContent = shown.startBlocked ? (countdown ? "Game over: next game starting" : "Game over: press New game") : controller.running ? "Pause" : controller.moves.length > 0 ? "Resume" : "Start";
+  toggleButton.textContent = shown.startBlocked ? (countdown ? "Next game starting" : "Game over") : controller.running ? "Pause" : controller.moves.length > 0 ? "Resume" : "Start";
   setEnabled(toggleButton, !shown.startBlocked);
   setEnabled(element("step", HTMLButtonElement), controller.canStep);
   setEnabled(element("undo", HTMLButtonElement), controller.canUndo);

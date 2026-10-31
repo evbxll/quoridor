@@ -254,7 +254,7 @@ export class SeatControls {
     const value = this.model ?? MAIN_MODEL;
     if (this.modelSelect.value !== value) this.modelSelect.value = value;
     const state = this.model === undefined ? null : models.state(this.model);
-    const status = this.model === undefined || state === null ? null : describeModelStatus(modelTitle(this.model, models.card(this.model)), state);
+    const status = this.model === undefined || state === null ? null : describeModelStatus(modelTitle(models.card(this.model)), state);
     // One line for both the download note and the model's state, so the row is the same height whichever it says; the progress bar and Retry keep their room when not shown.
     setText(this.modelStatus, status?.text ?? FIRST_USE_NOTE);
     this.modelProgress.style.visibility = status?.downloading ? "visible" : "hidden";

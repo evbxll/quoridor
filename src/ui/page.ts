@@ -140,7 +140,7 @@ export function startPage(port: SearchPort, network: NetworkSource): GameControl
       cardsAsked.add(id);
       models.card(id).then(
         (card) => {
-          setModelLabel(id, modelTitle(id, card));
+          setModelLabel(id, modelTitle(card));
           reconcileModels();
           render();
         },

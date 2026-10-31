@@ -255,3 +255,23 @@ async function download(env: ModelEnv, url: URL, entry: ModelEntry, onProgress: 
     signal?.removeEventListener("abort", cancel);
   }
 }
+
+/**
+ * Removes from this site's model cache what the index no longer publishes: a replaced model's weights and card. Only
+ * entries of this cache under the site's `models/` are looked at; the index, and every published model's file and card,
+ * are kept. Failures are ignored: the cache is only an aid.
+ */
+export async function pruneCache(env: ModelEnv, index: ModelIndex): Promise<void> {
+  try {
+    const cache = await openCache(env);
+    if (cache === null) return;
+    const models = siteUrl(env, "models/").pathname;
+    const kept = new Set([siteUrl(env, "models/index.json").pathname, ...index.models.flatMap((entry) => [siteUrl(env, entry.path).pathname, siteUrl(env, entry.path.replace(/[^/]*$/, "card.json")).pathname])]);
+    for (const request of await cache.keys()) {
+      const { pathname } = new URL(request.url);
+      if (pathname.startsWith(models) && !kept.has(pathname)) await cache.delete(request);
+    }
+  } catch {
+    // Nothing is lost: an entry left behind only takes room.
+  }
+}

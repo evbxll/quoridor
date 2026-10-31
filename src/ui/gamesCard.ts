@@ -7,7 +7,13 @@ import { type GameHistory, type GameRecord, isMirror, resultText, seatNames } fr
 const ARMED_MS = 5000;
 
 /** How many games the card lists until "Show all" is pressed: the latest ones. */
-const LATEST = 10;
+export const LATEST = 10;
+
+/** The games the card lists, newest first: the latest `LATEST`, or all of them once "Show all" is pressed. */
+export const shownGames = <T>(games: readonly T[], showAll: boolean): T[] => {
+  const newest = [...games].reverse();
+  return showAll ? newest : newest.slice(0, LATEST);
+};
 
 /**
  * A cell of a game's row. `label` names it in a narrow card, where the row is a block of lines and the column
@@ -100,9 +106,8 @@ export class GamesCard {
         return item;
       }),
     );
-    const newest = [...games].reverse();
     this.body.replaceChildren(
-      ...(this.showAll ? newest : newest.slice(0, LATEST)).map((game) => {
+      ...shownGames(games, this.showAll).map((game) => {
         const names = seatNames(game);
         const row = document.createElement("tr");
         row.setAttribute("role", "row");

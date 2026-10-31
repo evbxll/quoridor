@@ -106,7 +106,7 @@ button {
 button:hover:not(:disabled):not([aria-disabled="true"]) { border-color: var(--text); }
 button[aria-disabled="true"] { opacity: .5; cursor: default; border-style: dashed; }
 button.primary { background: var(--accent); border-color: var(--accent); color: var(--on-accent); font-weight: 600; }
-/* A finished game of two bots: Start cannot be used, and says what to do, at full contrast. */
+/* A finished game of two bots: Start cannot be used and says "Game over" (or that the next game is starting), at full contrast. */
 button.primary.run.blocked { opacity: 1; background: var(--card); border-color: var(--muted); color: var(--muted); }
 button.pending { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent); }
 button.quiet { background: none; border-color: transparent; color: var(--muted); padding: 4px 8px; }
@@ -148,7 +148,7 @@ select {
 .view > summary { cursor: pointer; padding: 2px 8px; border: 1px solid var(--line); border-radius: 999px; background: var(--card); color: var(--muted); font-size: 0.875rem; }
 .view[open] > summary, .view > summary:hover { color: var(--text); }
 .view-pop {
-  position: absolute; left: 64px; top: calc(100% + 4px); z-index: 2; width: min(300px, calc(100vw - 32px));
+  position: absolute; left: 64px; top: calc(100% + 4px); z-index: 2; width: min(300px, calc(100vw - 96px)); /* starts 80px from the page edge: it never widens the page */
   display: flex; flex-direction: column; gap: 2px; padding: 10px 12px;
   background: var(--card); border: 1px solid var(--line); border-radius: 12px; box-shadow: 0 6px 20px var(--shadow);
 }
@@ -260,7 +260,8 @@ select {
 /* Start, Pause and Resume is the main control of a bot game: large, and the same size under each label. */
 .bot-controls { display: flex; flex-direction: column; gap: 8px; }
 .person-controls { align-self: start; }
-.run { width: 100%; padding: 12px 14px; font-size: 1.125rem; }
+/* One line, at one height, whatever it says, so Step and Speed below it never move. */
+.run { width: 100%; height: 3.25rem; padding: 0 14px; font-size: 1.125rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
 /* A fixed height, so the card keeps its size as the game goes on; the list scrolls inside. */
 .moves-box { position: relative; height: 168px; }

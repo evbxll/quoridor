@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { botFor, galleryEntries, networkWithheld, parseIndex } from "../../src/model/index";
-import { loadIndex, loadModel, ModelError, type Progress, sha256Hex } from "../../src/model/store";
+import { botFor, galleryEntries, type ModelIndex, networkWithheld, parseIndex } from "../../src/model/index";
+import { loadIndex, loadModel, ModelError, type Progress, pruneCache, sha256Hex } from "../../src/model/store";
 import { BASE, envOf, fakeFetch, FakeCaches, sha256, streamed } from "../helpers/fakeBrowser";
 
 const model = new Uint8Array(1000).map((_, i) => (i * 7) % 251);
@@ -265,5 +265,19 @@ describe("loadIndex", () => {
 describe("sha256Hex", () => {
   it("matches node's digest", async () => {
     expect(await sha256Hex(model.buffer)).toBe(sha256(model));
+  });
+});
+
+describe("pruning the model cache", () => {
+  it("drops what the index no longer publishes and keeps the index, the published models and their cards", async () => {
+    const caches = new FakeCaches();
+    for (const path of ["models/index.json", "models/new/model.onnx?sha256=aa", "models/new/card.json", "models/old/model.onnx?sha256=bb", "models/old/card.json", "models/old/arch.json"]) caches.stored.set(`${BASE}${path}`, new Uint8Array([1]));
+    caches.stored.set("https://site.example/elsewhere/models/x.onnx", new Uint8Array([1]));
+    await pruneCache(envOf(fakeFetch({}).fetch, caches), { models: [{ id: "new", path: "models/new/model.onnx", sha256: "aa" }], bots: {}, gallery: [] } as unknown as ModelIndex);
+    expect([...caches.stored.keys()].sort()).toEqual([`${BASE}models/index.json`, `${BASE}models/new/card.json`, `${BASE}models/new/model.onnx?sha256=aa`, "https://site.example/elsewhere/models/x.onnx"].sort());
+  });
+
+  it("does nothing without Cache Storage", async () => {
+    await expect(pruneCache(envOf(fakeFetch({}).fetch, undefined), { models: [], bots: {}, gallery: [] } as unknown as ModelIndex)).resolves.toBeUndefined();
   });
 });

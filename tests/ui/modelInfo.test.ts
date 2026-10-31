@@ -61,18 +61,18 @@ describe("the Model select's options", () => {
     const built = options(7, GALLERY, some);
     expect(built[0]).toEqual({ value: MAIN_MODEL, label: "Main network", disabled: false });
     expect(built.find((o) => o.value === "s9-conv-paths-g050")!.disabled).toBe(false);
-    expect(built.find((o) => o.value === "s9-fpu-basic-g112")).toEqual({ value: "s9-fpu-basic-g112", label: "s9-fpu-basic-g112 (loading)", disabled: true });
+    expect(built.find((o) => o.value === "s9-fpu-basic-g112")).toEqual({ value: "s9-fpu-basic-g112", label: "Another network (loading)", disabled: true });
   });
 
   it("says a card that could not be read is not coming", () => {
     const built = options(9, GALLERY, {}, ["s9-fpu-basic-g112"]);
-    expect(built.find((o) => o.value === "s9-fpu-basic-g112")).toMatchObject({ label: "s9-fpu-basic-g112 (card could not be read)", disabled: true });
+    expect(built.find((o) => o.value === "s9-fpu-basic-g112")).toMatchObject({ label: "Another network (card could not be read)", disabled: true });
   });
 
-  it("names a model by its architecture, with no generation, and by its id until its card is read", () => {
-    expect(modelTitle("s9-conv-paths-g050", CARDS["s9-conv-paths-g050"]!)).toBe("Convolutional");
-    expect(modelTitle("s9-fpu-basic-g112", fc)).toBe("Fully connected");
-    expect(modelTitle("s9-fpu-basic-g112", null)).toBe("s9-fpu-basic-g112");
+  it("names a model by its architecture, with no generation, and as another network until its card is read", () => {
+    expect(modelTitle(CARDS["s9-conv-paths-g050"]!)).toBe("Convolutional");
+    expect(modelTitle(fc)).toBe("Fully connected");
+    expect(modelTitle(null)).toBe("Another network");
   });
 });
 

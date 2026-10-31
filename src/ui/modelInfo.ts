@@ -50,10 +50,10 @@ const eloText = (elo: number): string => `${elo < 0 ? "-" : "+"}${Math.abs(Math.
 
 /**
  * A model in words from its card: its architecture, "Convolutional" or "Fully connected". The gallery holds one model
- * per architecture, the latest, so the architecture names it. Without a card, its id.
+ * per architecture, the latest, so the architecture names it. Before its card is read, "Another network": an id is never shown.
  */
-export function modelTitle(id: string, card: ModelCard | null): string {
-  if (card === null) return id;
+export function modelTitle(card: ModelCard | null): string {
+  if (card === null) return "Another network";
   return card.network.head === "fc" ? "Fully connected" : "Convolutional";
 }
 
@@ -76,11 +76,11 @@ export function buildModelOptions(input: OptionInput): ModelOption[] {
   const extras = choosableModels(input.mainId, input.gallery, input.card);
   if (extras.length === 0) return [];
   const mainCard = input.mainId === null ? null : input.card(input.mainId);
-  const options: ModelOption[] = [{ value: MAIN_MODEL, label: mainCard === null || input.mainId === null ? "Main network" : modelTitle(input.mainId, mainCard), disabled: false }];
+  const options: ModelOption[] = [{ value: MAIN_MODEL, label: mainCard === null || input.mainId === null ? "Main network" : modelTitle(mainCard), disabled: false }];
   for (const id of extras) {
     const card = input.card(id);
     const reason = card === null && input.cardFailed(id) ? "card could not be read" : disabledReason(card, input.size);
-    options.push({ value: id, label: reason === null ? modelTitle(id, card) : `${modelTitle(id, card)} (${reason})`, disabled: reason !== null });
+    options.push({ value: id, label: reason === null ? modelTitle(card) : `${modelTitle(card)} (${reason})`, disabled: reason !== null });
   }
   return options;
 }

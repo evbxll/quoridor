@@ -1,11 +1,12 @@
 // Checks that editing the players never moves the game's main controls, and takes screenshots.
 //
 // Drives a headless Chromium-family browser (Edge or Chrome) over the DevTools protocol against a
-// running copy of the site, at 1280 and 390 px wide, in the light and the dark theme. In each, it
+// running copy of the site, at 1280, 390 and 320 px wide, in the light and the dark theme. In each, it
 // seats two bots, then changes every control of both seats in turn (each option of each select,
 // each checkbox both ways, each slider step, each disclosure open and shut), Swap sides, and the
 // View menu, and measures Start, Step, the board and the eval bar after every change. Any move of
-// more than half a pixel fails the run.
+// more than half a pixel fails the run, and so does the page growing wider than the window. Then it
+// plays two Beginners with auto-play on and checks the same during the countdown to the next game.
 //
 // Usage:
 //   npm run build && npx vite preview --port 4318 --strictPort   (in another terminal)
@@ -21,6 +22,7 @@ import { join } from "node:path";
 const WIDTHS = [
   { width: 1280, height: 800, mobile: false },
   { width: 390, height: 844, mobile: true },
+  { width: 320, height: 700, mobile: true },
 ];
 const THEMES = ["light", "dark"];
 /** The controls that must not move, by id. Start and Step are measured only while shown (two bots). */
@@ -149,7 +151,7 @@ const measure = () => Object.fromEntries(WATCHED.map((id) => {
   if (!shown(el)) return [id, null];
   const r = el.getBoundingClientRect();
   return [id, [r.x + scrollX, r.y + scrollY, r.width, r.height]];
-}));
+}).concat([["wide", document.documentElement.scrollWidth - innerWidth]]));
 const usable = (el) => shown(el) && !el.disabled && el.closest("[hidden]") === null;
 const label = (el) => el.id || el.getAttribute("aria-label") || el.textContent.trim().slice(0, 30);
 const fire = (el, type) => el.dispatchEvent(new Event(type, { bubbles: true }));
@@ -246,6 +248,33 @@ const EDIT_ALL = `(async () => {
   return records;
 })()`;
 
+/** Two Beginners at instant speed with auto-play on, measured before Start and during the countdown to the next game. */
+const COUNTDOWN = `(async () => {
+  ${IN_PAGE}
+  for (const side of ["p1", "p2"]) {
+    const select = document.getElementById("player-" + side);
+    select.value = "beginner";
+    fire(select, "change");
+  }
+  const speed = document.getElementById("speed");
+  speed.value = "instant";
+  fire(speed, "change");
+  const auto = document.getElementById("auto-on");
+  if (!auto.checked) auto.click();
+  await settle();
+  const before = measure();
+  const toggle = document.getElementById("toggle");
+  toggle.click();
+  const started = Date.now();
+  while (!/Next game/.test(toggle.textContent) && Date.now() - started < 90000) await pause(50);
+  await settle();
+  const during = measure();
+  const shownLabel = toggle.textContent;
+  document.getElementById("auto-cancel").click();
+  if (auto.checked) auto.click();
+  return { before, during, label: shownLabel };
+})()`;
+
 /**
  * Loads the page fresh at a width and theme, waiting for the service worker's one reload and the first drawing.
  * @param {Page} page
@@ -320,8 +349,16 @@ async function main() {
         });
         // The edits leave every seat disclosure open.
         await shoot(page, `${tag}-settings-open`);
+        const countdown = await page.evaluate(COUNTDOWN);
+        const countdownMoved = moved(countdown.before, countdown.during);
+        const reached = /Next game/.test(countdown.label);
+        console.log(`${tag}: auto-play countdown ${reached ? `reached ("${countdown.label}")` : "NOT reached"}; ${Object.keys(countdownMoved).length === 0 ? "nothing moved" : `moved ${JSON.stringify(countdownMoved)}`}`);
+        failures += reached && Object.keys(countdownMoved).length === 0 ? 0 : 1;
         const bad = records.map((entry) => ({ what: entry.what, moved: moved(baseline, entry.at) })).filter((entry) => Object.keys(entry.moved).length > 0);
         const shownStart = records.filter((entry) => entry.at.toggle !== null).length;
+        const wide = records.filter((entry) => Number(entry.at["wide"]) > 0).map((entry) => entry.what);
+        if (wide.length > 0) console.log(`  the page became wider than the window after: ${wide.join(", ")}`);
+        failures += wide.length;
         console.log(`${tag}: ${records.length} edits, Start shown in ${shownStart}; ${bad.length === 0 ? "nothing moved" : `${bad.length} moved something`}`);
         for (const entry of bad.slice(0, 12)) console.log(`  ${entry.what}: ${JSON.stringify(entry.moved)}`);
         if (bad.length > 12) console.log(`  ... and ${bad.length - 12} more`);
