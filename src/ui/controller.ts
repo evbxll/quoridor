@@ -4,7 +4,7 @@ import { parseMove } from "../engine/notation";
 import { GameState } from "../engine/state";
 import type { SearchResponse } from "../ai/protocol";
 import type { SearchParams } from "../ai/searchClient";
-import { type Bot, botOf, capFor, sameBot, temperatureOf } from "./bots";
+import { type Bot, botOf, capFor, minVisitShareOf, sameBot, temperatureOf } from "./bots";
 
 /** The part of the search client the game flow uses. */
 export interface SearchPort {
@@ -418,6 +418,7 @@ export class GameController {
           // The seat form fits a bot to its board size, but a link or a seat set elsewhere may not have: the cap holds here.
           simulations: Math.min(bot.simulations, capFor(bot.engine, this.game.size)),
           temperature: temperatureOf(bot),
+          ...(minVisitShareOf(bot) > 0 ? { minVisitShare: minVisitShareOf(bot) } : {}),
           seed: Math.floor(this.random() * SEED_RANGE),
         });
         if (epoch !== this.epoch) return;

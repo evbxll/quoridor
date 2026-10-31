@@ -146,6 +146,20 @@ describe("search service", () => {
     expect(new Set(moves).size).toBe(1);
   });
 
+  it("samples only among moves with the asked share of the top move's visits", async () => {
+    const { handle, resultOf } = setup();
+    handle({ type: "configure", id: 1, engine });
+    // The uniform evaluator spreads 10 simulations evenly, so every legal move is near the top and a share of 1 leaves the top move alone.
+    handle(search(2, [], { simulations: 10, reuseTree: false }));
+    const best = await resultOf(2);
+    const top = Math.max(...best.visits);
+    const topMoves = new Set(best.moves.filter((_, i) => best.visits[i] === top));
+    for (let seed = 1; seed <= 20; seed++) {
+      handle(search(100 + seed, [], { simulations: 10, temperature: 1, minVisitShare: 1, seed, reuseTree: false }));
+      expect(topMoves.has((await resultOf(100 + seed)).move)).toBe(true);
+    }
+  });
+
   it("cancels a running search and then serves the next one", async () => {
     const { handle, reply, resultOf, evaluator, outbox } = setup();
     handle({ type: "configure", id: 1, engine });

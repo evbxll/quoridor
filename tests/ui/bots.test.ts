@@ -10,6 +10,8 @@ import {
   fitTo,
   formatMs,
   MEASURED_MODEL,
+  minVisitShareOf,
+  NETWORK_VARY_MIN_VISIT_SHARE,
   nearestStep,
   PRESETS,
   presetOf,
@@ -90,6 +92,14 @@ describe("simulation steps and caps", () => {
 });
 
 describe("move choice", () => {
+  it("sets a visit-share cutoff only for a varied network bot", () => {
+    expect(minVisitShareOf({ engine: "network", simulations: 32, vary: true })).toBe(NETWORK_VARY_MIN_VISIT_SHARE);
+    expect(NETWORK_VARY_MIN_VISIT_SHARE).toBe(0.5);
+    expect(minVisitShareOf(botOf("beginner"))).toBe(0);
+    expect(minVisitShareOf({ engine: "heuristic", simulations: 1600, vary: true })).toBe(0);
+    for (const id of ["normal", "strong", "max"] as const) expect(minVisitShareOf(botOf(id))).toBe(0);
+  });
+
   it("samples at temperature 1 when moves vary and plays the most visited at 0 otherwise", () => {
     expect(temperatureOf(botOf("beginner"))).toBe(1);
     expect(temperatureOf(botOf("normal"))).toBe(0);

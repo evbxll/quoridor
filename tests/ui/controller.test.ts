@@ -98,6 +98,15 @@ describe("GameController with a person playing", () => {
     expect(controller.humanToMove).toBe(true);
   });
 
+  it("asks a varied network bot to sample only among moves with half the top move's visits, and no other bot", async () => {
+    const varied = setup(5, { p1: HUMAN, p2: { engine: "network", simulations: 32, vary: true } });
+    varied.play("c2");
+    expect(varied.engine.requests).toEqual([{ engine: "network", size: 5, moves: ["c2"], simulations: 32, temperature: 1, minVisitShare: 0.5, seed: 2147483648 }]);
+    const steady = setup(5, { p1: HUMAN, p2: STRONG });
+    steady.play("c2");
+    expect(steady.engine.requests[0]).not.toHaveProperty("minVisitShare");
+  });
+
   it("lets the bot open when the person plays second", async () => {
     const { engine, controller, play } = setup(5, { p1: NORMAL, p2: HUMAN });
     expect(controller.thinking).toBe(true);
