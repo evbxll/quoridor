@@ -55,6 +55,15 @@ export const MEASURED_MODEL = DATA.times.network.model;
 /** The temperature a bot's searches ask for: 1 samples among the searched moves, 0 plays the most visited. */
 export const temperatureOf = (bot: Bot): number => (bot.vary ? 1 : 0);
 
+/**
+ * How much of the top move's visits a move needs to be sampled, for a varied network bot. A short network search
+ * spreads its few visits almost evenly once the values are close, and sampling that plays moves the search did not favour.
+ */
+export const NETWORK_VARY_MIN_VISIT_SHARE = 0.5;
+
+/** The share of the top move's visits a move needs to be sampled: only a varied network bot sets one (a heuristic bot varies over all searched moves, which is what makes Beginner weak). */
+export const minVisitShareOf = (bot: Bot): number => (bot.vary && bot.engine === "network" ? NETWORK_VARY_MIN_VISIT_SHARE : 0);
+
 export function preset(id: PresetId): Preset {
   return PRESETS.find((candidate) => candidate.id === id)!;
 }

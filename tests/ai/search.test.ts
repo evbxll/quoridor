@@ -218,6 +218,70 @@ describe("selectAction", () => {
     }
   });
 
+  it("never picks a move under the visit-share cutoff, and samples the rest as before", async () => {
+    const random = seededRandom(9);
+    const narrow = { ...result, visits: [10, 29, 60] };
+    // 10 and 29 visits are under half of 60; only the 60-visit action is left.
+    expect(new Set(Array.from({ length: 5000 }, () => selectAction(narrow, 1, random, 0.5)))).toEqual(new Set([9]));
+    const wide = { ...result, visits: [29, 30, 60] };
+    const again = seededRandom(9);
+    const kept = new Set(Array.from({ length: 5000 }, () => selectAction(wide, 1, again, 0.5)));
+    expect(kept).toEqual(new Set([5, 9]));
+  });
+
+  it("keeps a move at exactly the cutoff, and ignores the cutoff at temperature 0", async () => {
+    const random = seededRandom(2);
+    const edge = { ...result, visits: [30, 60, 60] };
+    // 30 is exactly half of 60.
+    expect(new Set(Array.from({ length: 2000 }, () => selectAction(edge, 1, random, 0.5)))).toEqual(new Set([3, 5, 9]));
+    expect(selectAction(result, 0, Math.random, 0.5)).toBe(9);
+  });
+
+  it("with no cutoff draws exactly what the formula without one draws", async () => {
+    const plain = (random: () => number): number => {
+      const logits = result.visits.map((v) => (v > 0 ? Math.log(v) : -Infinity));
+      const top = Math.max(...logits);
+      const weights = logits.map((l) => Math.exp(l - top));
+      let remaining = random() * weights.reduce((a, b) => a + b, 0);
+      for (let i = 0; i < weights.length; i++) {
+        remaining -= weights[i]!;
+        if (remaining < 0) return result.actions[i]!;
+      }
+      return result.actions.at(-1)!;
+    };
+    const a = seededRandom(4);
+    const b = seededRandom(4);
+    const c = seededRandom(4);
+    for (let i = 0; i < 2000; i++) {
+      const expected = plain(a);
+      expect(selectAction(result, 1, b)).toBe(expected);
+      expect(selectAction(result, 1, c, 0)).toBe(expected);
+    }
+  });
+
+  it("cannot sample g5 in the owner's game, where it had 3 of 39 visits (the top move 11)", async () => {
+    const ply = "e2.e8.e3.e7.d1h.e6.e4.e7h.e4h.d8v.b5h.e5.b4h.d5.b1h.d4.f1h.c8h.a3h.g7h.c3h.f4.h1h.g4.d4.g3.e2v.g4.d5.f4.d6.g4.c6.b6h.b6.a5v.c6"
+      .split(".");
+    const state = GameState.initial(9);
+    for (const move of ply) state.play(parseMove(state, move));
+    // The root visits of a 32-simulation network search here (the tree carried 7 over from the move before).
+    const searched: Record<string, number> = { f4: 11, c7v: 8, h4: 5, d6h: 4, a8h: 4, b7v: 4, g5: 3 };
+    const legal = state.legalActions();
+    const owner = {
+      actions: legal,
+      visits: legal.map((a) => searched[formatAction(state, a)] ?? 0),
+      qValues: legal.map(() => 0),
+      value: 0.99,
+      principalVariation: [],
+    };
+    const names = (cutoff: number): Set<string> => {
+      const random = seededRandom(1);
+      return new Set(Array.from({ length: 20000 }, () => formatAction(state, selectAction(owner, 1, random, cutoff))));
+    };
+    expect(names(0)).toContain("g5");
+    expect(names(0.5)).toEqual(new Set(["f4", "c7v"]));
+  });
+
   it("sharpens toward the most visited action at a low temperature", async () => {
     const random = seededRandom(3);
     const picks = Array.from({ length: 200 }, () => selectAction(result, 0.1, random));

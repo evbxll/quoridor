@@ -110,7 +110,7 @@ export function createSearchService(post: (response: Response) => void, makeEval
     if (mine.cancelled) return abandon(mine);
     const result = await mcts.search(0);
     const state = mcts.rootState;
-    const action = selectAction(result, request.temperature, seededRandom(request.seed));
+    const action = selectAction(result, request.temperature, seededRandom(request.seed), request.minVisitShare);
     post({
       type: "result",
       id: mine.id,

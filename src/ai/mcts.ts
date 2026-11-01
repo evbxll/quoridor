@@ -250,11 +250,16 @@ function mostVisited(visits: ArrayLike<number>): number {
  * the power, this never picks an unvisited action. The two agree to within
  * 1e-6 relative weight for temperatures up to 2; above that Python starts to
  * play moves the search never looked at.
+ *
+ * `minVisitShare` (default 0: none) also never picks an action with fewer
+ * visits than that share of the most visited one's. It has no effect at
+ * temperature 0.
  */
-export function selectAction(result: SearchResult, temperature: number, random: () => number): PlayerAction {
+export function selectAction(result: SearchResult, temperature: number, random: () => number, minVisitShare = 0): PlayerAction {
   const best = mostVisited(result.visits);
   if (temperature <= 0) return result.actions[best]!;
-  const logits = result.visits.map((v) => (v > 0 ? Math.log(v) / temperature : -Infinity));
+  const floor = minVisitShare * result.visits[best]!;
+  const logits = result.visits.map((v) => (v > 0 && v >= floor ? Math.log(v) / temperature : -Infinity));
   const top = Math.max(...logits);
   const weights = logits.map((l) => Math.exp(l - top));
   let remaining = random() * weights.reduce((a, b) => a + b, 0);

@@ -39,6 +39,8 @@ export type Request =
       readonly simulations: number;
       /** 0 plays the most visited move; above 0 samples in proportion to `visits ** (1 / temperature)`. */
       readonly temperature: number;
+      /** When sampling, only moves with at least this share of the most visited move's visits can be picked. Default 0: any visited move. */
+      readonly minVisitShare?: number;
       readonly seed: number;
       /** False searches a fresh tree that is not kept, so the answer is from exactly `simulations` and the game's tree is untouched. Default true. */
       readonly reuseTree?: boolean;
