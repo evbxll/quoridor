@@ -280,12 +280,12 @@ describe("only public words in what the site ships", () => {
     ["a pull request of the private repo", "PR #177"],
     ["the measuring machine", "Ryzen 7"],
     ["the old disclosure", "How this was measured"],
-    ["a commit field", "private_git_sha"],
+    ["a commit field", "private_" + "git_sha"],
     ["a ratings folder", "ratings_folder"],
     ["the old Normal note", "The reference level: about even with its author on 9 × 9."],
     ["its author", "even with its Author"],
     ["calibration", "calibrated against Normal"],
-    ["a git commit id", "ec23805c5cc030885812c9a980ea2f65e10d0ddf"],
+    ["a git commit id", "0123456789abcdef".repeat(3).slice(0, 40)],
     ["a no-break space", "fresh\u00a0tree"],
   ])("refuses %s in a shipped script", (_name, words) => {
     shipped();
