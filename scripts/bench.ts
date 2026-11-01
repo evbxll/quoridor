@@ -16,7 +16,7 @@ import { createOrtNetwork } from "../src/ai/ort";
 import { seededRandom } from "../src/ai/random";
 import { GameState } from "../src/engine/state";
 
-const SIZES = [5, 7, 9, 11];
+const SIZES = [5, 7, 9, 11, 13];
 const INFERENCES = 100;
 const WARMUP = 10;
 const SIMULATIONS = 100;

@@ -23,7 +23,7 @@ export const samePlayer = (a: Player, b: Player): boolean => (a === HUMAN || b =
 export type Players = Readonly<Record<Side, Player>>;
 
 /** The board sizes the site offers. */
-export const BOARD_SIZES = [5, 7, 9, 11] as const;
+export const BOARD_SIZES = [5, 7, 9, 11, 13] as const;
 
 /** Whether the site offers a board of this size (a link can name others, which the engine reads but the page does not play). */
 export const isOfferedSize = (size: number): boolean => BOARD_SIZES.some((offered) => offered === size);

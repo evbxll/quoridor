@@ -3,7 +3,7 @@ import { Game } from "../../src/engine/game";
 import { type Bot, botLabel, botOf, capFor, capitalized, modelName, PRESETS, withModel } from "../../src/ui/bots";
 import { HUMAN, type Player, type Players } from "../../src/ui/controller";
 import { keepNote, takeNote } from "../../src/ui/persistence";
-import { addressOf, isOwnAddress, keptAfterSeat, keptAfterSwap, parseSeat, personFirst, readSetup, seatCode, seatsForLink, seatsOf, type Setup, setupText } from "../../src/ui/setupLink";
+import { addressOf, FIRST_VISIT_PLAYERS, isOwnAddress, keptAfterSeat, keptAfterSwap, parseSeat, personFirst, readSetup, seatCode, seatsForLink, seatsOf, type Setup, setupText } from "../../src/ui/setupLink";
 
 const DEFAULTS: Players = { p1: HUMAN, p2: botOf("strong") };
 const SEATS: readonly Player[] = [
@@ -95,11 +95,35 @@ describe("the setup kept between visits", () => {
   });
 
   it("is ignored when missing or for a board the site does not offer", () => {
-    for (const text of [null, "", "garbage", "n=13&p1=p&p2=p", "n=9.0&p1=p&p2=p", "n=9", "n=-9&p1=p&p2=p"]) expect(readSetup(text, DEFAULTS), String(text)).toBeNull();
+    for (const text of [null, "", "garbage", "n=15&p1=p&p2=p", "n=9.0&p1=p&p2=p", "n=9", "n=-9&p1=p&p2=p"]) expect(readSetup(text, DEFAULTS), String(text)).toBeNull();
   });
 
   it("takes the default for a seat it cannot read", () => {
     expect(readSetup("n=9&p1=h100&p2=???", DEFAULTS)).toEqual({ size: 9, players: { p1: botOf("normal"), p2: DEFAULTS.p2 } });
+  });
+});
+
+describe("a board of 13 x 13 in links and kept setups", () => {
+  it("is read back from a kept setup and from a link", () => {
+    const players: Players = { p1: botOf("normal"), p2: botOf("normal") };
+    expect(readSetup(setupText({ size: 13, players }), DEFAULTS)).toEqual({ size: 13, players });
+    expect(Game.fromHash("#n=13&m=g2.g12").size).toBe(13);
+  });
+
+  it("brings a bot's searches down to the cap of the board", () => {
+    expect(parseSeat("n800", 13)).toEqual({ engine: "network", simulations: 400, vary: false });
+    expect(parseSeat("h1600", 13)).toEqual({ engine: "heuristic", simulations: 1600, vary: false });
+  });
+});
+
+describe("the first visit's seats", () => {
+  it("are Normal against Strong, two bots", () => {
+    expect(FIRST_VISIT_PLAYERS).toEqual({ p1: botOf("normal"), p2: botOf("strong") });
+    expect(personFirst(FIRST_VISIT_PLAYERS)).toBe(FIRST_VISIT_PLAYERS);
+  });
+
+  it("are not what a link falls back to: a link that names no seat well still gets a person against Strong", () => {
+    expect(seatsForLink(seatsOf("#n=9&p1=zz&p2=zz", 9)!, DEFAULTS, 0)).toEqual(DEFAULTS);
   });
 });
 

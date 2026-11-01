@@ -8,7 +8,8 @@
 // more than half a pixel fails the run, and so does the page growing wider than the window. Then it
 // steps two Beginners through their first moves and checks that neither the controls nor the move list
 // and the cards after it move as the moves come in, and plays two Beginners with auto-play on and checks
-// the controls during the countdown to the next game.
+// the controls during the countdown to the next game. On a 13 x 13 board it checks the cell count, the file labels a to m, the board's
+// label, and that the controls sit where they sat on 9 x 9; the later checks in each run then play on that board.
 // Where the board's column stays in view (a wide, tall window), it scrolls the column beside the
 // board from top to bottom and fails if the board or its controls leave the window at any step. It
 // opens the View menu with the controls at the top and at the bottom of the window and fails if the
@@ -311,6 +312,24 @@ const COUNTDOWN = `(async () => {
   return { before, during, label: shownLabel };
 })()`;
 
+/** A 13 x 13 board with two Normals: the board, its labels and the controls measured on the empty board and after Start has played a move, to be compared with the same page on 9 x 9. */
+const THIRTEEN = `(async () => {
+  ${IN_PAGE}
+  const size = document.getElementById("size");
+  size.value = "13";
+  fire(size, "change");
+  document.getElementById("new").click();
+  await settle();
+  const labels = [...document.querySelectorAll("#board .label")].map((el) => el.textContent);
+  const cells = document.querySelectorAll("#board .cell").length;
+  const aria = document.getElementById("board").getAttribute("aria-label");
+  const at = measure();
+  const board = document.getElementById("board").getBoundingClientRect();
+  const fitsWindow = board.top >= 0 && board.bottom <= innerHeight + 1 && board.right <= innerWidth + 1;
+  const offered = [...document.querySelectorAll("#seat-p1 select option")].filter((o) => o.value === "strong" || o.value === "max").map((o) => o.disabled);
+  return { labels, cells, aria, at, fitsWindow, strongOff: offered, board: [Math.round(board.width), Math.round(board.height)] };
+})()`;
+
 /** Where the board's column is sticky: scrolls the page through the game area and reports the board and the column at each step. */
 const SCROLL = `(async () => {
   ${IN_PAGE}
@@ -469,6 +488,12 @@ async function main() {
         const played = first.after.at(-1)?.moves ?? 0;
         console.log(`${tag}: first moves ${played === 3 ? "played (3)" : `NOT all played (${played})`}; ${firstMoved.length === 0 ? "nothing moved" : `moved ${JSON.stringify(firstMoved)}`}`);
         failures += played === 3 && firstMoved.length === 0 ? 0 : 1;
+        const thirteen = await page.evaluate(THIRTEEN);
+        const thirteenMoved = moved(baseline, thirteen.at);
+        const files = thirteen.labels.filter((/** @type {string} */ label) => /^[a-z]$/.test(label)).join("");
+        const thirteenOk = thirteen.cells === 169 && files === "abcdefghijklm" && /13 by 13/.test(thirteen.aria) && Object.keys(thirteenMoved).length === 0;
+        console.log(`${tag}: 13 x 13 board ${thirteen.cells} cells, files ${files}, board ${thirteen.board.join("x")}px; ${Object.keys(thirteenMoved).length === 0 ? "nothing moved" : `moved ${JSON.stringify(thirteenMoved)}`}; network levels disabled: ${JSON.stringify(thirteen.strongOff)}`);
+        failures += thirteenOk ? 0 : 1;
         const countdown = await page.evaluate(COUNTDOWN);
         const countdownMoved = moved(countdown.before, countdown.during);
         const reached = /Next game/.test(countdown.label);

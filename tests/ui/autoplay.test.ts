@@ -78,6 +78,23 @@ function setup() {
 /** The page tells auto-play after every change. */
 const settle = (auto: AutoPlay): void => auto.update();
 
+describe("AutoPlay defaults", () => {
+  it("is on, with sides swapped and varied openings, for a viewer who has chosen nothing", () => {
+    const auto = new AutoPlay(new FakeHost(), () => 0.25, () => {});
+    expect([auto.enabled, auto.swapSides, auto.variedOpenings]).toEqual([true, true, true]);
+    expect(auto.active).toBe(false);
+  });
+
+  it("does not start a run by itself: only Start does", () => {
+    const host = new FakeHost();
+    const auto = new AutoPlay(host, () => 0.25, () => {});
+    auto.update();
+    expect([auto.active, host.starts]).toEqual([false, 0]);
+    auto.start();
+    expect([auto.active, host.starts]).toEqual([true, 1]);
+  });
+});
+
 describe("AutoPlay", () => {
   it("begins with a varied opening when Start is pressed on a fresh game", () => {
     const { host, auto } = setup();

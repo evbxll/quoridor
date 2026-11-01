@@ -4,7 +4,7 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Quoridor</title>
-    <meta name="description" content="Play Quoridor against a bot in your browser, on 5x5 to 11x11 boards, with no server and no account." />
+    <meta name="description" content="Play Quoridor against a bot in your browser, on 5x5 to 13x13 boards, with no server and no account." />
     <meta name="theme-color" content="#f4f3ef" media="(prefers-color-scheme: light)" />
     <meta name="theme-color" content="#141413" media="(prefers-color-scheme: dark)" />
     <link rel="icon" href="data:," />
@@ -79,6 +79,7 @@
                   <option value="7">7 × 7</option>
                   <option value="9" selected>9 × 9</option>
                   <option value="11">11 × 11</option>
+                  <option value="13">13 × 13</option>
                 </select>
               </label>
               <button id="new" type="button">New game</button>
@@ -165,7 +166,7 @@
           </section>
 
           <div id="auto" class="card auto" role="group" aria-label="Automatic games">
-            <label class="check"><input id="auto-on" type="checkbox" /> Play the next game automatically</label>
+            <label class="check"><input id="auto-on" type="checkbox" checked /> Play the next game automatically</label>
             <div class="auto-options">
               <label class="check"><input id="auto-swap" type="checkbox" checked /> Swap sides each game</label>
               <label class="check"><input id="auto-opening" type="checkbox" checked /> Varied openings</label>
