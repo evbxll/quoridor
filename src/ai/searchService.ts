@@ -3,6 +3,7 @@ import { formatAction, parseMove } from "../engine/notation";
 import { GameState } from "../engine/state";
 import type { Evaluator } from "./evaluator";
 import { C_PUCT, FPU_REDUCTION, Mcts, selectAction } from "./mcts";
+import { keepProgress } from "./progressGuard";
 import { type EngineSpec, type Request, type Response, slotOf } from "./protocol";
 import { seededRandom } from "./random";
 import { createYielder } from "./yielder";
@@ -110,7 +111,9 @@ export function createSearchService(post: (response: Response) => void, makeEval
     if (mine.cancelled) return abandon(mine);
     const result = await mcts.search(0);
     const state = mcts.rootState;
-    const action = selectAction(result, request.temperature, seededRandom(request.seed), request.minVisitShare);
+    const sampled = selectAction(result, request.temperature, seededRandom(request.seed), request.minVisitShare);
+    // A varied heuristic bot (Beginner) is meant to wander, so only a bot that plays its most visited move is held to progress.
+    const action = request.engine === "heuristic" && request.temperature <= 0 ? keepProgress(state, result, sampled) : sampled;
     post({
       type: "result",
       id: mine.id,
