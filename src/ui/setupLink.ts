@@ -1,4 +1,4 @@
-import { type Bot, fitTo } from "./bots";
+import { type Bot, botOf, fitTo } from "./bots";
 import { HUMAN, isOfferedSize, type Player, type Players, type Side } from "./controller";
 
 const SIDES = ["p1", "p2"] as const;
@@ -59,6 +59,9 @@ export function seatsOf(hash: string, size: number): LinkSeats | null {
   }
   return { seats, unreadable };
 }
+
+/** What a first visit with no link and no kept setup opens with: two bots, Normal against Strong. Where there is no network, Strong gives way to Normal. It is never kept as a choice. */
+export const FIRST_VISIT_PLAYERS: Players = { p1: botOf("normal"), p2: botOf("strong") };
 
 /** A setup the page keeps between visits: the board size and the seats. */
 export interface Setup {

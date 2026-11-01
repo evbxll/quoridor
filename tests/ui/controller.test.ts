@@ -354,9 +354,9 @@ describe("GameController with a person playing", () => {
 
   it("refuses a board size the site does not offer", () => {
     const { controller } = setup();
-    for (const size of [0, 3, 6, 13]) expect(() => controller.newGame(size, { p1: HUMAN, p2: NORMAL })).toThrow("no ");
-    expect(() => controller.load(Game.fromHash("#n=13"), { p1: HUMAN, p2: NORMAL })).toThrow("13x13");
-    expect([3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13].filter(isOfferedSize)).toEqual([5, 7, 9, 11]);
+    for (const size of [0, 3, 6, 12]) expect(() => controller.newGame(size, { p1: HUMAN, p2: NORMAL })).toThrow("no ");
+    expect(() => controller.load(Game.fromHash("#n=12"), { p1: HUMAN, p2: NORMAL })).toThrow("12x12");
+    expect([3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15].filter(isOfferedSize)).toEqual([5, 7, 9, 11, 13]);
     expect(controller.size).toBe(5);
   });
 

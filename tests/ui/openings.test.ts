@@ -4,7 +4,7 @@ import { parseMove } from "../../src/engine/notation";
 import { OPENING_PLIES, openingFor, openingGame, openingPool } from "../../src/ui/openings";
 
 describe("openings", () => {
-  for (const size of [5, 7, 9, 11]) {
+  for (const size of [5, 7, 9, 11, 13]) {
     it(`plays ${OPENING_PLIES} legal pawn plies on ${size}x${size}, each to a different position`, () => {
       const pool = openingPool(size);
       expect(pool.length).toBeGreaterThan(10);
@@ -27,10 +27,11 @@ describe("openings", () => {
     expect(openingPool(9)).toHaveLength(35);
     expect(openingPool(7)).toHaveLength(35);
     expect(openingPool(11)).toHaveLength(35);
+    expect(openingPool(13)).toHaveLength(35);
     expect(openingPool(5)).toHaveLength(35);
   });
 
-  for (const size of [5, 7, 9, 11]) {
+  for (const size of [5, 7, 9, 11, 13]) {
     it(`never steps a pawn away from its goal in any opening on ${size}x${size}`, () => {
       for (const moves of openingPool(size)) {
         const state = GameState.initial(size);

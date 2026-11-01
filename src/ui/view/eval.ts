@@ -13,6 +13,24 @@ function setTip(id: string, text: string): void {
   if (tip.textContent !== text) tip.textContent = text;
 }
 
+const METER_LABEL = "Chance that player 1 wins, by the network";
+
+/** A meter needs a value; with none (no network at this size, or not ready) the bar is described as a picture, with the reason in its label. */
+function describeMeter(meter: HTMLElement, percent: number | null, text: string): void {
+  if (percent === null) {
+    for (const name of ["aria-valuenow", "aria-valuemin", "aria-valuemax", "aria-valuetext"]) meter.removeAttribute(name);
+    meter.setAttribute("role", "img");
+    meter.setAttribute("aria-label", `${METER_LABEL}: ${text}`);
+    return;
+  }
+  meter.setAttribute("role", "meter");
+  meter.setAttribute("aria-label", METER_LABEL);
+  meter.setAttribute("aria-valuemin", "0");
+  meter.setAttribute("aria-valuemax", "100");
+  meter.setAttribute("aria-valuenow", String(percent));
+  meter.setAttribute("aria-valuetext", text);
+}
+
 /** Draws the eval bar: its fill, the two percentages and each bot's marker, with the blurbs that explain them. */
 export class EvalView {
   /** The bar's last fresh percentage, kept (dimmed) while the next position is read. */
@@ -35,9 +53,7 @@ export class EvalView {
     if (!bar.stale) this.shownPercent = bar.percent;
     container.classList.toggle("empty", bar.percent === null);
     container.classList.toggle("stale", bar.stale);
-    if (bar.percent === null) meter.removeAttribute("aria-valuenow");
-    else meter.setAttribute("aria-valuenow", String(bar.percent));
-    meter.setAttribute("aria-valuetext", bar.label);
+    describeMeter(meter, bar.percent, bar.label);
     element("eval-fill", HTMLElement).style.height = `${bar.percent ?? 0}%`;
     element("eval-p1", HTMLElement).textContent = bar.percent === null ? "–" : `${bar.percent}%`;
     element("eval-p2", HTMLElement).textContent = bar.percent === null ? "–" : `${100 - bar.percent}%`;

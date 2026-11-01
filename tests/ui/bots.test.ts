@@ -32,7 +32,7 @@ describe("presets", () => {
   });
 
   it("are every one a step of its engine's control on every site size", () => {
-    for (const preset of PRESETS) for (const size of [5, 7, 9, 11]) expect(stepsFor(preset.engine, size)).toContain(preset.simulations);
+    for (const preset of PRESETS) for (const size of [5, 7, 9, 11, 13]) expect(stepsFor(preset.engine, size)).toContain(preset.simulations);
   });
 
   it("say what each plays with", () => {
@@ -89,15 +89,16 @@ describe("a bot's name", () => {
 });
 
 describe("simulation steps and caps", () => {
-  it("offer the network 1 to 800 on 5 to 9 and 1 to 400 on 11", () => {
+  it("offer the network 1 to 800 on 5 to 9 and 1 to 400 on 11 and 13", () => {
     const all = [1, 8, 16, 32, 64, 100, 200, 400, 800];
     for (const size of [5, 7, 9]) expect(stepsFor("network", size)).toEqual(all);
     expect(stepsFor("network", 11)).toEqual(all.slice(0, -1));
-    expect([5, 7, 9, 11].map((size) => capFor("network", size))).toEqual([800, 800, 800, 400]);
+    expect(stepsFor("network", 13)).toEqual(all.slice(0, -1));
+    expect([5, 7, 9, 11, 13].map((size) => capFor("network", size))).toEqual([800, 800, 800, 400, 400]);
   });
 
   it("offer the heuristic 1 to 1,600 on every size", () => {
-    for (const size of [5, 7, 9, 11]) {
+    for (const size of [5, 7, 9, 11, 13]) {
       expect(stepsFor("heuristic", size)).toEqual([1, 5, 25, 50, 100, 200, 400, 800, 1600]);
       expect(capFor("heuristic", size)).toBe(1600);
     }
@@ -175,7 +176,9 @@ describe("time estimates", () => {
     expect(estimateMs(heuristic(100), 9)).toEqual({ ms: 14, kind: "estimate" });
     expect(estimateMs(heuristic(1600), 9)).toEqual({ ms: 224, kind: "estimate" });
     expect(estimateMs(heuristic(5), 11)!.ms).toBeCloseTo(1.2, 6);
-    expect(estimateMs(heuristic(100), 13)).toBeNull();
+    expect(estimateMs(heuristic(100), 13)).toEqual({ ms: 52, kind: "estimate" });
+    expect(estimateMs(heuristic(100), 15)).toBeNull();
+    expect(estimateMs({ engine: "network", simulations: 32, vary: false }, 13)).toBeNull();
   });
 
   it("read as one sentence with the machine and the note that weaker devices are slower; a time not measured at this budget is rough", () => {

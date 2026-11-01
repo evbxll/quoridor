@@ -38,7 +38,7 @@ const flipped = (players: Players): Players => ({ p1: players.p2, p2: players.p1
  */
 export class AutoPlay {
   /** The viewer's choices: the checkbox, and its two options. */
-  enabled = false;
+  enabled = true;
   swapSides = true;
   variedOpenings = true;
 

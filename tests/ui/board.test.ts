@@ -10,7 +10,7 @@ const count = (markup: string, pattern: RegExp): number => markup.match(pattern)
 
 describe("renderBoard", () => {
   it("draws every cell, both pawns with their numbers, and labels the files and ranks", () => {
-    for (const size of [5, 9, 11]) {
+    for (const size of [5, 9, 11, 13]) {
       const markup = renderBoard(GameState.initial(size));
       expect(count(markup, /class="cell"/g)).toBe(size * size);
       expect(count(markup, /class="pawn p[12]/g)).toBe(2);
@@ -19,6 +19,16 @@ describe("renderBoard", () => {
       expect(markup).toContain(">a<");
       expect(markup).toContain(`>${size}<`);
     }
+  });
+
+  it("labels a 13 x 13 board a to m and 13 down to 1, and says its walls in words", () => {
+    const state = GameState.initial(13);
+    const markup = renderBoard(state);
+    expect(count(markup, /class="label"/g)).toBe(26);
+    expect(markup).toContain(">m<");
+    expect(markup).not.toContain(">n<");
+    expect(describeBoard(state)).toContain("13 by 13 board");
+    expect(describeBoard(state)).toContain("14 walls");
   });
 
   it("marks the player to move, and nobody once the game is over", () => {

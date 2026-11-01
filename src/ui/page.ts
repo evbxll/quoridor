@@ -16,7 +16,7 @@ import { GameController, HUMAN, isOfferedSize, type Player, type Players, samePl
 import { buildModelOptions, extraModels, modelTitle } from "./modelInfo";
 import { describeNetwork } from "./networkText";
 import { keepNote, saveSetupText, saveShowEval, savedSetupText, savedShowEval, savedStorage, takeNote } from "./persistence";
-import { addressOf, isOwnAddress, keptAfterSeat, keptAfterSwap, personFirst, readSetup, seatsForLink, seatsOf, type Setup, setupText } from "./setupLink";
+import { addressOf, FIRST_VISIT_PLAYERS, isOwnAddress, keptAfterSeat, keptAfterSwap, personFirst, readSetup, seatsForLink, seatsOf, type Setup, setupText } from "./setupLink";
 import { cellAt, wallAt } from "./geometry";
 import { WallPreview } from "./pointer";
 import { Tooltips } from "./tooltip";
@@ -45,7 +45,7 @@ export interface NetworkSource {
 
 const SIDES = ["p1", "p2"] as const;
 const NORMAL = botOf("normal");
-/** A visitor plays player 1 against Strong, the network at 32 searches, unless they choose otherwise. */
+/** The seats a link that names none of them, or not well, falls back to: a person against Strong, the network at 32 searches. */
 const DEFAULT_PLAYERS: Players = { p1: HUMAN, p2: botOf("strong") };
 const describePlayer = (player: Player): string => (player === HUMAN ? "a person" : botLabel(player));
 /** The page may be about to reload once: it is not cross-origin isolated yet, and the service worker that makes it so reloads it. */
@@ -80,7 +80,7 @@ export function startPage(port: SearchPort, network: NetworkSource): GameControl
   let seatsChosen = false;
   /** The setup the person last chose here, read at the start; null until they choose one. Links and seats the page swaps in itself never change it. */
   const saved = readSetup(savedSetupText(), DEFAULT_PLAYERS);
-  let kept: Setup = saved ?? { size: 9, players: DEFAULT_PLAYERS };
+  let kept: Setup = saved ?? { size: 9, players: FIRST_VISIT_PLAYERS };
   const keep = (next: Setup): void => {
     kept = next;
     saveSetupText(setupText(next));

@@ -65,7 +65,7 @@ export function renderBoard(state: GameState, marks: BoardMarks = NO_MARKS): str
     }
   }
   // Larger boards are drawn smaller on screen, so their labels and pawn numbers get more board units.
-  const font = n >= 11 ? 28 : n >= 9 ? 24 : 17;
+  const font = n >= 13 ? 32 : n >= 11 ? 28 : n >= 9 ? 24 : 17;
   const markFont = n >= 9 ? 30 : 24;
   for (let i = 0; i < n; i++) {
     out.push(`<text class="label" style="font-size:${font}px" x="${cellX(i) + CELL / 2}" y="${PAD + span + 24}">${String.fromCharCode(97 + i)}</text>`);
