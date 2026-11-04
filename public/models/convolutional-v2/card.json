@@ -1,13 +1,14 @@
 {
-  "id": "s9-conv-paths-g105",
+  "id": "convolutional-v2",
   "display_name": "Convolutional",
   "sizes": [
     5,
     7,
     9,
-    11
+    11,
+    13
   ],
-  "sha256": "bf8842f19958c49f741f25f39712044ae445ea5b7014d8c62d8e2b5bd86f98fb",
+  "sha256": "d71643109784747ba3c1cc90cbdc5159969e1866511a02d139e5fe1534a87fbd",
   "bytes": 9915306,
   "license": "CC-BY-4.0",
   "attribution": "evbxll (https://evanbell.site/quoridor/)",
@@ -37,7 +38,7 @@
   "strength": [
     {
       "size": 9,
-      "elo_vs_normal": 518
+      "elo_vs_normal": 744
     }
   ]
 }

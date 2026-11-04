@@ -1,15 +1,16 @@
 {
   "models": [
     {
-      "id": "s9-conv-paths-g105",
-      "path": "models/s9-conv-paths-g105/model.onnx",
-      "sha256": "bf8842f19958c49f741f25f39712044ae445ea5b7014d8c62d8e2b5bd86f98fb"
+      "id": "convolutional-v2",
+      "path": "models/convolutional-v2/model.onnx",
+      "sha256": "d71643109784747ba3c1cc90cbdc5159969e1866511a02d139e5fe1534a87fbd"
     }
   ],
   "bots": {
-    "5": "s9-conv-paths-g105",
-    "7": "s9-conv-paths-g105",
-    "9": "s9-conv-paths-g105",
-    "11": "s9-conv-paths-g105"
+    "5": "convolutional-v2",
+    "7": "convolutional-v2",
+    "9": "convolutional-v2",
+    "11": "convolutional-v2",
+    "13": "convolutional-v2"
   }
 }
