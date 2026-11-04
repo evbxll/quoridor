@@ -17,10 +17,19 @@ const newId = process.argv[2] ?? "convolutional-v2";
 const sizes = [5, 7, 9, 11, 13];
 
 const copy = mkdtempSync(join(tmpdir(), "quoridor-swap-"));
+
+/**
+ * Runs git in the copy and throws if it fails.
+ * @param {string[]} args
+ */
+function git(args) {
+  const run = spawnSync("git", args, { cwd: copy, stdio: "inherit" });
+  if (run.status !== 0) throw new Error(`git ${args.join(" ")} failed`);
+}
 cpSync(repo, copy, { recursive: true, filter: (path) => !/^(node_modules|\.git|dist|\.bench)([\\/]|$)/.test(relative(repo, path)) });
 symlinkSync(join(repo, "node_modules"), join(copy, "node_modules"), "junction");
 // tests/publicFiles.test.ts lists the repo's files with git.
-spawnSync("git", ["init", "-q"], { cwd: copy });
+git(["init", "-q"]);
 
 const models = join(copy, "public", "models");
 /** @type {{models: {id: string, sha256: string}[]}} */
@@ -38,8 +47,9 @@ writeFileSync(
   join(models, "index.json"),
   JSON.stringify({ models: [{ id: newId, path: `models/${newId}/model.onnx`, sha256: old.sha256 }], bots: Object.fromEntries(sizes.map((size) => [size, newId])) }, null, 2) + "\n",
 );
-spawnSync("git", ["add", "-A"], { cwd: copy });
-spawnSync("git", ["add", "-A"], { cwd: copy });
+const written = JSON.parse(readFileSync(join(models, newId, "card.json"), "utf8"));
+if (written.strength?.[0]?.elo_vs_normal !== 744 || !written.sizes.includes(13) || written.id !== newId) throw new Error("The simulated card is not the one intended");
+git(["add", "-A"]);
 console.log(`Swapped ${oldIds.join(", ")} for ${newId} in ${copy}`);
 
 const npm = process.platform === "win32" ? "npm.cmd" : "npm";

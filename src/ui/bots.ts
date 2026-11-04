@@ -38,7 +38,7 @@ interface BotsData {
       /** The make the times belong to, as `timeKeyOf` names it ("conv-128x8"); any network of that make is as fast. */
       readonly architecture: string;
       readonly bySize: Readonly<Record<string, Points>>;
-      /** Sizes not measured: times scaled from the measured ones, always shown as estimates. */
+      /** Sizes not measured: times scaled from the measured ones (13 x 13 is a rough extrapolation from the 9 and 11 entries), always shown as estimates. */
       readonly estimatedBySize: Readonly<Record<string, Points>>;
     };
     readonly heuristic: { readonly msAt100: Readonly<Record<string, number>> };
@@ -199,3 +199,16 @@ export function describeEstimate(bot: Bot, size: number, timeKey: string | null 
  * whatever its weights or id. A make the table does not hold reads "unmeasured".
  */
 export const timeKeyOf = (card: ModelCard): string => `${card.network.head}-${card.network.channels}x${card.network.blocks}`;
+
+/**
+ * The time key for a seat: null for a heuristic bot, else the make of the network that would play. That network is
+ * the seat's own model if it holds one, else the main model (`mainId`, null before it is ready). A model whose card
+ * is not read yet is keyed by the seat's model id, which matches no make (unmeasured), and by null for the main
+ * model, which then uses the table.
+ */
+export function timeKeyFor(bot: Bot, seatModel: string | undefined, mainId: string | null, card: (id: string) => ModelCard | null): string | null {
+  if (bot.engine !== "network") return null;
+  const id = seatModel ?? mainId;
+  const read = id === null ? null : card(id);
+  return read !== null ? timeKeyOf(read) : (seatModel ?? null);
+}

@@ -29,12 +29,14 @@ export async function showArchitecture(env: ModelEnv, id: string): Promise<void>
   }
 }
 
-/** Which board sizes the model plays, from its card; the plain "plays every board size" where the card cannot be read. */
-async function boardSizesText(env: ModelEnv, id: string): Promise<string> {
+/**
+ * Which board sizes the model plays, from its card (fetched here again: the model manager keeps its copy private, and the browser serves this one from its cache); the plain "plays several board sizes" where the card cannot be read.
+ */
+export async function boardSizesText(env: ModelEnv, id: string): Promise<string> {
   try {
     const response = await env.fetch(cardUrl(env.base, id), { credentials: "omit", mode: "same-origin" });
-    return response.ok ? playsText(parseCard(await response.json())) : "The same network plays every board size.";
+    return response.ok ? playsText(parseCard(await response.json())) : "The same network plays several board sizes.";
   } catch {
-    return "The same network plays every board size.";
+    return "The same network plays several board sizes.";
   }
 }

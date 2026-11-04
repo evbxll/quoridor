@@ -23,7 +23,6 @@
         "9": [[32, 155], [200, 635], [400, 2377], [800, 3865]],
         "11": [[32, 200], [200, 848]]
       },
-      "estimatedNote": "Not measured: scaled from the 9 and 11 entries (cost grows about 1.3x per two board sizes at 32 and at 200 simulations). The network cap of 400 at 13 and the heuristic's 13 time are placeholders too.",
       "estimatedBySize": {
         "13": [[32, 260], [200, 1130]]
       }

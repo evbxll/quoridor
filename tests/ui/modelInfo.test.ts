@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { type ModelCard, parseCard } from "../../src/model/card";
-import { botLabel, botOf, botSummary, estimateMs, MEASURED_ARCHITECTURE, modelName, presetOf, sameBot, setModelLabel, timeKeyOf, withModel } from "../../src/ui/bots";
+import { botLabel, botOf, botSummary, estimateMs, MEASURED_ARCHITECTURE, modelName, presetOf, sameBot, setModelLabel, timeKeyFor, timeKeyOf, withModel } from "../../src/ui/bots";
 import { buildModelOptions, choosableModels, describeModelStatus, disabledReason, extraModels, MAIN_MODEL, modelTitle, playsText, seatStrength } from "../../src/ui/modelInfo";
 import { cardJson, fcCardJson } from "../helpers/cards";
 
@@ -180,5 +180,38 @@ describe("where a model plays", () => {
   it("passes the public text audit", async () => {
     const { forbiddenIn } = await import("../../scripts/verify-dist.mjs");
     expect(forbiddenIn(playsText(parseCard(cardJson("m", { sizes: [5, 7, 9, 11, 13] }))))).toEqual([]);
+  });
+});
+
+describe("the time key of a seat", () => {
+  const strong = botOf("strong");
+  const cards = (id: string): ModelCard | null => CARDS[id] ?? null;
+
+  it("is the main model's make when the seat holds no model, so Strong and Max are measured whatever the main model's id", () => {
+    expect(timeKeyFor(strong, undefined, "test-main", cards)).toBe("conv-128x8");
+    expect(timeKeyFor(strong, undefined, "a-model-never-seen-before", (id) => conv(id))).toBe(MEASURED_ARCHITECTURE);
+  });
+
+  it("uses the table while the main model is not ready or its card is not read, and is none for a heuristic bot", () => {
+    expect(timeKeyFor(strong, undefined, null, cards)).toBeNull();
+    expect(timeKeyFor(strong, undefined, "unread", cards)).toBeNull();
+    expect(timeKeyFor(botOf("normal"), undefined, "test-main", cards)).toBeNull();
+  });
+
+  it("is the gallery model's make, or its id (unmeasured) while its card is not read", () => {
+    expect(timeKeyFor(strong, "test-fc", "test-main", cards)).toBe("fc-128x8");
+    expect(timeKeyFor(strong, "test-older", "test-main", cards)).toBe(MEASURED_ARCHITECTURE);
+    expect(timeKeyFor(strong, "unread", "test-main", cards)).toBe("unread");
+    expect(estimateMs(strong, 9, timeKeyFor(strong, "unread", "test-main", cards))).toBeNull();
+  });
+
+  it("follows the model a seat holds explicitly, even when it is the main model", () => {
+    expect(timeKeyFor(strong, "test-main", "test-fc", cards)).toBe("conv-128x8");
+  });
+
+  it("names the make by its width and depth", () => {
+    const network = (channels: number, blocks: number) => ({ head: "conv", input_planes: 10, channels, blocks, pool_every: 3, head_channels: 32, board_size: null });
+    expect(timeKeyOf(parseCard(cardJson("m", { network: network(128, 6) })))).toBe("conv-128x6");
+    expect(timeKeyOf(parseCard(cardJson("m", { network: network(64, 8) })))).toBe("conv-64x8");
   });
 });
