@@ -10,7 +10,7 @@ import {
   estimateMs,
   fitTo,
   formatMs,
-  MEASURED_MODEL,
+  MEASURED_ARCHITECTURE,
   minVisitShareOf,
   NETWORK_VARY_MIN_VISIT_SHARE,
   nearestStep,
@@ -165,10 +165,24 @@ describe("time estimates", () => {
     expect(describeEstimate(network(400), 11)).toBe("Time a move: unmeasured on 11 × 11.");
   });
 
-  it("are unmeasured on a size with no table (13x13 is not offered yet) and for another network", () => {
-    expect(estimateMs(network(32), 13)).toBeNull();
-    expect(estimateMs(network(32), 9, "another-model")).toBeNull();
-    expect(estimateMs(network(32), 9, MEASURED_MODEL)).toEqual({ ms: 155, kind: "measured" });
+  it("are unmeasured for another make of network, and keyed by make, not by model id", () => {
+    expect(MEASURED_ARCHITECTURE).toBe("conv-128x8");
+    expect(estimateMs(network(32), 9, "fc-128x8")).toBeNull();
+    expect(estimateMs(network(32), 9, "some-model-id")).toBeNull();
+    expect(estimateMs(network(32), 9, MEASURED_ARCHITECTURE)).toEqual({ ms: 155, kind: "measured" });
+  });
+
+  it("are only scaled estimates on 13x13, never shown as measured, and unmeasured past the scaled budgets or off the table", () => {
+    expect(estimateMs(network(32), 13)).toEqual({ ms: 260, kind: "estimate" });
+    expect(estimateMs(network(200), 13)).toEqual({ ms: 1130, kind: "estimate" });
+    expect(estimateMs(network(100), 13)!.kind).toBe("estimate");
+    expect(estimateMs(network(400), 13)).toBeNull();
+    expect(estimateMs(network(32), 13, "fc-128x8")).toBeNull();
+    expect(estimateMs(network(32), 15)).toBeNull();
+    expect(describeEstimate(network(32), 13)).toBe("Roughly 0.3 s a move on a fast desktop; weaker devices are slower.");
+    // The estimate sits above the 11 x 11 time at the same budget.
+    expect(estimateMs(network(32), 13)!.ms).toBeGreaterThan(estimateMs(network(32), 11)!.ms);
+    expect(estimateMs(network(200), 13)!.ms).toBeGreaterThan(estimateMs(network(200), 11)!.ms);
   });
 
   it("are derived for the heuristic from Normal's time, in proportion to simulations, and always an estimate", () => {
@@ -178,7 +192,6 @@ describe("time estimates", () => {
     expect(estimateMs(heuristic(5), 11)!.ms).toBeCloseTo(1.2, 6);
     expect(estimateMs(heuristic(100), 13)).toEqual({ ms: 52, kind: "estimate" });
     expect(estimateMs(heuristic(100), 15)).toBeNull();
-    expect(estimateMs({ engine: "network", simulations: 32, vary: false }, 13)).toBeNull();
   });
 
   it("read as one sentence with the machine and the note that weaker devices are slower; a time not measured at this budget is rough", () => {

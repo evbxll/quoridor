@@ -38,6 +38,9 @@ export function parseArchitecture(json: unknown): Architecture {
 /** Where a model's `arch.json` is published: beside its `model.onnx`, as the publisher writes them (`models/<id>/`). */
 export const architectureUrl = (base: string, id: string): URL => new URL(`models/${encodeURIComponent(id)}/arch.json`, base);
 
+/** Where a model's `card.json` is published: beside its `model.onnx`. */
+export const cardUrl = (base: string, id: string): URL => new URL(`models/${encodeURIComponent(id)}/card.json`, base);
+
 const plural = (count: number, word: string): string => `${count} ${word}${count === 1 ? "" : "s"}`;
 
 /** The network's parameters in words: "2.5 million". */

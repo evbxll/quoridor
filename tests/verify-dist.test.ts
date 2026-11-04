@@ -8,6 +8,7 @@ import { checkCard, forbiddenIn, SUPPORTED_PLANES as SCRIPT_PLANES, verifyDist }
 import { SUPPORTED_PLANES } from "../src/ai/encoding";
 import { parseCard } from "../src/model/card";
 import { cardJson, fcCardJson } from "./helpers/cards";
+import { publishedModels } from "./helpers/models";
 
 let root: string;
 let dist: string;
@@ -305,9 +306,9 @@ describe("only public words in what the site ships", () => {
   });
 
   it("allows the page's own words and a published model's id", () => {
-    expect(forbiddenIn("Varied openings. Trained on 9 × 9. ≈ +500 Elo vs Normal. evanbell.site. An anchor. Max plays 200 simulations. sha256 " + "a".repeat(64))).toEqual([]);
-    expect(forbiddenIn("models/s9-conv-paths-g105/model.onnx", ["s9-conv-paths-g105"])).toEqual([]);
-    expect(forbiddenIn("models/s9-conv-paths-g105/model.onnx")).toEqual(["s9 conv paths"]);
+    expect(forbiddenIn("Varied openings. Trained on 9 × 9. ≈ +750 Elo vs Normal. evanbell.site. An anchor. Max plays 200 simulations. sha256 " + "a".repeat(64))).toEqual([]);
+    expect(forbiddenIn("models/s9-conv-paths-g1/model.onnx", ["s9-conv-paths-g1"])).toEqual([]);
+    expect(forbiddenIn("models/s9-conv-paths-g1/model.onnx")).toEqual(["s9 conv paths"]);
   });
 
   it("refuses a card field the public site does not ship, and a strength entry that says more than a number", () => {
@@ -317,7 +318,7 @@ describe("only public words in what the site ships", () => {
   });
 
   it("finds none in the repo's own public files: the README, the page, the bot data and the published models", () => {
-    const ids = ["s9-conv-paths-g105"];
+    const ids = publishedModels().map((model) => model.id);
     for (const file of ["README.md", "index.html", "src/ui/bots.json", ...files("public/models").filter((path) => path.endsWith(".json"))]) expect(forbiddenIn(readFileSync(file, "utf8"), ids), file).toEqual([]);
   });
 });

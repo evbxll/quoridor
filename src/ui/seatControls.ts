@@ -1,6 +1,6 @@
 import type { ModelCard } from "../model/card";
 import type { ModelState } from "../model/manager";
-import { type Bot, botLabel, botOf, botSummary, describeEstimate, fitTo, formatMs, PRESETS, sameBot, stepsFor, timeModelOf, withModel } from "./bots";
+import { type Bot, botLabel, botOf, botSummary, describeEstimate, fitTo, formatMs, PRESETS, sameBot, stepsFor, timeKeyOf, withModel } from "./bots";
 import { HUMAN, type MoveTime, type Player, type Side } from "./controller";
 import { playableModel } from "./seatModels";
 import { choiceOf, CUSTOM, ENGINE_GROUPS, seatAfterChoice } from "./seatChoice";
@@ -236,11 +236,12 @@ export class SeatControls {
     this.slider.setAttribute("aria-valuetext", `${bot.simulations.toLocaleString("en-US")} simulations`);
     setText(this.value, bot.simulations.toLocaleString("en-US"));
 
-    const card = this.model === undefined ? null : models.card(this.model);
-    // The time table belongs to a make of network: a gallery model of the same make as the measured one uses it, another is unmeasured.
-    const model = bot.engine !== "network" ? null : this.model === undefined ? mainModel : card === null ? this.model : timeModelOf(card);
+    const timed = this.model ?? mainModel;
+    const card = timed === null ? null : models.card(timed);
+    // The time table belongs to a make of network: a model of the same make as the measured one uses it, another is unmeasured (a gallery model whose card is not read yet is keyed by its id, which matches no make).
+    const timeKey = bot.engine !== "network" ? null : card !== null ? timeKeyOf(card) : (this.model ?? null);
     const here = moveTime !== null && moveTime.size === size && sameBot(moveTime.bot, withModel(bot, this.model)) ? `On this device: ${formatMs(moveTime.ms)}.` : "";
-    setText(this.estimate, describeEstimate(bot, size, model));
+    setText(this.estimate, describeEstimate(bot, size, timeKey));
     setText(this.measured, here);
     if (this.vary.checked !== bot.vary) this.vary.checked = bot.vary;
     const rated = bot.engine === "network" ? (this.model ?? models.mainId) : null;

@@ -98,8 +98,8 @@ const HEURISTIC_STRENGTH: Partial<Record<PresetId, string>> = {
  * A bot's strength for a casual player, in one line, or "" when there is none to give.
  *
  * A network bot's comes from its card: its figure against Normal at the board size (or at the size it was rated on,
- * which is then named), rounded to 50. Only the presets it holds for get a line: Strong ("≈ +500 Elo vs Normal") and Max
- * ("≈ +500 Elo or more", as it searches far more than was rated). A network bot with Vary moves or other Custom settings
+ * which is then named), rounded to 50. Only the presets it holds for get a line: Strong ("≈ +750 Elo vs Normal") and Max
+ * ("≈ +750 Elo or more", as it searches far more than was rated). A network bot with Vary moves or other Custom settings
  * plays otherwise than rated, so it gets none.
  */
 export function seatStrength(bot: Bot, card: ModelCard | null, size: number): string {
@@ -113,6 +113,16 @@ export function seatStrength(bot: Bot, card: ModelCard | null, size: number): st
   const elo = Math.round(entry.eloVsNormal / ELO_ROUNDING) * ELO_ROUNDING;
   const where = entry.size === size ? "" : ` (measured on ${entry.size} × ${entry.size})`;
   return `≈ ${eloText(elo)} Elo${preset === "max" ? " or more" : ""} vs Normal${where}`;
+}
+
+/** The board sizes a model plays, in words: "Trained on 9 × 9; also plays 5 × 5, 7 × 7, 11 × 11 and 13 × 13." */
+export function playsText(card: ModelCard): string {
+  const board = (size: number): string => `${size} × ${size}`;
+  const others = card.sizes.filter((size) => size !== card.trainedSize).sort((a, b) => a - b).map(board);
+  const trained = `Trained on ${board(card.trainedSize)}`;
+  if (others.length === 0) return `${trained}.`;
+  const list = others.length === 1 ? others[0]! : `${others.slice(0, -1).join(", ")} and ${others.at(-1)}`;
+  return `${trained}; also plays ${list}.`;
 }
 
 /** Where a seat's model stands, in words, and how far a download is (null when unknown or not downloading). */

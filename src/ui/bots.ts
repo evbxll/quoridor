@@ -35,10 +35,11 @@ interface BotsData {
   readonly times: {
     readonly device: string;
     readonly network: {
-      readonly model: string;
-      /** What the measured model is made of; a model with the same make is as fast. */
-      readonly architecture: { readonly head: string; readonly inputPlanes: number; readonly channels: number; readonly blocks: number };
+      /** The make the times belong to, as `timeKeyOf` names it ("conv-128x8"); any network of that make is as fast. */
+      readonly architecture: string;
       readonly bySize: Readonly<Record<string, Points>>;
+      /** Sizes not measured: times scaled from the measured ones, always shown as estimates. */
+      readonly estimatedBySize: Readonly<Record<string, Points>>;
     };
     readonly heuristic: { readonly msAt100: Readonly<Record<string, number>> };
   };
@@ -49,8 +50,8 @@ const DATA = data as unknown as BotsData;
 export const PRESETS: readonly Preset[] = DATA.presets;
 /** Where the time estimates were measured, in words ("a fast desktop"). */
 export const MEASURED_ON = DATA.times.device;
-/** The network whose times `bots.json` holds; the page shows no measured time for another one. */
-export const MEASURED_MODEL = DATA.times.network.model;
+/** The make of network whose times `bots.json` holds ("conv-128x8"); the page shows no measured time for another make. */
+export const MEASURED_ARCHITECTURE = DATA.times.network.architecture;
 
 /** The temperature a bot's searches ask for: 1 samples among the searched moves, 0 plays the most visited. */
 export const temperatureOf = (bot: Bot): number => (bot.vary ? 1 : 0);
@@ -153,20 +154,23 @@ export interface Estimate {
 /**
  * What a move takes on the measured desktop, or null if unmeasured.
  * The network is looked up in the measured table: exact at a measured budget, linear between measured
- * budgets and from zero below the first, none above the last. `model` is the network that would play, if
- * known; a different one than the table's is unmeasured. The heuristic's time is derived from Normal's, in
+ * budgets and from zero below the first, none above the last. `timeKey` is the make of the network that would play
+ * (`timeKeyOf`), if known; a different make than the table's is unmeasured. A size with only scaled times is always an estimate. The heuristic's time is derived from Normal's, in
  * proportion to simulations, so it is always an estimate.
  */
-export function estimateMs(bot: Bot, size: number, model: string | null = null): Estimate | null {
+export function estimateMs(bot: Bot, size: number, timeKey: string | null = null): Estimate | null {
   if (bot.engine === "heuristic") {
     const at100 = DATA.times.heuristic.msAt100[size];
     return at100 === undefined ? null : { ms: (at100 * bot.simulations) / 100, kind: "estimate" };
   }
-  const points = model === null || model === MEASURED_MODEL ? DATA.times.network.bySize[size] : undefined;
+  if (timeKey !== null && timeKey !== MEASURED_ARCHITECTURE) return null;
+  const measured = DATA.times.network.bySize[size];
+  const points = measured ?? DATA.times.network.estimatedBySize[size];
   if (points === undefined) return null;
+  const exact: EstimateKind = measured === undefined ? "estimate" : "measured";
   let before: readonly [number, number] = [0, 0];
   for (const point of points) {
-    if (bot.simulations === point[0]) return { ms: point[1], kind: "measured" };
+    if (bot.simulations === point[0]) return { ms: point[1], kind: exact };
     if (bot.simulations < point[0]) {
       const along = (bot.simulations - before[0]) / (point[0] - before[0]);
       return { ms: before[1] + (point[1] - before[1]) * along, kind: "estimate" };
@@ -184,18 +188,14 @@ export function formatMs(ms: number): string {
 }
 
 /** The time line in a bot's settings: "About 0.2 s a move on a fast desktop; weaker devices are slower." A time that is not measured at this budget says "Roughly". */
-export function describeEstimate(bot: Bot, size: number, model: string | null = null): string {
-  const found = estimateMs(bot, size, model);
+export function describeEstimate(bot: Bot, size: number, timeKey: string | null = null): string {
+  const found = estimateMs(bot, size, timeKey);
   if (found === null) return `Time a move: unmeasured on ${size} × ${size}.`;
   return `${found.kind === "measured" ? "About" : "Roughly"} ${formatMs(found.ms)} a move on ${MEASURED_ON}; weaker devices are slower.`;
 }
 
 /**
- * The model whose measured times apply to a model with this card: the measured one when it is made the same way
- * (head, input planes, width, depth), else the model itself. Unknown makes have no table and read "unmeasured".
+ * The key of the times that apply to a network with this card: its make (head, width, depth), like "conv-128x8",
+ * whatever its weights or id. A make the table does not hold reads "unmeasured".
  */
-export function timeModelOf(card: ModelCard): string {
-  const made = DATA.times.network.architecture;
-  const { head, inputPlanes, channels, blocks } = card.network;
-  return head === made.head && inputPlanes === made.inputPlanes && channels === made.channels && blocks === made.blocks ? MEASURED_MODEL : card.id;
-}
+export const timeKeyOf = (card: ModelCard): string => `${card.network.head}-${card.network.channels}x${card.network.blocks}`;

@@ -16,13 +16,16 @@
   "times": {
     "device": "a fast desktop",
     "network": {
-      "model": "s9-conv-paths-g105",
-      "architecture": { "head": "conv", "inputPlanes": 10, "channels": 128, "blocks": 8 },
+      "architecture": "conv-128x8",
       "bySize": {
         "5": [[32, 50], [200, 185], [400, 417], [800, 508]],
         "7": [[32, 98], [200, 425]],
         "9": [[32, 155], [200, 635], [400, 2377], [800, 3865]],
         "11": [[32, 200], [200, 848]]
+      },
+      "estimatedNote": "Not measured: scaled from the 9 and 11 entries (cost grows about 1.3x per two board sizes at 32 and at 200 simulations). The network cap of 400 at 13 and the heuristic's 13 time are placeholders too.",
+      "estimatedBySize": {
+        "13": [[32, 260], [200, 1130]]
       }
     },
     "heuristic": {
