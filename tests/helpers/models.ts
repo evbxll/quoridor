@@ -47,3 +47,30 @@ export function discoverModels(root: string, override: string | undefined): Test
     .filter((model) => complete(model.dir))
     .map((model) => withCard(model.id, model.dir));
 }
+
+/** A published model's files, found through `public/models/index.json` and never by a hard-coded id. */
+export interface PublishedModel {
+  readonly id: string;
+  /** The folder under `public/models/` holding its `card.json` and `arch.json`. */
+  readonly dir: string;
+  readonly card: ReturnType<typeof parseCard>;
+  /** The raw `card.json`. */
+  readonly cardJson: Record<string, unknown>;
+}
+
+/** Every model `public/models/index.json` lists, with its card read through the page's own `parseCard`. */
+export function publishedModels(root = process.cwd()): PublishedModel[] {
+  const index = parseIndex(JSON.parse(readFileSync(join(root, "public", "models", "index.json"), "utf8")));
+  return index.models.map((model) => {
+    const dir = join(root, "public", "models", model.id);
+    const json = JSON.parse(readFileSync(join(dir, "card.json"), "utf8")) as Record<string, unknown>;
+    return { id: model.id, dir, card: parseCard(json), cardJson: json };
+  });
+}
+
+/** The model that plays `size` as the bot, or null where the index names none. */
+export function publishedBot(size: number, root = process.cwd()): PublishedModel | null {
+  const index = parseIndex(JSON.parse(readFileSync(join(root, "public", "models", "index.json"), "utf8")));
+  const id = index.bots[size];
+  return publishedModels(root).find((model) => model.id === id) ?? null;
+}

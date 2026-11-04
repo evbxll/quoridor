@@ -25,8 +25,8 @@ class FakeEngine implements SearchPort {
 }
 
 const settle = (): Promise<void> => new Promise((resolve) => setImmediate(resolve));
-const OLD = "s9-conv-paths-g050";
-const OTHER = "s9-conv-paths-g010";
+const OLD = "test-older";
+const OTHER = "test-oldest";
 const strong = botOf("strong");
 const withOld = withModel(strong, OLD);
 

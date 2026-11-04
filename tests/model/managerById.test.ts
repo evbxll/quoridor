@@ -148,6 +148,24 @@ describe("ModelManager keyed by model id", () => {
     await expect(manager.card("ghost")).rejects.toThrow("no model ghost");
   });
 
+  it("offers the network on 13 x 13 only where the index lists a bot for it; Strong and Max stay off otherwise", async () => {
+    const without = build({}, { models, bots: { 5: "m1", 7: "m1", 9: "m1", 11: "m1" }, gallery: [] }).manager;
+    await without.select(9);
+    expect(without.state(13)).toEqual({ status: "unavailable", reason: "none-published" });
+    expect(without.mainIdFor(13)).toBeNull();
+    const withdrawn = build({}, { models, bots: { 9: "m1", 13: "heuristic" }, gallery: [] }).manager;
+    await withdrawn.select(9);
+    expect(withdrawn.state(13)).toEqual({ status: "unavailable", reason: "not-offered" });
+    const card13 = { "models/m1/card.json": () => new Response(JSON.stringify(cardJson("m1", { sizes: [5, 7, 9, 11, 13] }, models[0]!.sha256))) };
+    const listed = build(card13, { models, bots: { 5: "m1", 9: "m1", 11: "m1", 13: "m1" }, gallery: [] });
+    await listed.manager.select(13);
+    expect(listed.manager.mainIdFor(13)).toBe("m1");
+    expect(listed.manager.state(13)).toMatchObject({ status: "ready", model: "m1" });
+    expect(listed.manager.state(9)).toMatchObject({ status: "ready", model: "m1" });
+    await listed.manager.card("m1");
+    expect(listed.manager.stateFor("m1", 13).status).toBe("ready");
+  });
+
   it("stops the network a size selected before, but not one a seat asked for, and a seat can release its own", async () => {
     const { manager, stopped } = build({}, { models, bots: { 5: "m1", 9: "m2" }, gallery: ["m1", "m2"] });
     await manager.select(5);

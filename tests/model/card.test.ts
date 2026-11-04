@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { inputOf, parseCard, supportsSize } from "../../src/model/card";
 import { cardJson, fcCardJson } from "../helpers/cards";
+import { publishedModels } from "../helpers/models";
 
 describe("parseCard", () => {
   it("reads a conv card into typed fields", () => {
@@ -24,10 +25,14 @@ describe("parseCard", () => {
     expect(inputOf(parseCard(cardJson("m1")))).toEqual({ planes: 10, fixedSize: null });
   });
 
-  it("reads the real cards of the published models", async () => {
-    const { readFileSync } = await import("node:fs");
-    const card = parseCard(JSON.parse(readFileSync("public/models/s9-conv-paths-g105/card.json", "utf8")));
-    expect(card).toMatchObject({ id: "s9-conv-paths-g105", sizes: [5, 7, 9, 11], network: { head: "conv", inputPlanes: 10 } });
+  it("reads the real cards of the published models, each card naming the folder it is in and offering its trained size", () => {
+    const published = publishedModels();
+    expect(published.length).toBeGreaterThan(0);
+    for (const { id, dir, card } of published) {
+      expect(card.id, dir).toBe(id);
+      expect(card.sizes, id).toContain(card.trainedSize);
+      expect(card.network.inputPlanes, id).toBeGreaterThan(0);
+    }
   });
 
   it.each([
